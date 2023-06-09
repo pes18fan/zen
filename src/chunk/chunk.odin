@@ -10,10 +10,17 @@ control the instruction we're dealing with.
 */
 OpCode :: enum {
     OP_CONSTANT,
+    OP_NIL,
+    OP_TRUE,
+    OP_FALSE,
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
     OP_ADD,
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_NOT,
     OP_NEGATE,
     OP_RETURN,
 }
@@ -71,7 +78,7 @@ get_line :: proc (lines: [dynamic]int, offset: int) -> int {
         }
     }
 
-    fmt.eprintln("Invalid line number offset")
+    fmt.eprintln("Reached unreachable code: Invalid line number offset")
     unreachable()
 }
 

@@ -21,8 +21,6 @@ constant_instruction :: proc (name: string, c: ^ch.Chunk, offset: int) -> int {
 
 /* Disassembles the instruction at the provided offset. */
 disassemble_instruction :: proc (c: ^ch.Chunk, offset: int) -> int {
-    using ch.OpCode
-
     fmt.printf("%04d ", offset)
 
     if offset > 0 && 
@@ -34,22 +32,36 @@ disassemble_instruction :: proc (c: ^ch.Chunk, offset: int) -> int {
 
     instruction := c.code[offset]
     switch ch.OpCode(instruction) {
-        case OP_CONSTANT:
+        case .OP_CONSTANT:
             return constant_instruction("OP_CONSTANT", c, offset)
-        case OP_ADD:
+        case .OP_NIL:
+            return simple_instruction("OP_NIL", offset)
+        case .OP_TRUE:
+            return simple_instruction("OP_TRUE", offset)
+        case .OP_FALSE:
+            return simple_instruction("OP_FALSE", offset)
+        case .OP_EQUAL:
+            return simple_instruction("OP_EQUAL", offset)
+        case .OP_GREATER:
+            return simple_instruction("OP_GREATER", offset)
+        case .OP_LESS:
+            return simple_instruction("OP_LESS", offset)
+        case .OP_ADD:
             return simple_instruction("OP_ADD", offset)
-        case OP_SUBTRACT:
+        case .OP_SUBTRACT:
             return simple_instruction("OP_SUBTRACT", offset)
-        case OP_MULTIPLY:
+        case .OP_MULTIPLY:
             return simple_instruction("OP_MULTIPLY", offset)
-        case OP_DIVIDE:
+        case .OP_DIVIDE:
             return simple_instruction("OP_DIVIDE", offset)
-        case OP_NEGATE:
+        case .OP_NOT:
+            return simple_instruction("OP_NOT", offset)
+        case .OP_NEGATE:
             return simple_instruction("OP_NEGATE", offset)
-        case OP_RETURN:
+        case .OP_RETURN:
             return simple_instruction("OP_RETURN", offset)
         case:
-            fmt.printf("Unknown opcode %d\n", instruction)
+            fmt.eprintf("Unknown opcode %d\n", instruction)
             return offset + 1
     }
 }

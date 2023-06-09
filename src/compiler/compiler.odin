@@ -176,7 +176,6 @@ get_rule :: proc (type: lx.TokenType) -> ^ParseRule {
 /* Parse a binary expression and emit it to the chunk. */
 @(private)
 binary :: proc (p: ^Parser) {
-    using lx.TokenType
     using ch.OpCode
 
     operator_type := p.previous.type
@@ -184,10 +183,30 @@ binary :: proc (p: ^Parser) {
     parse_precedence(p, Precedence(byte(rule.precedence) + 1))
 
     #partial switch operator_type {
-        case MINUS: emit_byte(p, byte(OP_SUBTRACT))
-        case PLUS: emit_byte(p, byte(OP_ADD))
-        case SLASH: emit_byte(p, byte(OP_DIVIDE))
-        case STAR: emit_byte(p, byte(OP_MULTIPLY))
+        case .BANG_EQUAL: emit_bytes(p, byte(OP_EQUAL), byte(OP_NOT))
+        case .EQUAL_EQUAL: emit_byte(p, byte(OP_EQUAL))
+        case .GREATER: emit_byte(p, byte(OP_GREATER))
+        case .GREATER_EQUAL: emit_bytes(p, byte(OP_LESS), byte(OP_NOT))
+        case .LESS: emit_byte(p, byte(OP_LESS))
+        case .LESS_EQUAL: emit_bytes(p, byte(OP_GREATER), byte(OP_NOT))
+        case .MINUS: emit_byte(p, byte(OP_SUBTRACT))
+        case .PLUS: emit_byte(p, byte(OP_ADD))
+        case .SLASH: emit_byte(p, byte(OP_DIVIDE))
+        case .STAR: emit_byte(p, byte(OP_MULTIPLY))
+        case: return // Unreachable.
+    }
+}
+
+/* Parse a literal value and emit it to the chunk. */
+@(private)
+literal :: proc (p: ^Parser) {
+    using lx.TokenType
+    using ch.OpCode
+
+    #partial switch p.previous.type {
+        case FALSE: emit_byte(p, byte(OP_FALSE))
+        case NIL: emit_byte(p, byte(OP_NIL))
+        case TRUE: emit_byte(p, byte(OP_TRUE))
         case: return // Unreachable.
     }
 }
@@ -211,13 +230,12 @@ number :: proc (p: ^Parser) {
             fmt.tprintf("Failed to parse '%s' into f64.", p.previous.lexeme))
     }
 
-    emit_constant(p, value)
+    emit_constant(p, val.number_val(value))
 }
 
 /* Parse a unary expression. */
 @(private)
 unary :: proc (p: ^Parser) {
-    using lx.TokenType
     using ch.OpCode
     operator_type := p.previous.type
 
@@ -226,7 +244,8 @@ unary :: proc (p: ^Parser) {
 
     // Emit the operator instruction.
     #partial switch operator_type {
-        case MINUS: emit_byte(p, byte(OP_NEGATE))
+        case .NOT: emit_byte(p, byte(OP_NOT))
+        case .MINUS: emit_byte(p, byte(OP_NEGATE))
         case: return // Unreachable.
     }
 }
@@ -244,32 +263,32 @@ rules: []ParseRule = {
     lx.TokenType.SEMI          = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.SLASH         = ParseRule{ nil,      binary, .FACTOR },
     lx.TokenType.STAR          = ParseRule{ nil,      binary, .FACTOR },
-    lx.TokenType.BANG_EQUAL    = ParseRule{ nil,      nil,    .NONE },
+    lx.TokenType.BANG_EQUAL    = ParseRule{ nil,      binary, .EQUALITY },
     lx.TokenType.EQUAL         = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.EQUAL_EQUAL   = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.GREATER       = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.GREATER_EQUAL = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.LESS          = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.LESS_EQUAL    = ParseRule{ nil,      nil,    .NONE },
+    lx.TokenType.EQUAL_EQUAL   = ParseRule{ nil,      binary, .EQUALITY },
+    lx.TokenType.GREATER       = ParseRule{ nil,      binary, .COMPARISON },
+    lx.TokenType.GREATER_EQUAL = ParseRule{ nil,      binary, .COMPARISON },
+    lx.TokenType.LESS          = ParseRule{ nil,      binary, .COMPARISON },
+    lx.TokenType.LESS_EQUAL    = ParseRule{ nil,      binary, .COMPARISON },
     lx.TokenType.IDENT         = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.STRING        = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.NUMBER        = ParseRule{ number,   nil,    .NONE },
     lx.TokenType.AND           = ParseRule{ nil,      nil,    .AND },
     lx.TokenType.BREAK         = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.ELSE          = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.FALSE         = ParseRule{ nil,      nil,    .NONE },
+    lx.TokenType.FALSE         = ParseRule{ literal,  nil,    .NONE },
     lx.TokenType.FINAL         = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.FOR           = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.FUN           = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.IF            = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.IMPORT        = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.IN            = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.NIL           = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.NOT           = ParseRule{ nil,      nil,    .NONE },
+    lx.TokenType.NIL           = ParseRule{ literal,  nil,    .NONE },
+    lx.TokenType.NOT           = ParseRule{ unary,    nil,    .NONE },
     lx.TokenType.OR            = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.PRIVATE       = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.RETURN        = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.TRUE          = ParseRule{ nil,      nil,    .NONE },
+    lx.TokenType.TRUE          = ParseRule{ literal,  nil,    .NONE },
     lx.TokenType.WRITE         = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.ILLEGAL       = ParseRule{ nil,      nil,    .NONE },
     lx.TokenType.EOF           = ParseRule{ nil,      nil,    .NONE },
