@@ -1,7 +1,6 @@
 oc := "odin"
 target_dbg := "bin/dbg/zen"
 target_rel := "bin/rel/zen"
-modules := "src/ src/chunk src/lexer src/vm src/value src/compiler src/debug"
 
 alias r := rel
 
@@ -29,20 +28,13 @@ rel *args="": _prerel
 
 # Generate documentation in the doc/ folder.
 doc: _predoc
-    odin doc {{ modules }} > doc/docs.txt
-
-# Test the provided module.
-test module="": _pretest
-    #!/usr/bin/env bash
-    cd bin/test/
-    {{ oc }} test ../../src/{{ module }}
+    odin doc src/ > doc/docs.txt
 
 # Test all modules.
 test_all: _pretest
     #!/usr/bin/env bash
     cd bin/test/
-    {{ oc }} test ../../src/chunk
-    {{ oc }} test ../../src/lexer
+    odin test ../../src/
 
 # Run the program with optional args.
 run *args="": dbg

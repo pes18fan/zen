@@ -1,8 +1,6 @@
-package chunk
+package zen
 
 import "core:fmt"
-
-import v "../value"
 
 /*
 Each operation in bytecode has a one-byte operation code or opcode. These
@@ -34,7 +32,7 @@ Chunk :: struct {
     code: [dynamic]byte,
 
     // The constant pool.
-    constants: v.ValueArray,
+    constants: ValueArray,
 
     // The line number. Encoded with RLE.
     lines: [dynamic]int,
@@ -46,7 +44,7 @@ Writes a line to an array using RLE.
 apparently occuring every time a line is written. No idea why this is happening, 
 if anyone does please let me know.
 */
-@(private)
+@(private="file")
 write_line :: proc (lines: ^[dynamic]int, line: int) {
     if len(lines^) == 0 {
         append(lines, 1)
@@ -86,7 +84,7 @@ get_line :: proc (lines: [dynamic]int, offset: int) -> int {
 init_chunk :: proc () -> Chunk {
     return Chunk {
         code = make([dynamic]byte, 0, 0),
-        constants = v.init_value_array(),
+        constants = init_value_array(),
         lines = make([dynamic]int, 0, 0),
     }
 }
@@ -98,8 +96,8 @@ write_chunk :: proc (c: ^Chunk, byte: byte, line: int) {
 }
 
 /* Adds a new constant value to the chunk. */
-add_constant :: proc (c: ^Chunk, value: v.Value) -> int {
-    v.write_value_array(&c.constants, value)
+add_constant :: proc (c: ^Chunk, value: Value) -> int {
+    write_value_array(&c.constants, value)
     return len(c.constants.values) - 1
 }
 
@@ -107,5 +105,5 @@ add_constant :: proc (c: ^Chunk, value: v.Value) -> int {
 free_chunk :: proc (c: ^Chunk) {
     delete(c.code)
     delete(c.lines)
-    v.free_value_array(&c.constants)
+    free_value_array(&c.constants)
 }

@@ -1,4 +1,4 @@
-package lexer
+package zen
 
 import "core:fmt"
 import "core:unicode/utf8"
@@ -57,13 +57,13 @@ init_lexer :: proc (source: string) -> Lexer {
 }
 
 /* Returns true if `c` is alphanumeric, or a question mark. */
-@(private)
+@(private="file")
 is_alphanumeric_or_qn :: proc (c: rune) -> bool {
     return is_alpha(c) || is_digit(c) || c == '?'
 }
 
 /* Returns true if `c` is a letter or underscore. */
-@(private)
+@(private="file")
 is_alpha :: proc (c: rune) -> bool {
     return (c >= 'a' && c <= 'z') ||
             (c >= 'A' && c <= 'Z') ||
@@ -71,32 +71,32 @@ is_alpha :: proc (c: rune) -> bool {
 }
 
 /* Returns true if `c` is a digit. */
-@(private)
+@(private="file")
 is_digit :: proc (c: rune) -> bool {
     return c >= '0' && c <= '9'
 }
 
 /* Returns true if the scanner reached the end of the source. */
-@(private)
+@(private="file")
 is_at_end :: proc (l: ^Lexer) -> bool {
     return l.current >= len(l.source)
 }
 
 /* Consume the current character and return it. */
-@(private)
+@(private="file")
 advance :: proc (l: ^Lexer) -> rune #no_bounds_check {
     defer l.current += 1
     return utf8.rune_at(l.source, l.current)
 }
 
 /* Return the current character without consuming it. */
-@(private)
+@(private="file")
 peek :: proc (l: ^Lexer) -> rune #no_bounds_check {
     return utf8.rune_at(l.source, l.current)
 }
 
 /* Returns the character after the current one. */
-@(private)
+@(private="file")
 peek_next :: proc (l: ^Lexer) -> rune {
     if is_at_end(l) {
         return utf8.RUNE_EOF
@@ -105,13 +105,13 @@ peek_next :: proc (l: ^Lexer) -> rune {
 }
 
 /* Returns the previously consumed character. */
-@(private)
+@(private="file")
 previous :: proc (l: ^Lexer) -> rune {
     return utf8.rune_at(l.source, l.current - 1)
 }
 
 /* Consume the next character if it matches `expected`. */
-@(private)
+@(private="file")
 match :: proc (l: ^Lexer, expected: rune) -> bool {
     if is_at_end(l) do return false
     defer l.current += 1
@@ -123,7 +123,7 @@ match :: proc (l: ^Lexer, expected: rune) -> bool {
 }
 
 /* Create a token of the provided `type`. */
-@(private)
+@(private="file")
 make_token :: proc (l: ^Lexer, type: TokenType) -> Token {
     return Token {
         type = type,
@@ -133,7 +133,7 @@ make_token :: proc (l: ^Lexer, type: TokenType) -> Token {
 }
 
 /* Return an error/"illegal" token. */
-@(private)
+@(private="file")
 illegal :: proc (l: ^Lexer, message: string) -> Token {
     return Token {
         type = TokenType.ILLEGAL,
@@ -158,7 +158,7 @@ This is the way it works:
         - infix operator
         - dot
 */
-@(private)
+@(private="file")
 insert_semis :: proc (tokens: []Token) -> []Token {
     defer delete(tokens)
     result := make([dynamic]Token, 0, 0)
@@ -212,7 +212,7 @@ Ignore any whitespace character (and comment) encountered. Newlines do not
 fall in this category, th ey are handled separately, as they are used for
 automatic semicolon insertion.
 */
-@(private)
+@(private="file")
 skip_whitespace :: proc (l: ^Lexer) {
     for {
         c := peek(l)
@@ -236,7 +236,7 @@ skip_whitespace :: proc (l: ^Lexer) {
 }
 
 /* Test for the rest of a potential keyword's lexeme. */
-@(private)
+@(private="file")
 check_keyword :: proc (l: ^Lexer, start, length: int, rest: string, 
     type: TokenType) -> TokenType {
     if start + length != l.current - l.start {
@@ -252,7 +252,7 @@ check_keyword :: proc (l: ^Lexer, start, length: int, rest: string,
 }
 
 /* Find the type of an indentifier. */
-@(private)
+@(private="file")
 ident_type :: proc (l: ^Lexer) -> TokenType {
     switch utf8.rune_at(l.source, l.start) {
         case 'a': return check_keyword(l, 1, 2, "nd", .AND)
@@ -296,7 +296,7 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
 }
 
 /* Consume an identifier. */
-@(private)
+@(private="file")
 tok_ident :: proc (l: ^Lexer) -> Token {
     // Consume letters, underscores and question marks.
     for is_alphanumeric_or_qn(peek(l)) {
@@ -307,7 +307,7 @@ tok_ident :: proc (l: ^Lexer) -> Token {
 }
 
 /* Consume a number. */
-@(private)
+@(private="file")
 tok_number :: proc (l: ^Lexer) -> Token {
     // Consume digits.
     for is_digit(peek(l)) {
@@ -327,7 +327,7 @@ tok_number :: proc (l: ^Lexer) -> Token {
 }
 
 /* Consume a string. */
-@(private)
+@(private="file")
 tok_string :: proc (l: ^Lexer) -> Token {
     // Consume characters until the closing quote.
     for peek(l) != '"' && !is_at_end(l) {
@@ -347,7 +347,7 @@ tok_string :: proc (l: ^Lexer) -> Token {
 }
 
 /* Lex a token. */
-@(private)
+@(private="file")
 lex_token :: proc (l: ^Lexer) -> Token {
     skip_whitespace(l)
     l.start = l.current
@@ -401,7 +401,7 @@ lex_token :: proc (l: ^Lexer) -> Token {
 Reports a syntax error. Assumes that `token` is an illegal token since only
 illegal tokens are returned on syntax errors. 
 */
-@(private)
+@(private="file")
 syntax_error :: proc (l: ^Lexer, token: Token) -> Token {
     fmt.printf("[line %d] Syntax error", token.line)
     fmt.printf(": %s\n", token.lexeme)

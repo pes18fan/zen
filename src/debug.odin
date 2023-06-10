@@ -1,37 +1,35 @@
-package debug
+package zen
 
 import "core:fmt"
-import ch "../chunk"
-import v "../value"
 
-@(private)
+@(private="file")
 simple_instruction :: proc (name: string, offset: int) -> int {
     fmt.printf("%s\n", name)
     return offset + 1
 }
 
-@(private)
-constant_instruction :: proc (name: string, c: ^ch.Chunk, offset: int) -> int {
+@(private="file")
+constant_instruction :: proc (name: string, c: ^Chunk, offset: int) -> int {
     constant := c.code[offset + 1]
     fmt.printf("%-16s %4d '", name, constant)
-    v.print_value(c.constants.values[constant])
+    print_value(c.constants.values[constant])
     fmt.printf("'\n")
     return offset + 2
 }
 
 /* Disassembles the instruction at the provided offset. */
-disassemble_instruction :: proc (c: ^ch.Chunk, offset: int) -> int {
+disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
     fmt.printf("%04d ", offset)
 
     if offset > 0 && 
-        ch.get_line(c.lines, offset) == ch.get_line(c.lines, offset - 1) {
+        get_line(c.lines, offset) == get_line(c.lines, offset - 1) {
         fmt.printf("   | ")
     } else {
-        fmt.printf("%4d ", ch.get_line(c.lines, offset))
+        fmt.printf("%4d ", get_line(c.lines, offset))
     }
 
     instruction := c.code[offset]
-    switch ch.OpCode(instruction) {
+    switch OpCode(instruction) {
         case .OP_CONSTANT:
             return constant_instruction("OP_CONSTANT", c, offset)
         case .OP_NIL:
@@ -70,7 +68,7 @@ disassemble_instruction :: proc (c: ^ch.Chunk, offset: int) -> int {
 Prints a header for each chunk, then loops through the bytecode, 
 disassembling each instruction one by one.
 */
-disassemble :: proc (c: ^ch.Chunk, name: string) {
+disassemble :: proc (c: ^Chunk, name: string) {
     fmt.printf("== %s ==\n", name)
 
     for i := 0; i < len(c.code); {

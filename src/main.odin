@@ -1,4 +1,4 @@
-package main
+package zen
 
 import "core:fmt"
 import "core:mem"
@@ -6,13 +6,9 @@ import "core:os"
 import "core:strings"
 import "core:time"
 
-import ch "chunk"
-import dbg "debug"
-import v "vm"
-
 /* Fire up a REPL. */
-@(private)
-repl :: proc (vm: ^v.VM) -> int {
+@(private="file")
+repl :: proc (vm: ^VM) -> int {
     fmt.println("zen REPL.")
     fmt.println("Enter '#exit' to exit.")
     buf: [1024]byte
@@ -31,41 +27,37 @@ repl :: proc (vm: ^v.VM) -> int {
         }
 
         line := string(buf[:n])
-        line = strings.trim_right_proc(line, 
-            proc (c: rune) -> bool { 
-                return c == '\n'
-            })
+        line = strings.trim_right_space(line)
 
         if line == "#exit" {
             break
         }
 
-        v.interpret(vm, line)
+        interpret(vm, line)
     }
 
     return 0
 }
 
 /* Read a file and return it as a string. */
-@(private)
-read_file :: proc (path: string) -> string {
+@(private="file")
+read_file :: proc (path: string) -> (string, bool) {
     data, ok := os.read_entire_file_from_filename(path)
     if !ok {
         fmt.printf("Could not open file \"%s\".", path)
-        os.exit(74)
+        return "", false
     }
     
-    return string(data[:])
+    return string(data[:]), true
 }
 
 /* Run a file. */
-@(private)
-run_file :: proc (vm: ^v.VM, path: string) -> int {
-    using v.InterpretResult
-
-    source := read_file(path)
+@(private="file")
+run_file :: proc (vm: ^VM, path: string) -> int {
+    source, ok := read_file(path)
     defer delete(source)
-    result := v.interpret(vm, source)
+    if !ok { return 74 }
+    result := interpret(vm, source)
 
     if result == .INTERPRET_LEX_ERROR do return 65
     if result == .INTERPRET_COMPILE_ERROR do return 65
@@ -75,8 +67,8 @@ run_file :: proc (vm: ^v.VM, path: string) -> int {
 }
 
 /* Parse the arguments passed to the program. */
-@(private)
-parse_argv :: proc (vm: ^v.VM) -> (status: int) {
+@(private="file")
+parse_argv :: proc (vm: ^VM) -> (status: int) {
     help_message ::
 `Usage: zen <option or filename>
 
@@ -131,9 +123,9 @@ main :: proc() {
 		}
 	}
 
-    vm := v.init_VM()
+    vm := init_VM()
 
     status = parse_argv(&vm)
 
-    v.free_VM(&vm)
+    free_VM(&vm)
 }

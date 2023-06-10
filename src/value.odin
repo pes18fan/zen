@@ -1,5 +1,8 @@
-package value
+package zen
 
+import "core:mem"
+import "core:strings"
+import "core:slice"
 import "core:fmt"
 
 /*
@@ -9,12 +12,14 @@ in the union, or nil.
 Value :: union {
     bool,
     f64,
+    ^Obj,
 }
 
 type_of_value :: proc (value: Value) -> typeid {
     switch v in value {
         case bool: return bool
         case f64: return f64
+        case ^Obj: return ^Obj
         case: return nil
     }
 }
@@ -28,13 +33,19 @@ is_number :: proc (value: Value) -> bool {
     _, ok := value.(f64)
     return ok
 }
+is_obj :: proc (value: Value) -> bool {
+    _, ok := value.(^Obj)
+    return ok
+}
 
+as_obj :: proc (value: Value) -> ^Obj { return value.(^Obj) }
 as_bool :: proc (value: Value) -> bool { return value.(bool) }
 as_number :: proc (value: Value) -> f64 { return value.(f64) }
 
 bool_val :: proc (value: bool) -> Value { return Value(value) }
-number_val :: proc (value: f64) -> Value { return Value(value) }
 nil_val :: proc () -> Value { return Value(nil) }
+number_val :: proc (value: f64) -> Value { return Value(value) }
+obj_val :: proc (value: ^Obj) -> Value { return Value(value) }
 
 /* 
 A wrapper around a dynamic array that works as a constant pool for values. 
@@ -67,6 +78,8 @@ print_value :: proc (value: Value) {
             fmt.print(v ? "true" : "false")
         case f64: 
             fmt.printf("%g", v)
+        case ^Obj:
+            print_object(v)
         case: fmt.print("nil")
     }
 }
@@ -79,7 +92,8 @@ values_equal :: proc (a: Value, b: Value) -> bool {
 
     switch v in a {
         case bool: return v == as_bool(b)
-        case f64: return v == as_number(a)
+        case f64:  return v == as_number(a)
+        case ^Obj: return as_obj(a) == as_obj(b)
         case: return true
     }  
 }

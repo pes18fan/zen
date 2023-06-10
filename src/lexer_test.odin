@@ -1,4 +1,4 @@
-package lexer
+package zen
 
 import "core:fmt"
 import tt "core:testing"

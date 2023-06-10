@@ -1,12 +1,8 @@
-package vm
+package zen
 
 import "core:fmt"
-
-import ch "../chunk"
-import cmp "../compiler"
-import dbg "../debug"
-import lx "../lexer"
-import val "../value"
+import "core:mem"
+import "core:strings"
 
 /* The maximum size for the stack. Going past this causes a stack overflow. */
 STACK_MAX :: 256
@@ -14,14 +10,18 @@ STACK_MAX :: 256
 /* The virtual machine that interprets the bytecode. */
 VM :: struct {
     /* The chunk being interpreted. */
-    chunk: ^ch.Chunk,
+    chunk: ^Chunk,
 
     /* Instruction pointer, although its an index. Represents where the VM
     is in the bytecod array. */
     ip: int,
 
     /* The stack of values. */
-    stack: [dynamic]val.Value,
+    stack: [dynamic]Value,
+
+    strings: Table,
+
+    objects: ^Obj,
 }
 
 /* The result of the interpreting. */
@@ -33,22 +33,22 @@ InterpretResult :: enum {
 }
 
 /* Raise a runtime error. */
-runtime_error :: proc (v: ^VM, format: string, args: ..any) {
+runtime_error :: proc (vm: ^VM, format: string, args: ..any) {
     fmt.eprintf(format, ..args)
     fmt.eprintln()
 
-    line := ch.get_line(v.chunk.lines, v.ip - 1)
+    line := get_line(vm.chunk.lines, vm.ip - 1)
     fmt.eprintf("[line %d] in script\n", line)
-    reset_stack(v)
+    reset_stack(vm)
 }
 
-reset_stack :: proc (v: ^VM) {
+reset_stack :: proc (vm: ^VM) {
     defer {
-        delete(v.stack)
-        v.stack = make([dynamic]val.Value, 0, 0)
+        delete(vm.stack)
+        vm.stack = make([dynamic]Value, 0, 0)
     }
-    v.chunk = nil
-    v.ip = 0
+    vm.chunk = nil
+    vm.ip = 0
 }
 
 /* Returns a newly created VM. */
@@ -56,26 +56,30 @@ init_VM :: proc () -> VM {
     return VM {
         chunk = nil,
         ip = 0,
-        stack = make([dynamic]val.Value, 0, 0),
+        stack = make([dynamic]Value, 0, 0),
+        objects = nil,
+        strings = init_table(),
     }
 }
 
 /* Free's the VM's memory. */
-free_VM :: proc (v: ^VM) {
-    delete(v.stack)
+free_VM :: proc (vm: ^VM) {
+    free_table(&vm.strings)
+    free_objects(vm)
+    delete(vm.stack)
 }
 
 /* Reads a byte from the chunk and increments the instruction pointer. */
-@(private)
-read_byte :: proc (v: ^VM) -> byte {
-    v.ip = v.ip + 1
-    return v.chunk.code[v.ip - 1]
+@(private="file")
+read_byte :: proc (vm: ^VM) -> byte {
+    vm.ip = vm.ip + 1
+    return vm.chunk.code[vm.ip - 1]
 }
 
 /* Reads a constant from the chunk and pushes it onto the stack. */
-@(private)
-read_constant :: proc (v: ^VM) -> val.Value {
-    constant := v.chunk.constants.values[read_byte(v)]
+@(private="file")
+read_constant :: proc (vm: ^VM) -> Value {
+    constant := vm.chunk.constants.values[read_byte(vm)]
     return constant
 }
 
@@ -83,28 +87,28 @@ read_constant :: proc (v: ^VM) -> val.Value {
 Performs a binary operation on the top two values of the stack. In zen, a
 binary operator can only return either a 64-bit float or a boolean. 
 */
-@(private)
+@(private="file")
 binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> bool {
-    if !val.is_number(vm_peek(v, 0)) || !val.is_number(vm_peek(v, 1)) {
+    if !is_number(vm_peek(v, 0)) || !is_number(vm_peek(v, 1)) {
         runtime_error(v, "Operands must be numbers.")
         return false
     }
 
-    b := val.as_number(vm_pop(v))
-    a := val.as_number(vm_pop(v))
+    b := as_number(vm_pop(v))
+    a := as_number(vm_pop(v))
 
     switch typeid_of(Returns) {
         case f64:
             switch op {
-                case '+': vm_push(v, val.number_val(a + b))
-                case '-': vm_push(v, val.number_val(a - b))
-                case '*': vm_push(v, val.number_val(a * b))
-                case '/': vm_push(v, val.number_val(a / b))
+                case '+': vm_push(v, number_val(a + b))
+                case '-': vm_push(v, number_val(a - b))
+                case '*': vm_push(v, number_val(a * b))
+                case '/': vm_push(v, number_val(a / b))
             }
         case bool:
             switch op {
-                case '>': vm_push(v, val.bool_val(a > b))
-                case '<': vm_push(v, val.bool_val(a < b))
+                case '>': vm_push(v, bool_val(a > b))
+                case '<': vm_push(v, bool_val(a < b))
             }
         case: unreachable()
     }
@@ -116,38 +120,38 @@ binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> bool {
 Run the VM, going through the bytecode and interpreting each instruction
 one by one.
 */
-@(private)
+@(private="file")
 run :: proc (v: ^VM) -> InterpretResult {
-    using ch.OpCode
+    using OpCode
 
     for {
         when ODIN_DEBUG {
             fmt.printf("          ")
             for i in v.stack {
                 fmt.printf("[ ")
-                val.print_value(i)
+                print_value(i)
                 fmt.printf(" ]")
             }
             fmt.printf("\n")
 
-            dbg.disassemble_instruction(v.chunk, v.ip)
+            disassemble_instruction(v.chunk, v.ip)
         }
 
-        instruction := ch.OpCode(read_byte(v))
+        instruction := OpCode(read_byte(v))
 
         switch instruction {
             case .OP_CONSTANT:
                 constant := read_constant(v)
                 vm_push(v, constant)
-                val.print_value(constant)
+                print_value(constant)
                 fmt.printf("\n")
-            case .OP_NIL:      vm_push(v, val.nil_val())
-            case .OP_TRUE:     vm_push(v, val.bool_val(true))
-            case .OP_FALSE:    vm_push(v, val.bool_val(false))
+            case .OP_NIL:      vm_push(v, nil_val())
+            case .OP_TRUE:     vm_push(v, bool_val(true))
+            case .OP_FALSE:    vm_push(v, bool_val(false))
             case .OP_EQUAL: {
                 b := vm_pop(v)
                 a := vm_pop(v)
-                vm_push(v, val.bool_val(val.values_equal(a, b)))
+                vm_push(v, bool_val(values_equal(a, b)))
             }
             // TODO: Get rid of the below repitition for binary operations
             case .OP_GREATER:
@@ -161,8 +165,17 @@ run :: proc (v: ^VM) -> InterpretResult {
                     return .INTERPRET_RUNTIME_ERROR
                 }
             case .OP_ADD:      
-                ok := binary_op(v, f64, '+')
-                if !ok {
+                if is_string(vm_peek(v, 0)) && 
+                    is_string(vm_peek(v, 1)) {
+                    concatenate(v)
+                } else if is_number(vm_peek(v, 0)) && 
+                    is_number(vm_peek(v, 1)) {
+                    b := as_number(vm_pop(v))
+                    a := as_number(vm_pop(v))
+                    vm_push(v, number_val(a + b))
+                } else {
+                    runtime_error(v, 
+                        "Operands must be two numbers or two strings.")
                     return .INTERPRET_RUNTIME_ERROR
                 }
             case .OP_SUBTRACT: 
@@ -181,15 +194,15 @@ run :: proc (v: ^VM) -> InterpretResult {
                     return .INTERPRET_RUNTIME_ERROR
                 }
             case .OP_NOT:
-                vm_push(v, val.bool_val(is_falsey(vm_pop(v))))
+                vm_push(v, bool_val(is_falsey(vm_pop(v))))
             case .OP_NEGATE:
-                if !val.is_number(vm_peek(v, 0)) {
+                if !is_number(vm_peek(v, 0)) {
                     runtime_error(v, "Can only negate numbers.")
                     return .INTERPRET_RUNTIME_ERROR
                 }
-                vm_push(v, val.number_val(-val.as_number(vm_pop(v))))
+                vm_push(v, number_val(-as_number(vm_pop(v))))
             case .OP_RETURN: 
-                val.print_value(vm_pop(v))
+                print_value(vm_pop(v))
                 fmt.printf("\n")
                 return .INTERPRET_OK
         }
@@ -197,45 +210,70 @@ run :: proc (v: ^VM) -> InterpretResult {
 }
 
 /* Interpret a chunk. */
-interpret :: proc (v: ^VM, source: string) -> InterpretResult {
-    lexer := lx.init_lexer(source)
-    tokens, err := lx.lex(&lexer)
+interpret :: proc (vm: ^VM, source: string) -> InterpretResult {
+    lexer := init_lexer(source)
+    tokens, err := lex(&lexer)
     defer delete(tokens)
     if err != nil {
         return .INTERPRET_LEX_ERROR
     }
 
-    chunk := ch.init_chunk()
-    defer ch.free_chunk(&chunk)
-    cmp_ok := cmp.compile(tokens, &chunk)
+    chunk := init_chunk()
+    defer free_chunk(&chunk)
+    cmp_ok := compile(vm, tokens, &chunk)
     if !cmp_ok {
         return .INTERPRET_COMPILE_ERROR
     }
 
-    v.chunk = &chunk
-    v.ip = 0
+    vm.chunk = &chunk
+    vm.ip = 0
 
-    result := run(v)
+    result := run(vm)
 
     return result
 }
 
 /* Push a value onto the stack. */
-vm_push :: proc (v: ^VM, value: val.Value) {
-    append(&v.stack, value)
+vm_push :: proc (vm: ^VM, value: Value) {
+    append(&vm.stack, value)
 }
 
 /* Pop a value out of the stack. */
-vm_pop :: proc (v: ^VM) -> val.Value {
-    return pop(&v.stack)
+vm_pop :: proc (vm: ^VM) -> Value {
+    return pop(&vm.stack)
 }
 
 /* Peek at a certain distance from the top of the stack. */
-vm_peek :: proc (v: ^VM, distance: int) -> val.Value {
-    return v.stack[len(v.stack) - 1 - distance]
+vm_peek :: proc (vm: ^VM, distance: int) -> Value {
+    return vm.stack[len(vm.stack) - 1 - distance]
 }
 
 /* Returns true if provided value is falsey. */
-is_falsey :: proc (value: val.Value) -> bool {
-    return val.is_nil(value) || (val.is_bool(value) && !val.as_bool(value))
+is_falsey :: proc (value: Value) -> bool {
+    return is_nil(value) || (is_bool(value) && !as_bool(value))
+}
+
+/* Concatenate two strings. */
+concatenate :: proc (vm: ^VM) {
+    b := as_string(vm_pop(vm))
+    a := as_string(vm_pop(vm))
+
+    length := len(a.chars) + len(b.chars)
+    chars := make([]byte, length)
+    i := 0
+    i =+ copy(chars, a.chars)
+    copy(chars[i:], b.chars)
+
+    result := take_string(vm, string(chars))
+    vm_push(vm, (^Obj)(result))
+}
+
+free_objects :: proc (vm: ^VM) {
+    object := vm.objects
+
+    for object != nil {
+        next := object.next
+        free_object(object)
+        object = next
+    }
 }

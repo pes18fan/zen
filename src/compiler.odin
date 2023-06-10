@@ -1,25 +1,21 @@
-package compiler
+package zen
 
 import "core:fmt"
 import "core:strconv"
-
-import dbg "../debug"
-import ch "../chunk"
-import lx "../lexer"
-import val "../value"
 
 /* Maximum limit for a eight bit unsigned integer. */
 U8_MAX :: 255
 
 /* The language parser. */
 Parser :: struct {
-    tokens: []lx.Token,
+    tokens: []Token,
     curr_idx: int,
-    current: lx.Token,
-    previous: lx.Token,
+    current: Token,
+    previous: Token,
     had_error: bool,
     panic_mode: bool,
-    compiling_chunk: ^ch.Chunk,
+    compiling_chunk: ^Chunk,
+    vm: ^VM,
 }
 
 /* Expression precedence. */
@@ -52,15 +48,15 @@ ParseRule :: struct {
 }
 
 /* Report an error at the provided token with a message. */
-@(private)
-error_at :: proc (p: ^Parser, token: ^lx.Token, message: string) {
+@(private="file")
+error_at :: proc (p: ^Parser, token: ^Token, message: string) {
     if p.panic_mode do return
     p.panic_mode = true
     fmt.eprintf("[line %d] Error", token.line)
 
-    if token.type == lx.TokenType.EOF {
+    if token.type == TokenType.EOF {
         fmt.eprintf(" at end")
-    } else if token.type == lx.TokenType.ILLEGAL {
+    } else if token.type == TokenType.ILLEGAL {
         // nothin'
     } else {
         fmt.eprintf(" at '%s'", token.lexeme)
@@ -71,13 +67,13 @@ error_at :: proc (p: ^Parser, token: ^lx.Token, message: string) {
 }
 
 /* Report an error at the token just parsed. */
-@(private)
+@(private="file")
 error :: proc (p: ^Parser, message: string) {
     error_at(p, &p.previous, message)
 }
 
 /* Report an error at the current token. */
-@(private)
+@(private="file")
 error_at_current :: proc (p: ^Parser, message: string) {
     error_at(p, &p.current, message)
 }
@@ -86,7 +82,7 @@ error_at_current :: proc (p: ^Parser, message: string) {
 Advance to the next token. Reports an error if that token is an
 ILLEGAL token variant.
 */
-@(private)
+@(private="file")
 advance :: proc (p: ^Parser) #no_bounds_check {
     p.previous = p.current
 
@@ -95,7 +91,7 @@ advance :: proc (p: ^Parser) #no_bounds_check {
 
         p.current = p.tokens[p.curr_idx]
         p.curr_idx += 1
-        if p.current.type != lx.TokenType.ILLEGAL do break
+        if p.current.type != TokenType.ILLEGAL do break
 
         error_at_current(p, p.current.lexeme)
     }
@@ -104,8 +100,8 @@ advance :: proc (p: ^Parser) #no_bounds_check {
 /*
 Advance to the next token if it matches the provided type, else
 report an error at that token. */
-@(private)
-consume :: proc (p: ^Parser, type: lx.TokenType, message: string) {
+@(private="file")
+consume :: proc (p: ^Parser, type: TokenType, message: string) {
     if p.current.type == type {
         advance(p)
         return
@@ -115,22 +111,22 @@ consume :: proc (p: ^Parser, type: lx.TokenType, message: string) {
 }
 
 /* Write a byte to the chunk being compiled. */
-@(private)
+@(private="file")
 emit_byte :: proc (p: ^Parser, byait: byte) {
-    ch.write_chunk(p.compiling_chunk, byait, p.previous.line)
+    write_chunk(p.compiling_chunk, byait, p.previous.line)
 }
 
 /* Write two bytes to the current chunk. */
-@(private)
+@(private="file")
 emit_bytes :: proc (p: ^Parser, byait1: byte, byait2: byte) {
     emit_byte(p, byait1)
     emit_byte(p, byait2)
 }
 
 /* Write a OP_RETURN to the current chunk. */
-@(private)
+@(private="file")
 emit_return :: proc (p: ^Parser) {
-    emit_byte(p, byte(ch.OpCode.OP_RETURN))
+    emit_byte(p, byte(OpCode.OP_RETURN))
 }
 
 /* 
@@ -138,9 +134,9 @@ Add a constant to the current chunk's constant pool. Reports an error if
 there are too many constants.
 TODO: Increase the limit of the constant pool from 255 to 65535.
 */
-@(private)
-make_constant :: proc (p: ^Parser, value: val.Value) -> byte {
-    constant := ch.add_constant(p.compiling_chunk, value)
+@(private="file")
+make_constant :: proc (p: ^Parser, value: Value) -> byte {
+    constant := add_constant(p.compiling_chunk, value)
     if constant > U8_MAX {
         error(p, "Too many constants in one chunk.")
         return 0
@@ -150,33 +146,33 @@ make_constant :: proc (p: ^Parser, value: val.Value) -> byte {
 }
 
 /* Write a OP_CONSTANT to the current chunk. */
-@(private)
-emit_constant :: proc (p: ^Parser, value: val.Value) {
-    emit_bytes(p, byte(ch.OpCode.OP_CONSTANT), make_constant(p, value))
+@(private="file")
+emit_constant :: proc (p: ^Parser, value: Value) {
+    emit_bytes(p, byte(OpCode.OP_CONSTANT), make_constant(p, value))
 }
 
 /* Emit a return instruction and decode the RLE-encoded lines. */
-@(private)
+@(private="file")
 end_compiler :: proc (p: ^Parser) {
     emit_return(p)
 
     when ODIN_DEBUG {
         if !p.had_error {
-            dbg.disassemble(p.compiling_chunk, "code")
+            disassemble(p.compiling_chunk, "code")
         }
     }
 }
 
 /* Get a rule for the provided token type from the rule table. */
-@(private)
-get_rule :: proc (type: lx.TokenType) -> ^ParseRule {
+@(private="file")
+get_rule :: proc (type: TokenType) -> ^ParseRule {
     return &rules[type]
 }
 
 /* Parse a binary expression and emit it to the chunk. */
-@(private)
+@(private="file")
 binary :: proc (p: ^Parser) {
-    using ch.OpCode
+    using OpCode
 
     operator_type := p.previous.type
     rule := get_rule(operator_type)
@@ -198,10 +194,10 @@ binary :: proc (p: ^Parser) {
 }
 
 /* Parse a literal value and emit it to the chunk. */
-@(private)
+@(private="file")
 literal :: proc (p: ^Parser) {
-    using lx.TokenType
-    using ch.OpCode
+    using TokenType
+    using OpCode
 
     #partial switch p.previous.type {
         case FALSE: emit_byte(p, byte(OP_FALSE))
@@ -212,17 +208,17 @@ literal :: proc (p: ^Parser) {
 }
 
 /* Parse a grouping (parenthesized) expression. */
-@(private)
+@(private="file")
 grouping :: proc (p: ^Parser) {
     expression(p)
-    consume(p, lx.TokenType.RPAREN, "Expect ')' after expression.")
+    consume(p, TokenType.RPAREN, "Expect ')' after expression.")
 }
 
 /* 
 Parse a number and emit that constant to the chunk. Numbers are currently
 only parsed as 64-bit floats, which is subject to change.
 */
-@(private)
+@(private="file")
 number :: proc (p: ^Parser) {
     value, ok := strconv.parse_f64(p.previous.lexeme)
     if !ok {
@@ -230,13 +226,19 @@ number :: proc (p: ^Parser) {
             fmt.tprintf("Failed to parse '%s' into f64.", p.previous.lexeme))
     }
 
-    emit_constant(p, val.number_val(value))
+    emit_constant(p, number_val(value))
+}
+
+@(private="file")
+zstring :: proc (p: ^Parser) {
+    emit_constant(p, obj_val(
+        copy_string(p.vm, p.previous.lexeme)))
 }
 
 /* Parse a unary expression. */
-@(private)
+@(private="file")
 unary :: proc (p: ^Parser) {
-    using ch.OpCode
+    using OpCode
     operator_type := p.previous.type
 
     // Compile the operand.
@@ -252,53 +254,53 @@ unary :: proc (p: ^Parser) {
 
 /* A table of the parsing rules for all the token types. */
 rules: []ParseRule = {
-    lx.TokenType.LPAREN        = ParseRule{ grouping, nil,    .NONE },
-    lx.TokenType.RPAREN        = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.LSQUIRLY      = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.RSQUIRLY      = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.COMMA         = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.DOT           = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.MINUS         = ParseRule{ unary,    binary, .TERM },
-    lx.TokenType.PLUS          = ParseRule{ nil,      binary, .TERM },
-    lx.TokenType.SEMI          = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.SLASH         = ParseRule{ nil,      binary, .FACTOR },
-    lx.TokenType.STAR          = ParseRule{ nil,      binary, .FACTOR },
-    lx.TokenType.BANG_EQUAL    = ParseRule{ nil,      binary, .EQUALITY },
-    lx.TokenType.EQUAL         = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.EQUAL_EQUAL   = ParseRule{ nil,      binary, .EQUALITY },
-    lx.TokenType.GREATER       = ParseRule{ nil,      binary, .COMPARISON },
-    lx.TokenType.GREATER_EQUAL = ParseRule{ nil,      binary, .COMPARISON },
-    lx.TokenType.LESS          = ParseRule{ nil,      binary, .COMPARISON },
-    lx.TokenType.LESS_EQUAL    = ParseRule{ nil,      binary, .COMPARISON },
-    lx.TokenType.IDENT         = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.STRING        = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.NUMBER        = ParseRule{ number,   nil,    .NONE },
-    lx.TokenType.AND           = ParseRule{ nil,      nil,    .AND },
-    lx.TokenType.BREAK         = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.ELSE          = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.FALSE         = ParseRule{ literal,  nil,    .NONE },
-    lx.TokenType.FINAL         = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.FOR           = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.FUN           = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.IF            = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.IMPORT        = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.IN            = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.NIL           = ParseRule{ literal,  nil,    .NONE },
-    lx.TokenType.NOT           = ParseRule{ unary,    nil,    .NONE },
-    lx.TokenType.OR            = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.PRIVATE       = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.RETURN        = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.TRUE          = ParseRule{ literal,  nil,    .NONE },
-    lx.TokenType.WRITE         = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.ILLEGAL       = ParseRule{ nil,      nil,    .NONE },
-    lx.TokenType.EOF           = ParseRule{ nil,      nil,    .NONE },
+    TokenType.LPAREN        = ParseRule{ grouping, nil,    .NONE },
+    TokenType.RPAREN        = ParseRule{ nil,      nil,    .NONE },
+    TokenType.LSQUIRLY      = ParseRule{ nil,      nil,    .NONE },
+    TokenType.RSQUIRLY      = ParseRule{ nil,      nil,    .NONE },
+    TokenType.COMMA         = ParseRule{ nil,      nil,    .NONE },
+    TokenType.DOT           = ParseRule{ nil,      nil,    .NONE },
+    TokenType.MINUS         = ParseRule{ unary,    binary, .TERM },
+    TokenType.PLUS          = ParseRule{ nil,      binary, .TERM },
+    TokenType.SEMI          = ParseRule{ nil,      nil,    .NONE },
+    TokenType.SLASH         = ParseRule{ nil,      binary, .FACTOR },
+    TokenType.STAR          = ParseRule{ nil,      binary, .FACTOR },
+    TokenType.BANG_EQUAL    = ParseRule{ nil,      binary, .EQUALITY },
+    TokenType.EQUAL         = ParseRule{ nil,      nil,    .NONE },
+    TokenType.EQUAL_EQUAL   = ParseRule{ nil,      binary, .EQUALITY },
+    TokenType.GREATER       = ParseRule{ nil,      binary, .COMPARISON },
+    TokenType.GREATER_EQUAL = ParseRule{ nil,      binary, .COMPARISON },
+    TokenType.LESS          = ParseRule{ nil,      binary, .COMPARISON },
+    TokenType.LESS_EQUAL    = ParseRule{ nil,      binary, .COMPARISON },
+    TokenType.IDENT         = ParseRule{ nil,      nil,    .NONE },
+    TokenType.STRING        = ParseRule{ zstring,  nil,    .NONE },
+    TokenType.NUMBER        = ParseRule{ number,   nil,    .NONE },
+    TokenType.AND           = ParseRule{ nil,      nil,    .AND },
+    TokenType.BREAK         = ParseRule{ nil,      nil,    .NONE },
+    TokenType.ELSE          = ParseRule{ nil,      nil,    .NONE },
+    TokenType.FALSE         = ParseRule{ literal,  nil,    .NONE },
+    TokenType.FINAL         = ParseRule{ nil,      nil,    .NONE },
+    TokenType.FOR           = ParseRule{ nil,      nil,    .NONE },
+    TokenType.FUN           = ParseRule{ nil,      nil,    .NONE },
+    TokenType.IF            = ParseRule{ nil,      nil,    .NONE },
+    TokenType.IMPORT        = ParseRule{ nil,      nil,    .NONE },
+    TokenType.IN            = ParseRule{ nil,      nil,    .NONE },
+    TokenType.NIL           = ParseRule{ literal,  nil,    .NONE },
+    TokenType.NOT           = ParseRule{ unary,    nil,    .NONE },
+    TokenType.OR            = ParseRule{ nil,      nil,    .NONE },
+    TokenType.PRIVATE       = ParseRule{ nil,      nil,    .NONE },
+    TokenType.RETURN        = ParseRule{ nil,      nil,    .NONE },
+    TokenType.TRUE          = ParseRule{ literal,  nil,    .NONE },
+    TokenType.WRITE         = ParseRule{ nil,      nil,    .NONE },
+    TokenType.ILLEGAL       = ParseRule{ nil,      nil,    .NONE },
+    TokenType.EOF           = ParseRule{ nil,      nil,    .NONE },
 }
 
 /* 
 Starting at the current token, parse an expression at the given precedence
 level or higher.
 */
-@(private)
+@(private="file")
 parse_precedence :: proc (p: ^Parser, precedence: Precedence) {
     advance(p)
     prefix_rule := get_rule(p.previous.type).prefix
@@ -317,24 +319,25 @@ parse_precedence :: proc (p: ^Parser, precedence: Precedence) {
 }
 
 /* Parse any expression. */
-@(private)
+@(private="file")
 expression :: proc (p: ^Parser) {
     parse_precedence(p, .ASSIGNMENT)
 }
 
 /* Compile the provided slice of tokens into a bytecode chunk. */
-compile :: proc (tokens: []lx.Token, chunk: ^ch.Chunk) -> bool {
+compile :: proc (vm: ^VM, tokens: []Token, chunk: ^Chunk) -> bool {
     p := Parser{
         tokens = tokens,
         curr_idx = 0,
         had_error = false,
         panic_mode = false,
         compiling_chunk = chunk,
+        vm = vm,
     }
 
     advance(&p)
     expression(&p)
-    consume(&p, lx.TokenType.EOF, "Expect end of expression.")
+    consume(&p, TokenType.EOF, "Expect end of expression.")
     end_compiler(&p)
 
     return !p.had_error
