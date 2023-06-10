@@ -28,14 +28,13 @@ free_table :: proc (table: ^Table) {
     delete(table.entries)
 }
 
-table_get :: proc (table: ^Table, key: ^ObjString, value: ^Value) -> bool {
-    if table.count == 0 do return false
+table_get :: proc (table: ^Table, key: ^ObjString) -> (Value, bool) {
+    if table.count == 0 { return nil_val(), false }
 
     entry := find_entry(table.entries, table.capacity, key)
-    if entry.key == nil do return false
+    if entry.key == nil { return nil_val(), false }
 
-    value^ = entry.value
-    return true
+    return entry.value, true
 }
 
 table_set :: proc (table: ^Table, key: ^ObjString, value: Value) -> bool {

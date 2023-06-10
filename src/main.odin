@@ -21,6 +21,7 @@ repl :: proc (vm: ^VM) -> int {
             return 74
         }
 
+        if n == 1 { continue }
         if n <= 0 {
             fmt.println("\n")
             break

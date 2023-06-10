@@ -9,7 +9,7 @@ Write a random chunk with arbitrary line numbers and check if those line
 numbers are RLE encoded. Fail if that's not the case.
 */
 @(test)
-test_write_lines :: proc (t: ^tt.T) {
+test_chunk_write_lines :: proc (t: ^tt.T) {
     chunk := init_chunk()
     /* Write a chunk with line numbers upto 20. If `i` is even, write an extra 
     instruction. The contents of the chunk don't matter here since this is a 
@@ -39,7 +39,7 @@ test_write_lines :: proc (t: ^tt.T) {
 }
 
 @(test)
-test_get_line :: proc (t: ^tt.T) {
+test_chunk_get_line :: proc (t: ^tt.T) {
     lines := [dynamic]int{3, 1, 2, 2, 3, 3, 2, 4}
 
     tt.expect_value(t, get_line(lines, 0), 1)

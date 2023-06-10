@@ -3,6 +3,7 @@ package zen
 import "core:fmt"
 import tt "core:testing"
 
+@(private="file")
 MaybeToken :: union { Token }
 
 @(private="file")
@@ -11,6 +12,9 @@ expect_tokens_equal :: proc (want: []Token, got: []Token) ->
     got := got
     for i in want {
         if len(got) == 0 do break
+
+        fmt.println(i)
+        fmt.println(got[0])
 
         if i != got[0] {
             return false, i, got[0]
@@ -22,18 +26,18 @@ expect_tokens_equal :: proc (want: []Token, got: []Token) ->
 }
 
 @(test)
-test_lexer :: proc (t: ^tt.T) {
+test_lexer_default :: proc (t: ^tt.T) {
     source := 
 `// this is a comment
-fun foo(str) {
+let foo = () {
     if not false {
-        println(str)
+        write str
     }
 }
 
-fun add(a, b) { return a + b }
+let add = (a, b) { return a + b }
 
-private fun test() {
+let test = () {
     foo("just a little lexer exercise")
     println(add(1, 2))
 }`
@@ -46,25 +50,24 @@ private fun test() {
     defer delete(got)
 
     want := []Token{
-        Token{type = .FUN, lexeme = "fun", line = 2},
+        Token{type = .LET, lexeme = "let", line = 2},
         Token{type = .IDENT, lexeme = "foo", line = 2},
+        Token{type = .EQUAL, lexeme = "=", line = 2},
         Token{type = .LPAREN, lexeme = "(", line = 2},
-        Token{type = .IDENT, lexeme = "str", line = 2},
         Token{type = .RPAREN, lexeme = ")", line = 2},
         Token{type = .LSQUIRLY, lexeme = "{", line = 2},
         Token{type = .IF, lexeme = "if", line = 3},
         Token{type = .NOT, lexeme = "not", line = 3},
         Token{type = .FALSE, lexeme = "false", line = 3},
         Token{type = .LSQUIRLY, lexeme = "{", line = 3},
-        Token{type = .IDENT, lexeme = "println", line = 4},
-        Token{type = .LPAREN, lexeme = "(", line = 4},
+        Token{type = .WRITE, lexeme = "write", line = 4},
         Token{type = .IDENT, lexeme = "str", line = 4},
-        Token{type = .RPAREN, lexeme = ")", line = 4},
         Token{type = .SEMI, lexeme = ";", line = 4},
         Token{type = .RSQUIRLY, lexeme = "}", line = 5},
         Token{type = .RSQUIRLY, lexeme = "}", line = 6},
-        Token{type = .FUN, lexeme = "fun", line = 8},
+        Token{type = .LET, lexeme = "let", line = 8},
         Token{type = .IDENT, lexeme = "add", line = 8},
+        Token{type = .EQUAL, lexeme = "=", line = 8},
         Token{type = .LPAREN, lexeme = "(", line = 8},
         Token{type = .IDENT, lexeme = "a", line = 8},
         Token{type = .COMMA, lexeme = ",", line = 8},
@@ -76,15 +79,15 @@ private fun test() {
         Token{type = .PLUS, lexeme = "+", line = 8},
         Token{type = .IDENT, lexeme = "b", line = 8},
         Token{type = .RSQUIRLY, lexeme = "}", line = 8},
-        Token{type = .PRIVATE, lexeme = "private", line = 10},
-        Token{type = .FUN, lexeme = "fun", line = 10},
+        Token{type = .LET, lexeme = "let", line = 10},
         Token{type = .IDENT, lexeme = "test", line = 10},
+        Token{type = .EQUAL, lexeme = "=", line = 10},
         Token{type = .LPAREN, lexeme = "(", line = 10},
         Token{type = .RPAREN, lexeme = ")", line = 10},
         Token{type = .LSQUIRLY, lexeme = "{", line = 10},
         Token{type = .IDENT, lexeme = "foo", line = 11},
         Token{type = .LPAREN, lexeme = "(", line = 11},
-        Token{type = .STRING, lexeme = "\"just a little lexer exercise\"",
+        Token{type = .STRING, lexeme = "\"just a little lexer exercise\"", 
             line = 11},
         Token{type = .RPAREN, lexeme = ")", line = 11},
         Token{type = .SEMI, lexeme = ";", line = 11},
@@ -101,7 +104,7 @@ private fun test() {
         Token{type = .RSQUIRLY, lexeme = "}", line = 13},
         Token{type = .EOF, lexeme = "", line = 13},
     }
-
+    
     ok, wanted, recieved := expect_tokens_equal(want, got)
     if !ok {
         tt.errorf(t, "want %s, got %s", wanted, recieved)

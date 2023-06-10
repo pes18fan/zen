@@ -19,6 +19,7 @@ VM :: struct {
     /* The stack of values. */
     stack: [dynamic]Value,
 
+    globals: Table,
     strings: Table,
 
     objects: ^Obj,
@@ -58,12 +59,14 @@ init_VM :: proc () -> VM {
         ip = 0,
         stack = make([dynamic]Value, 0, 0),
         objects = nil,
+        globals = init_table(),
         strings = init_table(),
     }
 }
 
 /* Free's the VM's memory. */
 free_VM :: proc (vm: ^VM) {
+    free_table(&vm.globals)
     free_table(&vm.strings)
     free_objects(vm)
     delete(vm.stack)
@@ -72,15 +75,19 @@ free_VM :: proc (vm: ^VM) {
 /* Reads a byte from the chunk and increments the instruction pointer. */
 @(private="file")
 read_byte :: proc (vm: ^VM) -> byte {
-    vm.ip = vm.ip + 1
+    vm.ip += 1
     return vm.chunk.code[vm.ip - 1]
 }
 
 /* Reads a constant from the chunk and pushes it onto the stack. */
 @(private="file")
 read_constant :: proc (vm: ^VM) -> Value {
-    constant := vm.chunk.constants.values[read_byte(vm)]
-    return constant
+    return vm.chunk.constants.values[read_byte(vm)]
+}
+
+@(private="file")
+read_string :: proc (vm: ^VM) -> ^ObjString {
+    return as_string(read_constant(vm))
 }
 
 /*
@@ -143,11 +150,34 @@ run :: proc (v: ^VM) -> InterpretResult {
             case .OP_CONSTANT:
                 constant := read_constant(v)
                 vm_push(v, constant)
-                print_value(constant)
-                fmt.printf("\n")
+                // print_value(constant)
+                // fmt.printf("\n")
             case .OP_NIL:      vm_push(v, nil_val())
             case .OP_TRUE:     vm_push(v, bool_val(true))
             case .OP_FALSE:    vm_push(v, bool_val(false))
+            case .OP_POP:      vm_pop(v)
+            case .OP_GET_GLOBAL: {
+                name := read_string(v)
+                value: Value; ok: bool
+                if value, ok = table_get(&v.globals, name); !ok {
+                    runtime_error(v, "Undefined variable '%s'.", name.chars)
+                    return .INTERPRET_RUNTIME_ERROR
+                }
+                vm_push(v, value)
+            }
+            case .OP_DEFINE_GLOBAL:
+                name := read_string(v)
+                table_set(&v.globals, name, vm_peek(v, 0))
+                vm_pop(v)
+            case .OP_SET_GLOBAL: {
+                name := read_string(v)
+
+                if table_set(&v.globals, name, vm_peek(v, 0)) {
+                    table_delete(&v.globals, name)
+                    runtime_error(v, "Undefined variable '%s'.", name.chars)
+                    return .INTERPRET_RUNTIME_ERROR
+                }
+            }
             case .OP_EQUAL: {
                 b := vm_pop(v)
                 a := vm_pop(v)
@@ -201,9 +231,11 @@ run :: proc (v: ^VM) -> InterpretResult {
                     return .INTERPRET_RUNTIME_ERROR
                 }
                 vm_push(v, number_val(-as_number(vm_pop(v))))
-            case .OP_RETURN: 
+            case .OP_WRITE:
                 print_value(vm_pop(v))
                 fmt.printf("\n")
+            case .OP_RETURN: 
+                // Exit interpreter.
                 return .INTERPRET_OK
         }
     }

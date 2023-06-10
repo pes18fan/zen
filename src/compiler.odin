@@ -34,7 +34,7 @@ Precedence :: enum {
 }
 
 /* A function that can parse a certain expression. */
-ParseFn :: #type proc (p: ^Parser)
+ParseFn :: #type proc (p: ^Parser, can_assign: bool)
 
 /* 
 A rule for parsing an expression. Has a prefix parsing function, an
@@ -110,6 +110,18 @@ consume :: proc (p: ^Parser, type: TokenType, message: string) {
     error_at_current(p, message)
 }
 
+@(private="file")
+check :: proc (p: ^Parser, type: TokenType) -> bool {
+    return p.current.type == type
+}
+
+@(private="file")
+match :: proc (p: ^Parser, type: TokenType) -> bool {
+    if !check(p, type) { return false }
+    advance(p)
+    return true
+}
+
 /* Write a byte to the chunk being compiled. */
 @(private="file")
 emit_byte :: proc (p: ^Parser, byait: byte) {
@@ -171,7 +183,7 @@ get_rule :: proc (type: TokenType) -> ^ParseRule {
 
 /* Parse a binary expression and emit it to the chunk. */
 @(private="file")
-binary :: proc (p: ^Parser) {
+binary :: proc (p: ^Parser, can_assign: bool) {
     using OpCode
 
     operator_type := p.previous.type
@@ -195,7 +207,7 @@ binary :: proc (p: ^Parser) {
 
 /* Parse a literal value and emit it to the chunk. */
 @(private="file")
-literal :: proc (p: ^Parser) {
+literal :: proc (p: ^Parser, can_assign: bool) {
     using TokenType
     using OpCode
 
@@ -209,7 +221,7 @@ literal :: proc (p: ^Parser) {
 
 /* Parse a grouping (parenthesized) expression. */
 @(private="file")
-grouping :: proc (p: ^Parser) {
+grouping :: proc (p: ^Parser, can_assign: bool) {
     expression(p)
     consume(p, TokenType.RPAREN, "Expect ')' after expression.")
 }
@@ -219,7 +231,7 @@ Parse a number and emit that constant to the chunk. Numbers are currently
 only parsed as 64-bit floats, which is subject to change.
 */
 @(private="file")
-number :: proc (p: ^Parser) {
+number :: proc (p: ^Parser, can_assign: bool) {
     value, ok := strconv.parse_f64(p.previous.lexeme)
     if !ok {
         error(p, 
@@ -230,14 +242,32 @@ number :: proc (p: ^Parser) {
 }
 
 @(private="file")
-zstring :: proc (p: ^Parser) {
+zstring :: proc (p: ^Parser, can_assign: bool) {
     emit_constant(p, obj_val(
-        copy_string(p.vm, p.previous.lexeme)))
+        copy_string(p.vm, p.previous.lexeme[1:len(p.previous.lexeme)-1])))
+}
+
+@(private="file")
+named_variable :: proc (p: ^Parser, name: Token, can_assign: bool) {
+    name := name
+    arg := identifier_constant(p, &name)
+
+    if can_assign && match(p, .EQUAL) {
+        expression(p)
+        emit_bytes(p, byte(OpCode.OP_SET_GLOBAL), arg)
+    } else {
+        emit_bytes(p, byte(OpCode.OP_GET_GLOBAL), arg)
+    }
+}
+
+@(private="file")
+variable :: proc (p: ^Parser, can_assign: bool) {
+    named_variable(p, p.previous, can_assign)
 }
 
 /* Parse a unary expression. */
 @(private="file")
-unary :: proc (p: ^Parser) {
+unary :: proc (p: ^Parser, can_assign: bool) {
     using OpCode
     operator_type := p.previous.type
 
@@ -272,7 +302,7 @@ rules: []ParseRule = {
     TokenType.GREATER_EQUAL = ParseRule{ nil,      binary, .COMPARISON },
     TokenType.LESS          = ParseRule{ nil,      binary, .COMPARISON },
     TokenType.LESS_EQUAL    = ParseRule{ nil,      binary, .COMPARISON },
-    TokenType.IDENT         = ParseRule{ nil,      nil,    .NONE },
+    TokenType.IDENT         = ParseRule{ variable, nil,    .NONE },
     TokenType.STRING        = ParseRule{ zstring,  nil,    .NONE },
     TokenType.NUMBER        = ParseRule{ number,   nil,    .NONE },
     TokenType.AND           = ParseRule{ nil,      nil,    .AND },
@@ -309,19 +339,110 @@ parse_precedence :: proc (p: ^Parser, precedence: Precedence) {
         return
     }
 
-    prefix_rule(p)
+    can_assign := precedence <= Precedence.ASSIGNMENT
+    prefix_rule(p, can_assign)
 
     for precedence <= get_rule(p.current.type).precedence {
         advance(p)
         infix_rule := get_rule(p.previous.type).infix
-        infix_rule(p)
+        infix_rule(p, can_assign)
     }
+
+    if can_assign && match(p, .EQUAL) {
+        error(p, "Invalid assignment target.")
+    }
+}
+
+@(private="file")
+identifier_constant :: proc (p: ^Parser, name: ^Token) -> u8 {
+    return make_constant(p, obj_val(copy_string(p.vm, name.lexeme)))
+}
+
+@(private="file")
+parse_variable :: proc (p: ^Parser, error_message: string) -> u8 {
+    consume(p, .IDENT, error_message)
+    return identifier_constant(p, &p.previous)
+}
+
+@(private="file")
+define_variable :: proc (p: ^Parser, global: u8) {
+    emit_bytes(p, byte(OpCode.OP_DEFINE_GLOBAL), global)
 }
 
 /* Parse any expression. */
 @(private="file")
 expression :: proc (p: ^Parser) {
     parse_precedence(p, .ASSIGNMENT)
+}
+
+@(private="file")
+let_declaration :: proc (p: ^Parser) {
+    global := parse_variable(p, "Expect variable name.")
+
+    if match(p, .EQUAL) {
+        expression(p)
+    } else {
+        emit_byte(p, byte(OpCode.OP_NIL))
+    }
+
+    consume(p, .SEMI, "Expect ';' after variable declaration.")
+
+    define_variable(p, global)
+}
+
+@(private="file")
+expression_statement :: proc (p: ^Parser) {
+    expression(p)
+    consume(p, .SEMI, "Expect ';' after expression.")
+    emit_byte(p, byte(OpCode.OP_POP))
+}
+
+@(private="file")
+write_statement :: proc (p: ^Parser) {
+    expression(p)
+    consume(p, .SEMI, "Expect ';' after value.")
+    emit_byte(p, byte(OpCode.OP_WRITE))
+}
+
+@(private="file")
+synchronize :: proc (p: ^Parser) {
+    p.panic_mode = false
+
+    for p.current.type != .EOF {
+        if p.previous.type == .SEMI {
+            return
+        }
+
+        #partial switch p.current.type {
+            case .FUN, .FOR, .IF, .WRITE, .RETURN:
+                return
+            case: // Do nothing.
+        }
+
+        advance(p)
+    }
+}
+
+@(private="file")
+declaration :: proc (p: ^Parser) {
+    if match(p, .LET) {
+        let_declaration(p)
+    } else {
+        statement(p)
+    }
+
+    if p.panic_mode {
+        synchronize(p)
+    }
+}
+
+@(private="file")
+statement :: proc (p: ^Parser) {
+    if match(p, .WRITE) {
+        write_statement(p)
+    } else {
+        expression_statement(p)
+    }
 }
 
 /* Compile the provided slice of tokens into a bytecode chunk. */
@@ -336,8 +457,11 @@ compile :: proc (vm: ^VM, tokens: []Token, chunk: ^Chunk) -> bool {
     }
 
     advance(&p)
-    expression(&p)
-    consume(&p, TokenType.EOF, "Expect end of expression.")
+
+    for !match(&p, .EOF) {
+        declaration(&p)
+    }
+
     end_compiler(&p)
 
     return !p.had_error

@@ -19,7 +19,7 @@ TokenType :: enum {
 
     // keywords
     AND, BREAK, ELSE, FALSE, FINAL, FOR, FUN,
-    IF, IMPORT, IN, NIL, NOT, OR, PRIVATE,
+    IF, IMPORT, IN, LET, NIL, NOT, OR, PRIVATE,
     RETURN, TRUE, WRITE,
 
     ILLEGAL, EOF,
@@ -114,10 +114,10 @@ previous :: proc (l: ^Lexer) -> rune {
 @(private="file")
 match :: proc (l: ^Lexer, expected: rune) -> bool {
     if is_at_end(l) do return false
-    defer l.current += 1
     if peek(l) != expected {
         return false
     }
+    defer l.current += 1
 
     return true
 }
@@ -164,7 +164,7 @@ insert_semis :: proc (tokens: []Token) -> []Token {
     result := make([dynamic]Token, 0, 0)
 
     for i, idx in tokens {
-        if i.type != .NEWLINE {
+        if i.type != .NEWLINE && i.type != .EOF || i.type == .SEMI {
             append(&result, i)
             continue
         }
@@ -172,27 +172,14 @@ insert_semis :: proc (tokens: []Token) -> []Token {
         if idx == 0 do continue
 
         #partial switch tokens[idx - 1].type {
-            case .IDENT: fallthrough
-            case .NUMBER: fallthrough
-            case .STRING: fallthrough
-            case .BREAK: fallthrough
-            case .RETURN: fallthrough
-            case .RPAREN: {
-                #partial switch tokens[idx + 1].type {
-                    case .PLUS: fallthrough
-                    case .MINUS: fallthrough
-                    case .STAR: fallthrough
-                    case .SLASH: fallthrough
-                    case .BANG_EQUAL: fallthrough
-                    case .EQUAL: fallthrough
-                    case .EQUAL_EQUAL: fallthrough
-                    case .GREATER: fallthrough
-                    case .GREATER_EQUAL: fallthrough
-                    case .LESS: fallthrough
-                    case .LESS_EQUAL: fallthrough
-                    case .AND: fallthrough
-                    case .OR: fallthrough
-                    case .DOT: continue
+            case .IDENT, .NUMBER, .STRING, .NIL, .TRUE, .FALSE,
+                .BREAK, .RETURN, .RPAREN: {
+                if i.type != .EOF {
+                    #partial switch tokens[idx + 1].type {
+                        case .PLUS, .MINUS, .STAR, .SLASH, .BANG_EQUAL, .EQUAL,
+                        .EQUAL_EQUAL, .GREATER, .GREATER_EQUAL, .LESS,
+                        .LESS_EQUAL, .AND, .OR, .DOT: continue
+                    }
                 }
 
                 append(&result, Token{
@@ -201,6 +188,10 @@ insert_semis :: proc (tokens: []Token) -> []Token {
                     line = tokens[idx - 1].line,
                 })
             }
+        }
+
+        if i.type == .EOF {
+            append(&result, i)
         }
     }
 
@@ -277,6 +268,7 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
                 }
             }
         }
+        case 'l': return check_keyword(l, 1, 2, "et", .LET)
         case 'n': {
             if l.current - l.start > 1 {
                 switch utf8.rune_at(l.source, l.start + 1) {

@@ -46,8 +46,9 @@ allocate_obj :: proc (vm: ^VM, $T: typeid, type: ObjType) -> ^Obj {
     return obj
 }
 
+// Line 51 leaks memory of variable names
 copy_string :: proc (v: ^VM, str: string) -> ^ObjString {
-    s := strings.clone(str[1:len(str)-1])
+    s := strings.clone(str)
     hash := hash_string(s)
 
     interned := table_find_string(&v.strings, s, hash)
