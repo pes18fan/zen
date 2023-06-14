@@ -9,12 +9,12 @@ import "core:time"
 /* Fire up a REPL. */
 @(private="file")
 repl :: proc (vm: ^VM) -> int {
-    fmt.println("zen REPL.")
+    fmt.println("Welcome to zen!")
     fmt.println("Enter '#exit' to exit.")
     buf: [1024]byte
 
     for {
-        fmt.print("> ")
+        fmt.print(">> ")
         n, err := os.read(os.stdin, buf[:])
         if err < 0 {
             fmt.eprintln("Failed to read input")

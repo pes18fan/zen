@@ -9,6 +9,21 @@ simple_instruction :: proc (name: string, offset: int) -> int {
 }
 
 @(private="file")
+byte_instruction :: proc (name: string, c: ^Chunk, offset: int) -> int {
+    slot := c.code[offset + 1]
+    fmt.printf("%-16s %4d\n", name, slot)
+    return offset + 2
+}
+
+@(private="file")
+jump_instruction :: proc (name: string, sign: int, c: ^Chunk, offset: int) -> int {
+    jump := int(c.code[offset + 1]) << 8
+    jump |= int(c.code[offset + 2])
+    fmt.printf("%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump)
+    return offset + 3
+}
+
+@(private="file")
 constant_instruction :: proc (name: string, c: ^Chunk, offset: int) -> int {
     constant := c.code[offset + 1]
     fmt.printf("%-16s %4d '", name, constant)
@@ -40,6 +55,10 @@ disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
             return simple_instruction("OP_FALSE", offset)
         case .OP_POP:
             return simple_instruction("OP_POP", offset)
+        case .OP_GET_LOCAL:
+            return byte_instruction("OP_GET_LOCAL", c, offset)
+        case .OP_SET_LOCAL:
+            return byte_instruction("OP_SET_LOCAL", c, offset)
         case .OP_GET_GLOBAL:
             return constant_instruction("OP_GET_GLOBAL", c, offset)
         case .OP_DEFINE_GLOBAL:
@@ -66,6 +85,10 @@ disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
             return simple_instruction("OP_NEGATE", offset)
         case .OP_WRITE:
             return simple_instruction("OP_WRITE", offset)
+        case .OP_JUMP:
+            return jump_instruction("OP_JUMP", 1, c, offset)
+        case .OP_JUMP_IF_FALSE:
+            return jump_instruction("OP_JUMP_IF_FALSE", 1, c, offset)
         case .OP_RETURN:
             return simple_instruction("OP_RETURN", offset)
         case:

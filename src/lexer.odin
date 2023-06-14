@@ -253,7 +253,7 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
             if l.current - l.start > 1 {
                 switch utf8.rune_at(l.source, l.start + 1) {
                     case 'a': return check_keyword(l, 2, 3, "lse", .FALSE)
-                    case 'i': return check_keyword(l, 2, 1, "n", .FINAL)
+                    case 'i': return check_keyword(l, 2, 3, "nal", .FINAL)
                     case 'o': return check_keyword(l, 2, 1, "r", .FOR)
                     case 'u': return check_keyword(l, 2, 1, "n", .FUN)
                 }

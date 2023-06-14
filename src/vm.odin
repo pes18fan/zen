@@ -90,6 +90,12 @@ read_string :: proc (vm: ^VM) -> ^ObjString {
     return as_string(read_constant(vm))
 }
 
+@(private="file")
+read_short :: proc (vm: ^VM) -> int {
+    vm.ip += 2
+    return int((vm.chunk.code[vm.ip - 2] << 8) | vm.chunk.code[vm.ip - 1])
+}
+
 /*
 Performs a binary operation on the top two values of the stack. In zen, a
 binary operator can only return either a 64-bit float or a boolean. 
@@ -156,6 +162,12 @@ run :: proc (v: ^VM) -> InterpretResult {
             case .OP_TRUE:     vm_push(v, bool_val(true))
             case .OP_FALSE:    vm_push(v, bool_val(false))
             case .OP_POP:      vm_pop(v)
+            case .OP_GET_LOCAL:
+                slot := read_byte(v)
+                vm_push(v, v.stack[slot])
+            case .OP_SET_LOCAL:
+                slot := read_byte(v)
+                v.stack[slot] = vm_peek(v, 0)
             case .OP_GET_GLOBAL: {
                 name := read_string(v)
                 value: Value; ok: bool
@@ -234,6 +246,14 @@ run :: proc (v: ^VM) -> InterpretResult {
             case .OP_WRITE:
                 print_value(vm_pop(v))
                 fmt.printf("\n")
+            case .OP_JUMP:
+                offset := read_short(v)
+                v.ip += offset
+            case .OP_JUMP_IF_FALSE:
+                offset := read_short(v)
+                if is_falsey(vm_peek(v, 0)) {
+                    v.ip += offset
+                }
             case .OP_RETURN: 
                 // Exit interpreter.
                 return .INTERPRET_OK

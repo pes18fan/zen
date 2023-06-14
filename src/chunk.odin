@@ -12,6 +12,8 @@ OpCode :: enum {
     OP_TRUE,
     OP_FALSE,
     OP_POP,
+    OP_GET_LOCAL,
+    OP_SET_LOCAL,
     OP_GET_GLOBAL,
     OP_DEFINE_GLOBAL,
     OP_SET_GLOBAL,
@@ -25,6 +27,8 @@ OpCode :: enum {
     OP_NOT,
     OP_NEGATE,
     OP_WRITE,
+    OP_JUMP,
+    OP_JUMP_IF_FALSE,
     OP_RETURN,
 }
 
@@ -45,9 +49,6 @@ Chunk :: struct {
 
 /*
 Writes a line to an array using RLE.
-! Memory leak here at line 66, according to the leak tracker in the main function,
-apparently occuring every time a line is written. No idea why this is happening, 
-if anyone does please let me know.
 */
 @(private="file")
 write_line :: proc (lines: ^[dynamic]int, line: int) {
