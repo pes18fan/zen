@@ -7,6 +7,7 @@ ObjType :: enum {
     STRING,
 }
 
+/* An object allocated on the heap. */
 Obj :: struct {
     type: ObjType,
     next: ^Obj,

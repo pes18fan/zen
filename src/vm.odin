@@ -74,14 +74,14 @@ free_VM :: proc (vm: ^VM) {
 
 /* Reads a byte from the chunk and increments the instruction pointer. */
 @(private="file")
-read_byte :: proc (vm: ^VM) -> byte {
+read_byte :: proc (vm: ^VM) -> byte #no_bounds_check {
     vm.ip += 1
     return vm.chunk.code[vm.ip - 1]
 }
 
 /* Reads a constant from the chunk and pushes it onto the stack. */
 @(private="file")
-read_constant :: proc (vm: ^VM) -> Value {
+read_constant :: proc (vm: ^VM) -> Value #no_bounds_check {
     return vm.chunk.constants.values[read_byte(vm)]
 }
 
@@ -91,7 +91,7 @@ read_string :: proc (vm: ^VM) -> ^ObjString {
 }
 
 @(private="file")
-read_short :: proc (vm: ^VM) -> int {
+read_short :: proc (vm: ^VM) -> int #no_bounds_check {
     vm.ip += 2
     return int((vm.chunk.code[vm.ip - 2] << 8) | vm.chunk.code[vm.ip - 1])
 }
@@ -101,10 +101,10 @@ Performs a binary operation on the top two values of the stack. In zen, a
 binary operator can only return either a 64-bit float or a boolean. 
 */
 @(private="file")
-binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> bool {
+binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> InterpretResult {
     if !is_number(vm_peek(v, 0)) || !is_number(vm_peek(v, 1)) {
         runtime_error(v, "Operands must be numbers.")
-        return false
+        return .INTERPRET_RUNTIME_ERROR
     }
 
     b := as_number(vm_pop(v))
@@ -126,7 +126,7 @@ binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> bool {
         case: unreachable()
     }
 
-    return true
+    return nil
 }
 
 /*
@@ -134,9 +134,7 @@ Run the VM, going through the bytecode and interpreting each instruction
 one by one.
 */
 @(private="file")
-run :: proc (v: ^VM) -> InterpretResult {
-    using OpCode
-
+run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
     for {
         when ODIN_DEBUG {
             fmt.printf("          ")
@@ -196,16 +194,8 @@ run :: proc (v: ^VM) -> InterpretResult {
                 vm_push(v, bool_val(values_equal(a, b)))
             }
             // TODO: Get rid of the below repitition for binary operations
-            case .OP_GREATER:
-                ok := binary_op(v, bool, '>')
-                if !ok {
-                    return .INTERPRET_RUNTIME_ERROR
-                }
-            case .OP_LESS:
-                ok := binary_op(v, bool, '<')
-                if !ok {
-                    return .INTERPRET_RUNTIME_ERROR
-                }
+            case .OP_GREATER: binary_op(v, bool, '>') or_return
+            case .OP_LESS:    binary_op(v, bool, '<') or_return
             case .OP_ADD:      
                 if is_string(vm_peek(v, 0)) && 
                     is_string(vm_peek(v, 1)) {
@@ -220,21 +210,9 @@ run :: proc (v: ^VM) -> InterpretResult {
                         "Operands must be two numbers or two strings.")
                     return .INTERPRET_RUNTIME_ERROR
                 }
-            case .OP_SUBTRACT: 
-                ok := binary_op(v, f64, '-')
-                if !ok {
-                    return .INTERPRET_RUNTIME_ERROR
-                }
-            case .OP_MULTIPLY: 
-                ok := binary_op(v, f64, '*')
-                if !ok {
-                    return .INTERPRET_RUNTIME_ERROR
-                }
-            case .OP_DIVIDE:   
-                ok := binary_op(v, f64, '/')
-                if !ok {
-                    return .INTERPRET_RUNTIME_ERROR
-                }
+            case .OP_SUBTRACT: binary_op(v, f64, '-') or_return
+            case .OP_MULTIPLY: binary_op(v, f64, '*') or_return
+            case .OP_DIVIDE:   binary_op(v, f64, '/') or_return
             case .OP_NOT:
                 vm_push(v, bool_val(is_falsey(vm_pop(v))))
             case .OP_NEGATE:
@@ -286,17 +264,17 @@ interpret :: proc (vm: ^VM, source: string) -> InterpretResult {
 }
 
 /* Push a value onto the stack. */
-vm_push :: proc (vm: ^VM, value: Value) {
+vm_push :: proc (vm: ^VM, value: Value) #no_bounds_check {
     append(&vm.stack, value)
 }
 
 /* Pop a value out of the stack. */
-vm_pop :: proc (vm: ^VM) -> Value {
+vm_pop :: proc (vm: ^VM) -> Value #no_bounds_check {
     return pop(&vm.stack)
 }
 
 /* Peek at a certain distance from the top of the stack. */
-vm_peek :: proc (vm: ^VM, distance: int) -> Value {
+vm_peek :: proc (vm: ^VM, distance: int) -> Value #no_bounds_check {
     return vm.stack[len(vm.stack) - 1 - distance]
 }
 

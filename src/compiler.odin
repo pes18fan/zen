@@ -363,7 +363,7 @@ named_variable :: proc (p: ^Parser, curr: ^Compiler, name: Token,
         set_op = byte(OpCode.OP_SET_GLOBAL)
     }
 
-    // For some reason, finals don't work in the REPL.
+    //! For some reason, finals don't work in the REPL.
     if can_assign && match(p, .EQUAL) {
         if set_op == byte(OpCode.OP_SET_LOCAL) {
             for i := curr.local_count - 1; i >= 0; i -= 1 {
