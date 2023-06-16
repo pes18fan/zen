@@ -157,6 +157,7 @@ This is the way it works:
     b. And ONLY when the next token isn't one of these:
         - infix operator
         - dot
+2. Or, insert a semi after a token if the token following it is a }
 */
 @(private="file")
 insert_semis :: proc (tokens: []Token) -> []Token {
@@ -169,7 +170,7 @@ insert_semis :: proc (tokens: []Token) -> []Token {
             continue
         }
 
-        if idx == 0 do continue
+        if idx == 0 { continue }
 
         #partial switch tokens[idx - 1].type {
             case .IDENT, .NUMBER, .STRING, .NIL, .TRUE, .FALSE,

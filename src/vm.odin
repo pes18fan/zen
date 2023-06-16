@@ -20,6 +20,7 @@ VM :: struct {
     stack: [dynamic]Value,
 
     globals: Table,
+    compiler_globals: Table,
     strings: Table,
 
     objects: ^Obj,
@@ -60,12 +61,14 @@ init_VM :: proc () -> VM {
         stack = make([dynamic]Value, 0, 0),
         objects = nil,
         globals = init_table(),
+        compiler_globals = init_table(),
         strings = init_table(),
     }
 }
 
 /* Free's the VM's memory. */
 free_VM :: proc (vm: ^VM) {
+    free_table(&vm.compiler_globals)
     free_table(&vm.globals)
     free_table(&vm.strings)
     free_objects(vm)
@@ -116,7 +119,13 @@ binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> InterpretResult {
                 case '+': vm_push(v, number_val(a + b))
                 case '-': vm_push(v, number_val(a - b))
                 case '*': vm_push(v, number_val(a * b))
-                case '/': vm_push(v, number_val(a / b))
+                case '/': {
+                    if b == 0 {
+                        runtime_error(v, "Cannot divide by zero.")
+                        return .INTERPRET_RUNTIME_ERROR
+                    }
+                    vm_push(v, number_val(a / b))
+                }
             }
         case bool:
             switch op {
@@ -250,7 +259,7 @@ interpret :: proc (vm: ^VM, source: string) -> InterpretResult {
 
     chunk := init_chunk()
     defer free_chunk(&chunk)
-    cmp_ok := compile(vm, tokens, &chunk)
+    cmp_ok := compile(vm, tokens, &chunk, &vm.compiler_globals)
     if !cmp_ok {
         return .INTERPRET_COMPILE_ERROR
     }

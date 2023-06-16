@@ -21,6 +21,7 @@ Parser :: struct {
     had_error: bool,
     panic_mode: bool,
     compiling_chunk: ^Chunk,
+    current_compiler: ^Compiler,
     vm: ^VM,
 }
 
@@ -40,7 +41,7 @@ Precedence :: enum {
 }
 
 /* A function that can parse a certain expression. */
-ParseFn :: #type proc (p: ^Parser, curr: ^Compiler, can_assign: bool)
+ParseFn :: #type proc (p: ^Parser, can_assign: bool)
 
 /* 
 A rule for parsing an expression. Has a prefix parsing function, an
@@ -66,7 +67,7 @@ Local :: struct {
 A struct that holds variables and scope info.
 */
 Compiler :: struct {
-    globals: Table,
+    globals: ^Table,
     locals: [U8_COUNT]Local,
     local_count: int,
     scope_depth: int,
@@ -223,18 +224,20 @@ patch_jump :: proc (p: ^Parser, offset: int) {
 
 /*
 Return a new Compiler struct.
+The globals table is inherited from previous runs of the compiler so that
+final variables' "finality" can be preserved in the global scope.
 */
-init_compiler :: proc () -> Compiler {
+init_compiler :: proc (globals: ^Table) -> Compiler {
     return Compiler {
         local_count = 0,
         scope_depth = 0,
-        globals = init_table(),
+        globals = globals,
     }
 }
 
 /* Emit a return instruction and decode the RLE-encoded lines. */
 @(private="file")
-end_compiler :: proc (p: ^Parser, curr: ^Compiler) {
+end_compiler :: proc (p: ^Parser) {
     emit_return(p)
 
     when ODIN_DEBUG {
@@ -242,14 +245,12 @@ end_compiler :: proc (p: ^Parser, curr: ^Compiler) {
             disassemble(p.compiling_chunk, "code")
         }
     }
-
-    free_table(&curr.globals)
 }
 
 /* Begin a new scope. */
 @(private="file")
-begin_scope :: proc (curr: ^Compiler) {
-    curr.scope_depth += 1
+begin_scope :: proc (p: ^Parser) {
+    p.current_compiler.scope_depth += 1
 }
 
 /* 
@@ -257,13 +258,14 @@ End the current scope.
 This also pops off any local variables that were declared in the scope.
 */
 @(private="file")
-end_scope :: proc (p: ^Parser, curr: ^Compiler) {
-    curr.scope_depth -= 1
+end_scope :: proc (p: ^Parser) {
+    p.current_compiler.scope_depth -= 1
 
-    for curr.local_count > 0 &&
-        curr.locals[curr.local_count - 1].depth > curr.scope_depth {
+    for p.current_compiler.local_count > 0 &&
+        p.current_compiler.locals[p.current_compiler.local_count - 1].depth > 
+            p.current_compiler.scope_depth {
         emit_byte(p, byte(OpCode.OP_POP))
-        curr.local_count -= 1
+        p.current_compiler.local_count -= 1
     }
 }
 
@@ -275,12 +277,12 @@ get_rule :: proc (type: TokenType) -> ^ParseRule {
 
 /* Parse a binary expression and emit it to the chunk. */
 @(private="file")
-binary :: proc (p: ^Parser, curr: ^Compiler, can_assign: bool) {
+binary :: proc (p: ^Parser, can_assign: bool) {
     using OpCode
 
     operator_type := p.previous.type
     rule := get_rule(operator_type)
-    parse_precedence(p, curr, Precedence(byte(rule.precedence) + 1))
+    parse_precedence(p, Precedence(byte(rule.precedence) + 1))
 
     #partial switch operator_type {
         case .BANG_EQUAL: emit_bytes(p, byte(OP_EQUAL), byte(OP_NOT))
@@ -299,22 +301,21 @@ binary :: proc (p: ^Parser, curr: ^Compiler, can_assign: bool) {
 
 /* Parse a literal value and emit it to the chunk. */
 @(private="file")
-literal :: proc (p: ^Parser, _: ^Compiler, can_assign: bool) {
-    using TokenType
+literal :: proc (p: ^Parser, can_assign: bool) {
     using OpCode
 
     #partial switch p.previous.type {
-        case FALSE: emit_byte(p, byte(OP_FALSE))
-        case NIL: emit_byte(p, byte(OP_NIL))
-        case TRUE: emit_byte(p, byte(OP_TRUE))
+        case .FALSE: emit_byte(p, byte(OP_FALSE))
+        case .NIL: emit_byte(p, byte(OP_NIL))
+        case .TRUE: emit_byte(p, byte(OP_TRUE))
         case: return // Unreachable.
     }
 }
 
 /* Parse a grouping (parenthesized) expression. */
 @(private="file")
-grouping :: proc (p: ^Parser, curr: ^Compiler, can_assign: bool) {
-    expression(p, curr)
+grouping :: proc (p: ^Parser, can_assign: bool) {
+    expression(p)
     consume(p, TokenType.RPAREN, "Expect ')' after expression.")
 }
 
@@ -323,7 +324,7 @@ Parse a number and emit that constant to the chunk. Numbers are currently
 only parsed as 64-bit floats, which is subject to change.
 */
 @(private="file")
-number :: proc (p: ^Parser, _: ^Compiler, can_assign: bool) {
+number :: proc (p: ^Parser, can_assign: bool) {
     value, ok := strconv.parse_f64(p.previous.lexeme)
     if !ok {
         error(p, 
@@ -335,7 +336,7 @@ number :: proc (p: ^Parser, _: ^Compiler, can_assign: bool) {
 
 /* Parse a string and emit that constant to the chunk. */
 @(private="file")
-zstring :: proc (p: ^Parser, _: ^Compiler, can_assign: bool) {
+zstring :: proc (p: ^Parser, can_assign: bool) {
     emit_constant(p, obj_val(
         copy_string(p.vm, p.previous.lexeme[1:len(p.previous.lexeme)-1])))
 }
@@ -346,12 +347,12 @@ assigning to variables, and for reading constants declared with `final`.
 This function will error if there is an attempt to assign to a constant.
 */
 @(private="file")
-named_variable :: proc (p: ^Parser, curr: ^Compiler, name: Token, 
+named_variable :: proc (p: ^Parser, name: Token, 
     can_assign: bool) {
     name := name
     get_op, set_op: u8
     arg: u8
-    possible_local := resolve_local(p, curr, &name)
+    possible_local := resolve_local(p, &name)
 
     if possible_local != -1 {
         arg = u8(possible_local)
@@ -363,31 +364,34 @@ named_variable :: proc (p: ^Parser, curr: ^Compiler, name: Token,
         set_op = byte(OpCode.OP_SET_GLOBAL)
     }
 
-    //! For some reason, finals don't work in the REPL.
     if can_assign && match(p, .EQUAL) {
         if set_op == byte(OpCode.OP_SET_LOCAL) {
-            for i := curr.local_count - 1; i >= 0; i -= 1 {
-                local := &curr.locals[i]
+            for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
+                local := &p.current_compiler.locals[i]
                 if identifiers_equal(&name, &local.name) && local.final {
                     error(p, 
-                        "Cannot assign to a constant.")
+                        "Can only set a final variable once.")
                 }
             }
-        } else {
+        } 
+
+        if set_op == byte(OpCode.OP_SET_GLOBAL) {
             global_o_str := copy_string(p.vm, name.lexeme)
             value: Value; ok: bool
 
-            if value, ok := table_get(&curr.globals, global_o_str); ok {
+            if value, ok := table_get(p.current_compiler.globals, 
+                global_o_str); ok {
                 if values_equal(value, bool_val(true)) {
                     error(p, 
-                        "Cannot assign to a constant.")
+                        "Can only set a final variable once.")
                 }
             } else {
-                table_set(&curr.globals, global_o_str, bool_val(false))
+                table_set(p.current_compiler.globals,
+                    global_o_str, bool_val(false))
             }
         }
 
-        expression(p, curr)
+        expression(p)
         emit_bytes(p, set_op, arg)
     } else {
         emit_bytes(p, get_op, arg)
@@ -396,18 +400,18 @@ named_variable :: proc (p: ^Parser, curr: ^Compiler, name: Token,
 
 /* Parses a variable expression. Also used to parse assignments. */
 @(private="file")
-variable :: proc (p: ^Parser, curr: ^Compiler, can_assign: bool) {
-    named_variable(p, curr, p.previous, can_assign)
+variable :: proc (p: ^Parser, can_assign: bool) {
+    named_variable(p, p.previous, can_assign)
 }
 
 /* Parse a unary expression. */
 @(private="file")
-unary :: proc (p: ^Parser, curr: ^Compiler, can_assign: bool) {
+unary :: proc (p: ^Parser, can_assign: bool) {
     using OpCode
     operator_type := p.previous.type
 
     // Compile the operand.
-    parse_precedence(p, curr, .UNARY)
+    parse_precedence(p, .UNARY)
 
     // Emit the operator instruction.
     #partial switch operator_type {
@@ -467,7 +471,7 @@ Starting at the current token, parse an expression at the given precedence
 level or higher.
 */
 @(private="file")
-parse_precedence :: proc (p: ^Parser, curr: ^Compiler, precedence: Precedence) {
+parse_precedence :: proc (p: ^Parser, precedence: Precedence) {
     advance(p)
     prefix_rule := get_rule(p.previous.type).prefix
     if (prefix_rule == nil) {
@@ -476,12 +480,12 @@ parse_precedence :: proc (p: ^Parser, curr: ^Compiler, precedence: Precedence) {
     }
 
     can_assign := precedence <= Precedence.ASSIGNMENT
-    prefix_rule(p, curr, can_assign)
+    prefix_rule(p, can_assign)
 
     for precedence <= get_rule(p.current.type).precedence {
         advance(p)
         infix_rule := get_rule(p.previous.type).infix
-        infix_rule(p, curr, can_assign)
+        infix_rule(p, can_assign)
     }
 
     /* Error raised if trying to assign to something that you can't
@@ -508,9 +512,9 @@ identifiers_equal :: proc (a: ^Token, b: ^Token) -> bool {
 Resolve a local name binding from the Compiler struct.
 */
 @(private="file")
-resolve_local :: proc (p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
-    for i := compiler.local_count - 1; i >= 0; i -= 1 {
-        local := &compiler.locals[i]
+resolve_local :: proc (p: ^Parser, name: ^Token) -> int {
+    for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
+        local := &p.current_compiler.locals[i]
         if identifiers_equal(name, &local.name) {
             if local.depth == -1 {
                 error(p, 
@@ -528,14 +532,14 @@ Add a local name binding.
 Errors if there are too many local variables in the scope already.
 */
 @(private="file")
-add_local :: proc (p: ^Parser, curr: ^Compiler, name: Token, final: bool) {
-    if curr.local_count == U8_COUNT {
+add_local :: proc (p: ^Parser, name: Token, final: bool) {
+    if p.current_compiler.local_count == U8_COUNT {
         error(p, "Too many local variables in function.")
         return
     }
 
-    defer curr.local_count += 1
-    local := &curr.locals[curr.local_count]
+    defer p.current_compiler.local_count += 1
+    local := &p.current_compiler.locals[p.current_compiler.local_count]
     local.name = name
     local.depth = -1
     local.final = final
@@ -546,14 +550,14 @@ Declare a name binding.
 Errors if the variable of that name already exists in the scope.
 */
 @(private="file")
-declare_variable :: proc (p: ^Parser, curr: ^Compiler, final: bool) {
-    if curr.scope_depth == 0 { return }
+declare_variable :: proc (p: ^Parser, final: bool) {
+    if p.current_compiler.scope_depth == 0 { return }
 
     name := &p.previous
 
-    for i := curr.local_count - 1; i >= 0; i -= 1 {
-        local := &curr.locals[i]
-        if local.depth != -1 && local.depth < curr.scope_depth {
+    for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
+        local := &p.current_compiler.locals[i]
+        if local.depth != -1 && local.depth < p.current_compiler.scope_depth {
             break
         }
 
@@ -563,31 +567,31 @@ declare_variable :: proc (p: ^Parser, curr: ^Compiler, final: bool) {
         }
     }
 
-    add_local(p, curr, name^, final)
+    add_local(p, name^, final)
 }
 
 /* Parse a variable or `final` declaration. */
 @(private="file")
-parse_variable :: proc (p: ^Parser, curr: ^Compiler, 
-    error_message: string, final: bool) -> u8 {
+parse_variable :: proc (p: ^Parser, error_message: string, 
+    final: bool) -> u8 {
     consume(p, .IDENT, error_message)
 
-    declare_variable(p, curr, final)
-    if curr.scope_depth > 0 { return 0 }
+    declare_variable(p, final)
+    if p.current_compiler.scope_depth > 0 { return 0 }
 
     global_o_str := copy_string(p.vm, p.previous.lexeme)
     value: Value; ok: bool
 
-    if value, ok := table_get(&curr.globals, global_o_str); ok {
+    if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
         if values_equal(value, bool_val(true)) {
             error(p, 
-                final ? "Cannot redefine a constant." : 
-                    "Cannot redefine a constant as variable.")
+                final ? "Cannot redefine a final variable." : 
+                    "Cannot redefine a final variable as normal variable.")
         } else if final {
-            error(p, "Cannot redefine a variable as constant.")
+            error(p, "Cannot redefine a variable as final variable.")
         }
     } else {
-        table_set(&curr.globals, global_o_str, bool_val(final))
+        table_set(p.current_compiler.globals, global_o_str, bool_val(final))
     }
 
     return identifier_constant(p, &p.previous)
@@ -595,15 +599,16 @@ parse_variable :: proc (p: ^Parser, curr: ^Compiler,
 
 /* Mark a local name binding as initialized. */
 @(private="file")
-mark_initialized :: proc (curr: ^Compiler) {
-    curr.locals[curr.local_count - 1].depth = curr.scope_depth
+mark_initialized :: proc (p: ^Parser) {
+    p.current_compiler.locals[p.current_compiler.local_count - 1].depth = 
+        p.current_compiler.scope_depth
 }
 
 /* Define a local or global name binding. */
 @(private="file")
-define_variable :: proc (p: ^Parser, curr: ^Compiler, global: u8) {
-    if curr.scope_depth > 0 { 
-        mark_initialized(curr)
+define_variable :: proc (p: ^Parser, global: u8) {
+    if p.current_compiler.scope_depth > 0 { 
+        mark_initialized(p)
         return 
     }
 
@@ -612,34 +617,34 @@ define_variable :: proc (p: ^Parser, curr: ^Compiler, global: u8) {
 
 /* Parse any expression. */
 @(private="file")
-expression :: proc (p: ^Parser, curr: ^Compiler) {
-    parse_precedence(p, curr, .ASSIGNMENT)
+expression :: proc (p: ^Parser) {
+    parse_precedence(p, .ASSIGNMENT)
 }
 
 /* Parse a block. */
 @(private="file")
-block :: proc (p: ^Parser, curr: ^Compiler) {
-    begin_scope(curr)
+block :: proc (p: ^Parser) {
+    begin_scope(p)
     for !check(p, .RSQUIRLY) && !check(p, .EOF) {
-        declaration(p, curr)
+        declaration(p)
     }
 
     consume(p, .RSQUIRLY, "Expect '}' after block.")
-    end_scope(p, curr)
+    end_scope(p)
 }
 
 /* Parse a name binding. */
 @(private="file")
-let_declaration :: proc (p: ^Parser, curr: ^Compiler) {
+let_declaration :: proc (p: ^Parser) {
     final := p.previous.type == .FINAL
-    global := parse_variable(p, curr, 
-        final ? "Expect constant name." : "Expect variable name.", final)
+    global := parse_variable(p, 
+        final ? "Expect final variable name." : "Expect variable name.", final)
 
     if match(p, .EQUAL) {
-        expression(p, curr)
+        expression(p)
     } else {
         if final {
-            error(p, "Constants must be initialized.")
+            error(p, "Final variables must be initialized.")
         } else {
             emit_byte(p, byte(OpCode.OP_NIL))
         }
@@ -647,26 +652,26 @@ let_declaration :: proc (p: ^Parser, curr: ^Compiler) {
 
     consume(p, .SEMI, "Expect ';' after variable declaration.")
 
-    define_variable(p, curr, global)
+    define_variable(p, global)
 }
 
 /* Parse an expression statement. */
 @(private="file")
-expression_statement :: proc (p: ^Parser, curr: ^Compiler) {
-    expression(p, curr)
+expression_statement :: proc (p: ^Parser) {
+    expression(p)
     consume(p, .SEMI, "Expect ';' after expression.")
     emit_byte(p, byte(OpCode.OP_POP))
 }
 
 /* Parse an if statement. */
 @(private="file")
-if_statement :: proc (p: ^Parser, curr: ^Compiler) {
-    expression(p, curr)
+if_statement :: proc (p: ^Parser) {
+    expression(p)
     consume(p, .LSQUIRLY, "Expect '{' after if condition.")
 
     then_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
     emit_byte(p, byte(OpCode.OP_POP))
-    block(p, curr)
+    block(p)
 
     else_jump := emit_jump(p, byte(OpCode.OP_JUMP))
 
@@ -675,15 +680,15 @@ if_statement :: proc (p: ^Parser, curr: ^Compiler) {
 
     if match(p, .ELSE) {
         consume(p, .LSQUIRLY, "Expect '{' after else.")
-        block(p, curr)
+        block(p)
     }
     patch_jump(p, else_jump)
 }
 
 /* Parse a `write` statement. */
 @(private="file")
-write_statement :: proc (p: ^Parser, curr: ^Compiler) {
-    expression(p, curr)
+write_statement :: proc (p: ^Parser) {
+    expression(p)
     consume(p, .SEMI, "Expect ';' after value.")
     emit_byte(p, byte(OpCode.OP_WRITE))
 }
@@ -713,11 +718,11 @@ synchronize :: proc (p: ^Parser) {
 
 /* Parse a declaration. */
 @(private="file")
-declaration :: proc (p: ^Parser, curr: ^Compiler) {
+declaration :: proc (p: ^Parser) {
     if match(p, .LET) || match(p, .FINAL) {
-        let_declaration(p, curr)
+        let_declaration(p)
     } else {
-        statement(p, curr)
+        statement(p)
     }
 
     if p.panic_mode {
@@ -727,38 +732,47 @@ declaration :: proc (p: ^Parser, curr: ^Compiler) {
 
 /* Parse a statement. */
 @(private="file")
-statement :: proc (p: ^Parser, curr: ^Compiler) {
+statement :: proc (p: ^Parser) {
     if match(p, .WRITE) {
-        write_statement(p, curr)
+        write_statement(p)
     } else if match(p, .IF) {
-        if_statement(p, curr)
+        if_statement(p)
     } else if match(p, .LSQUIRLY) {
-        block(p, curr)
+        block(p)
     } else {
-        expression_statement(p, curr)
+        expression_statement(p)
     }
 }
 
-/* Compile the provided slice of tokens into a bytecode chunk. */
-compile :: proc (vm: ^VM, tokens: []Token, chunk: ^Chunk) -> bool {
+/* 
+Compile the provided slice of tokens into a bytecode chunk. 
+The compile function also takes in a pointer to a globals table. The main 
+reason behind this is to keep track of any final variables declared. This is 
+useful in the REPL but not so much in a file.
+
+TODO: Find a better way to store global variables so that this whole
+table-passing thing isn't necessary.
+*/
+compile :: proc (vm: ^VM, tokens: []Token, chunk: ^Chunk, globals: ^Table) -> 
+    bool {
+    c := init_compiler(globals)
     p := Parser{
         tokens = tokens,
         curr_idx = 0,
         had_error = false,
         panic_mode = false,
         compiling_chunk = chunk,
+        current_compiler = &c,
         vm = vm,
     }
-    c := init_compiler()
-    current := &c
 
     advance(&p)
 
     for !match(&p, .EOF) {
-        declaration(&p, current)
+        declaration(&p)
     }
 
-    end_compiler(&p, &c)
+    end_compiler(&p)
 
     return !p.had_error
 }

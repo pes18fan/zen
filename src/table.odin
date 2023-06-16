@@ -1,10 +1,13 @@
 package zen
 
+import "core:fmt"
 import "core:mem"
 import "core:strings"
 
+@(private="file")
 MAX_LOAD :: 0.6
 
+@(private="file")
 Entry :: struct {
     key: ^ObjString,
     value: Value,
@@ -54,6 +57,7 @@ table_set :: proc (table: ^Table, key: ^ObjString, value: Value) -> bool {
     return is_new_key
 }
 
+@(private="file")
 find_entry :: proc (entries: []Entry, capacity: int,
     key: ^ObjString) -> ^Entry {
     index := key.hash % u32(capacity)
@@ -76,6 +80,7 @@ find_entry :: proc (entries: []Entry, capacity: int,
     }
 }
 
+@(private="file")
 adjust_capacity :: proc (table: ^Table, capacity: int) {
     entries := make([]Entry, capacity)
     for i in 0..<capacity {
@@ -140,6 +145,17 @@ table_find_string :: proc (table: ^Table, str: string,
     }
 }
 
+@(private="file")
 grow_capacity :: proc (capacity: int) -> int {
     return capacity < 8 ? 8 : capacity * 2
+}
+
+table_stringify :: proc (table: ^Table) {
+    for i in 0..<table.capacity {
+        entry := &table.entries[i]
+        if entry.key != nil {
+            fmt.eprintf("key: %s, value: %v\n", entry.key.chars, 
+                entry.value)
+        }
+    }
 }

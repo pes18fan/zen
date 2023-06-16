@@ -13,9 +13,6 @@ expect_tokens_equal :: proc (want: []Token, got: []Token) ->
     for i in want {
         if len(got) == 0 do break
 
-        fmt.println(i)
-        fmt.println(got[0])
-
         if i != got[0] {
             return false, i, got[0]
         }
