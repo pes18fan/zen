@@ -20,7 +20,7 @@ _pretest:
 
 # Create a debug build.
 dbg *args="": _predbg
-    {{ oc }} build src/ -out:{{ target_dbg }} -debug {{ args }}
+    {{ oc }} build src/ -out:{{ target_dbg }} -debug -o:none {{ args }}
 
 # Create a release build optimized for speed.
 rel *args="": _prerel

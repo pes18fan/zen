@@ -334,6 +334,17 @@ number :: proc (p: ^Parser, can_assign: bool) {
     emit_constant(p, number_val(value))
 }
 
+or_ :: proc (p: ^Parser, can_assign: bool) {
+    else_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
+    end_jump := emit_jump(p, byte(OpCode.OP_JUMP))
+
+    patch_jump(p, else_jump)
+    emit_byte(p, byte(OpCode.OP_POP))
+
+    parse_precedence(p, .OR)
+    patch_jump(p, end_jump)
+}
+
 /* Parse a string and emit that constant to the chunk. */
 @(private="file")
 zstring :: proc (p: ^Parser, can_assign: bool) {
@@ -444,7 +455,7 @@ rules: []ParseRule = {
     TokenType.IDENT         = ParseRule{ variable, nil,    .NONE },
     TokenType.STRING        = ParseRule{ zstring,  nil,    .NONE },
     TokenType.NUMBER        = ParseRule{ number,   nil,    .NONE },
-    TokenType.AND           = ParseRule{ nil,      nil,    .AND },
+    TokenType.AND           = ParseRule{ nil,      and_,   .AND },
     TokenType.BREAK         = ParseRule{ nil,      nil,    .NONE },
     TokenType.ELSE          = ParseRule{ nil,      nil,    .NONE },
     TokenType.FALSE         = ParseRule{ literal,  nil,    .NONE },
@@ -457,7 +468,7 @@ rules: []ParseRule = {
     TokenType.LET           = ParseRule{ nil,      nil,    .NONE },
     TokenType.NIL           = ParseRule{ literal,  nil,    .NONE },
     TokenType.NOT           = ParseRule{ unary,    nil,    .NONE },
-    TokenType.OR            = ParseRule{ nil,      nil,    .NONE },
+    TokenType.OR            = ParseRule{ nil,      or_,    .OR   },
     TokenType.PRIVATE       = ParseRule{ nil,      nil,    .NONE },
     TokenType.RETURN        = ParseRule{ nil,      nil,    .NONE },
     TokenType.TRUE          = ParseRule{ literal,  nil,    .NONE },
@@ -613,6 +624,15 @@ define_variable :: proc (p: ^Parser, global: u8) {
     }
 
     emit_bytes(p, byte(OpCode.OP_DEFINE_GLOBAL), global)
+}
+
+and_ :: proc (p: ^Parser, can_assign: bool) {
+    end_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
+
+    emit_byte(p, byte(OpCode.OP_POP))
+    parse_precedence(p, .AND)
+
+    patch_jump(p, end_jump)
 }
 
 /* Parse any expression. */

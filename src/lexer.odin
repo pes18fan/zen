@@ -214,6 +214,8 @@ skip_whitespace :: proc (l: ^Lexer) {
             case '\r': fallthrough
             case '\t':
                 advance(l)
+            /* ! Code that is only a comment causes a segfault, due to issues
+             * in insert_semis(). */
             case '/':
                 if peek_next(l) == '/' {
                     for peek(l) != '\n' && !is_at_end(l) {
