@@ -1,0 +1,8 @@
+// expect:
+// expect error:
+// Invalid assignment target.
+// end expect error
+// end expect
+
+let a = "a"
+(a) = "value"

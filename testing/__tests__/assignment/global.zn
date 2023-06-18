@@ -1,0 +1,15 @@
+// expect:
+// before
+// after
+// arg
+// arg
+// end expect
+
+let a = "before"
+write a
+
+a = "after"
+write a
+
+write a = "arg"
+write a
