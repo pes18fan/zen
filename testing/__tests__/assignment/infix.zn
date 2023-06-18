@@ -3,4 +3,5 @@
 // end expect
 
 let a = "a"
-(a) = "value"
+let b = "b"
+a + b = "value"

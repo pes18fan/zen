@@ -1,0 +1,12 @@
+// DRAFT
+// expect:
+// ERR: Invalid assignment target.
+// end expect
+
+let Foo = class {
+    Foo() {
+        this = "value"
+    }
+}
+
+Foo()

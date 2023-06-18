@@ -3,4 +3,4 @@
 // end expect
 
 let a = "a"
-(a) = "value"
+not a = "value"

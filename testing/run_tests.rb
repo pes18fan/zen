@@ -10,6 +10,7 @@ TEXT_BOLD = "\e[1m"
 
 puts "#{COL_RED}ZEN#{RESET} #{COL_GREEN}TESTER#{RESET}\n\n"
 
+# Test files recursively.
 def test(folder)
   puts "Now testing in directory #{TEXT_BOLD}#{folder}...#{RESET}\n"
   Dir.foreach(folder) do |file|
@@ -21,10 +22,17 @@ def test(folder)
       puts "\n"
       test(file_path)
     elsif file_path.end_with?(".zn")
-      print "Testing #{TEXT_BOLD}#{file_path}#{RESET}: "
-      output, error, status = capture_output("#{$compiler} #{file_path}")
+      expect, expected_err, wants_err, is_draft = 
+        read_expected_output(file_path)
 
-      expect, expected_err, wants_err = read_expected_output(file_path)
+      # Skip if the current file is a draft
+      if is_draft
+        next
+      end
+
+      print "Testing #{TEXT_BOLD}#{file_path}#{RESET}: "
+
+      output, error, status = capture_output("#{$compiler} #{file_path}")
 
       if status == 0
         if multiline_output_match?(output, expect)
@@ -54,40 +62,38 @@ def read_expected_output(path)
   expected_output = ""
   expected_error = ""
   read_output = false
-  read_error = false
   wants_error = false
+  is_draft = false
 
   File.open(path, "r") do |file|
     file.each_line do |line|
-      if line.strip == "// expect:"
+      if line.strip == "// DRAFT"
+        is_draft = true
+        break
+      elsif line.strip == "// expect:"
         read_output = true
         next
       elsif read_output && line.strip == "// end expect"
         read_output = false
         break
-      elsif line.strip == "// expect error:"
-        read_error = true
+      elsif read_output && line.start_with?("// ERR: ")
         wants_error = true
-        next
-      elsif read_error && line.strip == "// end expect error"
-        read_error = false
-        next
-      elsif read_error && line.start_with?("// ")
-        expected_error += line.sub("// ", "")
+        expected_error += line.sub("// ERR: ", "")
       elsif read_output && line.start_with?("// ")
         expected_output += line.sub("// ", "")
       end
     end
   end
 
-  [expected_output.strip, expected_error.strip, wants_error]
+  [expected_output.strip, expected_error.strip, wants_error, is_draft]
 end
 
 def multiline_output_match?(actual_output, expected_output)
   actual_lines = actual_output.strip.split("\n")
   expected_lines = expected_output.strip.split("\n")
 
-  actual_lines.size == expected_lines.size && actual_lines.zip(expected_lines).all? { |a, e| a.strip == e.strip }
+  actual_lines.size == expected_lines.size &&
+    actual_lines.zip(expected_lines).all? { |a, e| a.strip == e.strip }
 end
 
 # Capture stderr and stdout seperately

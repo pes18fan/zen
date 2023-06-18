@@ -30,15 +30,13 @@ rel *args="": _prerel
 doc: _predoc
     odin doc src/ > doc/docs.txt
 
-# Test all modules.
+# Test all modules, with both Odin's built-in tester and the ruby tester.
 test_all: _pretest
     #!/usr/bin/env bash
     cd bin/test/
     odin test ../../src/
-
-# Run tests using the tester written in Ruby.
-test_rb:
-    #!/usr/bin/env bash
+    cd ../../testing/
+    echo ""
     if ! command -v ruby >/dev/null 2>&1; then
         echo "Ruby needed to run the tests!"
         exit 1
