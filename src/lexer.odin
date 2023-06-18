@@ -20,7 +20,7 @@ TokenType :: enum {
     // keywords
     AND, BREAK, ELSE, FALSE, FINAL, FOR, FUN,
     IF, IMPORT, IN, LET, NIL, NOT, OR, PRIVATE,
-    RETURN, TRUE, WRITE,
+    RETURN, TRUE, WRITE, WHILE,
 
     ILLEGAL, EOF,
 }
@@ -113,7 +113,7 @@ previous :: proc (l: ^Lexer) -> rune {
 /* Consume the next character if it matches `expected`. */
 @(private="file")
 match :: proc (l: ^Lexer, expected: rune) -> bool {
-    if is_at_end(l) do return false
+    if is_at_end(l) { return false }
     if peek(l) != expected {
         return false
     }
@@ -157,12 +157,16 @@ This is the way it works:
     b. And ONLY when the next token isn't one of these:
         - infix operator
         - dot
-2. Or, insert a semi after a token if the token following it is a }
 */
 @(private="file")
 insert_semis :: proc (tokens: []Token) -> []Token {
     defer delete(tokens)
     result := make([dynamic]Token, 0, 0)
+
+    if len(tokens) == 1 && tokens[0].type == .EOF {
+        append(&result, tokens[0])
+        return result[:]
+    }
 
     for i, idx in tokens {
         if i.type != .NEWLINE && i.type != .EOF || i.type == .SEMI {
@@ -265,9 +269,9 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
         case 'i': {
             if l.current - l.start > 1 {
                 switch utf8.rune_at(l.source, l.start + 1) {
-                    case 'f': return check_keyword(l, 2, 0, "", .IF)
+                    case 'f': return .IF
                     case 'm': return check_keyword(l, 2, 4, "port", .IMPORT)
-                    case 'n': return check_keyword(l, 2, 2, "", .IN)
+                    case 'n': return .IN
                 }
             }
         }
@@ -284,7 +288,14 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
         case 'p': return check_keyword(l, 1, 6, "rivate", .PRIVATE)
         case 'r': return check_keyword(l, 1, 5, "eturn", .RETURN)
         case 't': return check_keyword(l, 1, 3, "rue", .TRUE)
-        case 'w': return check_keyword(l, 1, 4, "rite", .WRITE)
+        case 'w': {
+            if l.current - l.start > 1 {
+                switch utf8.rune_at(l.source, l.start + 1) {
+                    case 'r': return check_keyword(l, 2, 3, "ite", .WRITE)
+                    case 'h': return check_keyword(l, 2, 3, "ile", .WHILE)
+                }
+            }
+        }
     }
 
     return .IDENT
@@ -352,8 +363,8 @@ lex_token :: proc (l: ^Lexer) -> Token {
     }
 
     c := advance(l)
-    if is_alpha(c) do return tok_ident(l)
-    if is_digit(c) do return tok_number(l)
+    if is_alpha(c) { return tok_ident(l) }
+    if is_digit(c) { return tok_number(l) }
 
     switch c {
         case '(':  return make_token(l, .LPAREN)
@@ -389,7 +400,7 @@ lex_token :: proc (l: ^Lexer) -> Token {
     }
 
     return syntax_error(l, 
-        illegal(l, "Unexpected character."))
+        illegal(l, fmt.tprintf("Unexpected character '%c'.", previous(l))))
 }
 
 /* 
@@ -398,8 +409,9 @@ illegal tokens are returned on syntax errors.
 */
 @(private="file")
 syntax_error :: proc (l: ^Lexer, token: Token) -> Token {
-    fmt.printf("[line %d] Syntax error", token.line)
+    fmt.printf("\e[31msyntax error\e[0m")
     fmt.printf(": %s\n", token.lexeme)
+    fmt.printf("  on [line %d]\n", token.line)
     l.had_error = true
     return token
 }
@@ -420,9 +432,7 @@ lex :: proc (l: ^Lexer) -> (tokens: []Token, err: ErrorToken) {
 
         append(&toks, token)
 
-        if token.type == TokenType.EOF {
-            break
-        }
+        if token.type == TokenType.EOF { break }
     }
 
     tokens = insert_semis(toks[:])

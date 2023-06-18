@@ -78,7 +78,7 @@ Compiler :: struct {
 error_at :: proc (p: ^Parser, token: ^Token, message: string) {
     if p.panic_mode do return
     p.panic_mode = true
-    fmt.eprintf("[line %d] Error", token.line)
+    fmt.eprintf("\e[31mcompile error\e[0m")
 
     if token.type == TokenType.EOF {
         fmt.eprintf(" at end")
@@ -89,18 +89,19 @@ error_at :: proc (p: ^Parser, token: ^Token, message: string) {
     }
 
     fmt.eprintf(": %s\n", message)
+    fmt.eprintf("  on [line %d]\n", token.line)
     p.had_error = true
 }
 
 /* Report an error at the token just parsed. */
 @(private="file")
-error :: proc (p: ^Parser, message: string) {
+error :: proc (p: ^Parser, message: string, args: ..any) {
     error_at(p, &p.previous, message)
 }
 
 /* Report an error at the current token. */
 @(private="file")
-error_at_current :: proc (p: ^Parser, message: string) {
+error_at_current :: proc (p: ^Parser, message: string, args: ..any) {
     error_at(p, &p.current, message)
 }
 

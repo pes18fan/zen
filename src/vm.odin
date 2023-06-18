@@ -36,11 +36,12 @@ InterpretResult :: enum {
 
 /* Raise a runtime error. */
 runtime_error :: proc (vm: ^VM, format: string, args: ..any) {
-    fmt.eprintf(format, ..args)
+    fmt.eprintf("\e[31mpanic\e[0m: ")
+    fmt.eprintf("%s", fmt.tprintf(format, ..args))
     fmt.eprintln()
 
     line := get_line(vm.chunk.lines, vm.ip - 1)
-    fmt.eprintf("[line %d] in script\n", line)
+    fmt.eprintf("  from [line %d] in script\n", line)
     reset_stack(vm)
 }
 
@@ -106,7 +107,7 @@ binary operator can only return either a 64-bit float or a boolean.
 @(private="file")
 binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> InterpretResult {
     if !is_number(vm_peek(v, 0)) || !is_number(vm_peek(v, 1)) {
-        runtime_error(v, "Operands must be numbers.")
+        runtime_error(v, "Operands for '%c' must be numbers.", op)
         return .INTERPRET_RUNTIME_ERROR
     }
 

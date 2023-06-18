@@ -36,6 +36,16 @@ test_all: _pretest
     cd bin/test/
     odin test ../../src/
 
+# Run tests using the tester written in Ruby.
+test_rb:
+    #!/usr/bin/env bash
+    if ! command -v ruby >/dev/null 2>&1; then
+        echo "Ruby needed to run the tests!"
+        exit 1
+    fi
+    cd testing
+    ruby ./run_tests.rb
+
 # Run the program with optional args.
 run *args="": dbg
     ./{{ target_dbg }} {{ args }}

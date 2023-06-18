@@ -10,7 +10,7 @@ import "core:time"
 @(private="file")
 repl :: proc (vm: ^VM) -> int {
     fmt.println("Welcome to zen!")
-    fmt.println("Enter '#exit' to exit.")
+    fmt.println("Press 'Ctrl-D' to exit.")
     buf: [1024]byte
 
     for {
@@ -29,10 +29,6 @@ repl :: proc (vm: ^VM) -> int {
 
         line := string(buf[:n])
         line = strings.trim_right_space(line)
-
-        if line == "#exit" {
-            break
-        }
 
         interpret(vm, line)
     }

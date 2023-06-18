@@ -1,0 +1,10 @@
+// expect:
+// of course
+// end expect
+
+if false {
+    write "How did this happen"
+} else {
+    write "of course"
+}
+
