@@ -1,0 +1,10 @@
+// expect:
+// outer
+// end expect
+
+{
+    let a = "outer"
+    {
+        write a
+    }
+}

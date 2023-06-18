@@ -1,0 +1,6 @@
+// expect:
+// ERR: Cannot redefine a final variable
+// end expect
+
+final a = "some"
+final a = "other"

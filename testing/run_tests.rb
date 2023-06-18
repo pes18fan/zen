@@ -3,6 +3,10 @@ require "open3"
 test_folder = "__tests__"
 $compiler = "../bin/rel/zen"
 
+$tests = 0
+$passed = 0
+$failed = 0
+
 COL_RED = "\e[31m"
 COL_GREEN = "\e[32m"
 RESET = "\e[0m"
@@ -37,23 +41,28 @@ def test(folder)
       if status == 0
         if multiline_output_match?(output, expect)
           puts "#{COL_GREEN}PASSED#{RESET} with expected output"
+          $passed += 1
         else
           puts "#{COL_GREEN}FAILED#{RESET} with unexpected output"
           puts "Expected:\n#{expect}"
           puts "Actual:\n#{output}"
+          $failed += 1
         end
       else
         if wants_err
           if error.strip.include?(expected_err)
             puts "#{COL_GREEN}PASSED#{RESET} with expected error"
+            $passed += 1
           else
             puts "#{COL_RED}FAILED#{RESET} with unexpected error"
             puts "Expected:\n#{expected_err}"
             puts "Got:\n#{error}"
-            exit 1
+            $failed += 1
           end
         end
       end
+
+      $tests += 1
     end
   end
 end
@@ -113,4 +122,13 @@ end
 
 test(test_folder)
 puts "\n"
-puts "All tests #{COL_GREEN}passed#{RESET}! :)"
+
+puts "Total tests: #{$tests}"
+if $failed > 0
+  puts "#{COL_RED}FAILED#{RESET}: #{$failed} tests failed."
+elsif $passed == $tests
+  puts "All tests #{COL_GREEN}PASSED!#{RESET} :)"
+else
+  puts "#{COL_RED}Something went wrong.#{RESET}"
+  puts "#{$passed} tests passed, #{$failed} failed."
+end

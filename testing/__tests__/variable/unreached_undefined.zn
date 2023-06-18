@@ -1,0 +1,9 @@
+// expect:
+// ok
+// end expect
+
+if false {
+    write not_defined
+}
+
+write "ok"

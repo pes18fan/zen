@@ -41,7 +41,6 @@ test_all: _pretest
         echo "Ruby needed to run the tests!"
         exit 1
     fi
-    cd testing
     ruby ./run_tests.rb
 
 # Run the program with optional args.

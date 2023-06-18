@@ -56,6 +56,19 @@ init_lexer :: proc (source: string) -> Lexer {
     }
 }
 
+/* 
+Reports a syntax error. Assumes that `token` is an illegal token since only
+illegal tokens are returned on syntax errors. 
+*/
+@(private="file")
+syntax_error :: proc (l: ^Lexer, token: Token) -> Token {
+    fmt.eprintf("\e[31msyntax error:\e[0m ")
+    fmt.eprintf("%s\n", token.lexeme)
+    fmt.eprintf("  on [line %d]\n", token.line)
+    l.had_error = true
+    return token
+}
+
 /* Returns true if `c` is alphanumeric, or a question mark. */
 @(private="file")
 is_alphanumeric_or_qn :: proc (c: rune) -> bool {
@@ -401,19 +414,6 @@ lex_token :: proc (l: ^Lexer) -> Token {
 
     return syntax_error(l, 
         illegal(l, fmt.tprintf("Unexpected character '%c'.", previous(l))))
-}
-
-/* 
-Reports a syntax error. Assumes that `token` is an illegal token since only
-illegal tokens are returned on syntax errors. 
-*/
-@(private="file")
-syntax_error :: proc (l: ^Lexer, token: Token) -> Token {
-    fmt.printf("\e[31msyntax error\e[0m")
-    fmt.printf(": %s\n", token.lexeme)
-    fmt.printf("  on [line %d]\n", token.line)
-    l.had_error = true
-    return token
 }
 
 /*

@@ -35,8 +35,8 @@ InterpretResult :: enum {
 }
 
 /* Raise a runtime error. */
-runtime_error :: proc (vm: ^VM, format: string, args: ..any) {
-    fmt.eprintf("\e[31mpanic\e[0m: ")
+vm_panic :: proc (vm: ^VM, format: string, args: ..any) {
+    fmt.eprintf("\e[31mpanic:\e[0m ")
     fmt.eprintf("%s", fmt.tprintf(format, ..args))
     fmt.eprintln()
 
@@ -107,7 +107,7 @@ binary operator can only return either a 64-bit float or a boolean.
 @(private="file")
 binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> InterpretResult {
     if !is_number(vm_peek(v, 0)) || !is_number(vm_peek(v, 1)) {
-        runtime_error(v, "Operands for '%c' must be numbers.", op)
+        vm_panic(v, "Operands for '%c' must be numbers.", op)
         return .INTERPRET_RUNTIME_ERROR
     }
 
@@ -122,7 +122,7 @@ binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> InterpretResult {
                 case '*': vm_push(v, number_val(a * b))
                 case '/': {
                     if b == 0 {
-                        runtime_error(v, "Cannot divide by zero.")
+                        vm_panic(v, "Cannot divide by zero.")
                         return .INTERPRET_RUNTIME_ERROR
                     }
                     vm_push(v, number_val(a / b))
@@ -164,8 +164,6 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
             case .OP_CONSTANT:
                 constant := read_constant(v)
                 vm_push(v, constant)
-                // print_value(constant)
-                // fmt.printf("\n")
             case .OP_NIL:      vm_push(v, nil_val())
             case .OP_TRUE:     vm_push(v, bool_val(true))
             case .OP_FALSE:    vm_push(v, bool_val(false))
@@ -180,7 +178,7 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                 name := read_string(v)
                 value: Value; ok: bool
                 if value, ok = table_get(&v.globals, name); !ok {
-                    runtime_error(v, "Undefined variable '%s'.", name.chars)
+                    vm_panic(v, "Undefined variable '%s'.", name.chars)
                     return .INTERPRET_RUNTIME_ERROR
                 }
                 vm_push(v, value)
@@ -194,7 +192,7 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
 
                 if table_set(&v.globals, name, vm_peek(v, 0)) {
                     table_delete(&v.globals, name)
-                    runtime_error(v, "Undefined variable '%s'.", name.chars)
+                    vm_panic(v, "Undefined variable '%s'.", name.chars)
                     return .INTERPRET_RUNTIME_ERROR
                 }
             }
@@ -216,7 +214,7 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                     a := as_number(vm_pop(v))
                     vm_push(v, number_val(a + b))
                 } else {
-                    runtime_error(v, 
+                    vm_panic(v, 
                         "Operands must be two numbers or two strings.")
                     return .INTERPRET_RUNTIME_ERROR
                 }
@@ -227,7 +225,7 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                 vm_push(v, bool_val(is_falsey(vm_pop(v))))
             case .OP_NEGATE:
                 if !is_number(vm_peek(v, 0)) {
-                    runtime_error(v, "Can only negate numbers.")
+                    vm_panic(v, "Can only negate numbers.")
                     return .INTERPRET_RUNTIME_ERROR
                 }
                 vm_push(v, number_val(-as_number(vm_pop(v))))

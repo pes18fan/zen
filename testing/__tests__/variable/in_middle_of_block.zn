@@ -1,0 +1,17 @@
+// expect:
+// a
+// a b
+// a c
+// a b d
+// end expect
+
+{
+    let a = "a"
+    write a
+    let b = a + " b"
+    write b
+    let c = a + " c"
+    write c
+    let d = b + " d"
+    write d
+}

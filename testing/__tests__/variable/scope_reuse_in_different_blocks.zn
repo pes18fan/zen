@@ -1,0 +1,14 @@
+// expect:
+// first
+// second
+// end expect
+
+{
+    let a = "first"
+    write a
+}
+
+{
+    let a = "second"
+    write a
+}
