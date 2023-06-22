@@ -4,4 +4,4 @@
 
 let a = "1"
 let a
-write a
+print a

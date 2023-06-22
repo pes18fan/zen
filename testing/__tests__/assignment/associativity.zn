@@ -10,6 +10,6 @@ let c = "c"
 
 // assignment is right-associative.
 a = b = c
-write a
-write b
-write c
+print a
+print b
+print c

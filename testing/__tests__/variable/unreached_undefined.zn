@@ -3,7 +3,7 @@
 // end expect
 
 if false {
-    write not_defined
+    print not_defined
 }
 
-write "ok"
+print "ok"

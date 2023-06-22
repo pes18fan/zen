@@ -6,10 +6,10 @@
 // end expect
 
 let a = "before"
-write a
+print a
 
 a = "after"
-write a
+print a
 
-write a = "arg"
-write a
+print a = "arg"
+print a

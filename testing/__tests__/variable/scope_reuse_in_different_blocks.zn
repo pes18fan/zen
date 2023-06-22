@@ -5,10 +5,10 @@
 
 {
     let a = "first"
-    write a
+    print a
 }
 
 {
     let a = "second"
-    write a
+    print a
 }

@@ -5,6 +5,6 @@
 {
     let a = "outer"
     {
-        write a
+        print a
     }
 }

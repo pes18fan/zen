@@ -5,6 +5,7 @@ import "core:fmt"
 /*
 Each operation in bytecode has a one-byte operation code or opcode. These
 control the instruction we're dealing with.
+Note that the operation code is a byte, but the operation itself may be more.
 */
 OpCode :: enum {
     OP_CONSTANT,

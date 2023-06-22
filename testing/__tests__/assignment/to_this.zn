@@ -1,4 +1,3 @@
-// DRAFT
 // expect:
 // ERR: Invalid assignment target.
 // end expect

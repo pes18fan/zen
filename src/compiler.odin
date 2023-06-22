@@ -470,10 +470,9 @@ rules: []ParseRule = {
     TokenType.NIL           = ParseRule{ literal,  nil,    .NONE },
     TokenType.NOT           = ParseRule{ unary,    nil,    .NONE },
     TokenType.OR            = ParseRule{ nil,      or_,    .OR   },
-    TokenType.PRIVATE       = ParseRule{ nil,      nil,    .NONE },
+    TokenType.PRINT         = ParseRule{ nil,      nil,    .NONE },
     TokenType.RETURN        = ParseRule{ nil,      nil,    .NONE },
     TokenType.TRUE          = ParseRule{ literal,  nil,    .NONE },
-    TokenType.WRITE         = ParseRule{ nil,      nil,    .NONE },
     TokenType.ILLEGAL       = ParseRule{ nil,      nil,    .NONE },
     TokenType.EOF           = ParseRule{ nil,      nil,    .NONE },
 }
@@ -708,7 +707,7 @@ if_statement :: proc (p: ^Parser) {
 
 /* Parse a `write` statement. */
 @(private="file")
-write_statement :: proc (p: ^Parser) {
+print_statement :: proc (p: ^Parser) {
     expression(p)
     consume(p, .SEMI, "Expect ';' after value.")
     emit_byte(p, byte(OpCode.OP_WRITE))
@@ -728,7 +727,7 @@ synchronize :: proc (p: ^Parser) {
         }
 
         #partial switch p.current.type {
-            case .FUN, .FOR, .IF, .LET, .WRITE, .RETURN:
+            case .FUN, .FOR, .IF, .LET, .PRINT, .RETURN:
                 return
             case: // Do nothing.
         }
@@ -754,8 +753,8 @@ declaration :: proc (p: ^Parser) {
 /* Parse a statement. */
 @(private="file")
 statement :: proc (p: ^Parser) {
-    if match(p, .WRITE) {
-        write_statement(p)
+    if match(p, .PRINT) {
+        print_statement(p)
     } else if match(p, .IF) {
         if_statement(p)
     } else if match(p, .LSQUIRLY) {

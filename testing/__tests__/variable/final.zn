@@ -3,4 +3,4 @@
 // end expect
 
 final a = "ok"
-write a
+print a

@@ -4,24 +4,26 @@ import "io" // Import the io package from the standard library.
 import "./hello" // Import the hello package from a directory called hello.
 
 // Hello world!
-writeln "Hello, world!"
-writeln "Hello, again!"; // Semicolons are optional.
+println "Hello, world!"
+println "Hello, again!"; // Semicolons are optional.
 
 let name = "Sam" // Create a variable!
 let another_name string = "Jamie" // Explicitly type it
 let not_initialized string // Must give this a type
 const nice = 69 // You can't reassign to this!
 
-writeln name[0] // "S"
-writeln name.len // 3
+// Strings can be subscripted and have convenience methods too.
+println name[0] //=> "S"
+println name.len //=> 3
+println name.upcase() //=> "SAM"
 
-writeln f"{nice} is very nice indeed" // String interpolation!
+println f"{nice} is very nice indeed" // String interpolation!
 
 // Conditionals!
 if false {
-    writeln "How did this happen!"
+    println "How did this happen!"
 } else if true {
-    writeln "This is supposed to happen"
+    println "This is supposed to happen"
 }
 
 let hmm = nice == 69 ? "Nice" : "Not nice" // Ternary operator!
@@ -29,36 +31,41 @@ let hmm = nice == 69 ? "Nice" : "Not nice" // Ternary operator!
 // Loops.
 // All loops are for loops.
 for i in 0..=10 { // Inclusive range
-    write f"{i} "
+    print f"{i} "
 } // 0 1 2 3 4 5 6 7 8 9 10
 
 for i in 0..<10; step 2 { // Exclusive range, index incremented by 2
-    write f"{i} "
+    print f"{i} "
 } // 0 2 4 6 8
 
 let i = 0
 for i < 10 { // While loops are spelled "for" in zen.
-    write f"{i} "
+    print f"{i} "
 } // 0 1 2 3 4 5 6 7 8 9
 
 // Lists!
 let lst []int = [1, 2, 3, 4, 5]
-writeln lst[0] //=> 1
-writeln lst.len //=> 5
+println lst[0] //=> 1
+println lst.len //=> 5
 
-// Use the `has` method to check if a list contains an element.
-if lst.has(3) {
-    write "List has 3"
+lst.push(6) // Add an element to the end of the list.
+print lst.last() //=> 6
+lst.pop() // Remove the last element.
+print lst.last() //=> 5
+
+// Use the `has?` method to check if a list contains an element.
+if lst.has?(3) {
+    print "List has 3"
 }
 
-// Loop through arrays with `for`.
+// Loop through lists with `for`.
 for i in lst {
-    write f"{i} "
+    print f"{i} "
 } //=> 1 2 3 4 5
 
 // You can change the step of the loop too!
 for i in lst; step 2 {
-    write f"{i} "
+    print f"{i} "
 } //=> 1 3 5
 
 // Maps!
@@ -69,33 +76,33 @@ let people map[string]int = #{
     "Alex": 19,
 }
 
-writeln people["Sam"] //=> 21
-writeln people.size //=> 3
+println people["Sam"] //=> 21
+println people.size //=> 3
 
-// You can check if a map contains a key with the `has_key` method.
-if people.has_key("Sam") {
-    writeln "Sam is in the map"
+// You can check if a map contains a key with the `has_key?` method.
+if people.has_key?("Sam") {
+    println "Sam is in the map"
 }
 
 // You can loop through maps with `for`.
 for name, age in people {
-    writeln f"{name} is {age} years old"
+    println f"{name} is {age} years old"
 } //=> Sam is 21 years old
   //=> Jamie is 20 years old
   //=> Alex is 19 years old
 
 // Functions!
-let a_function() {
-    writeln "This is a function!"
+fn a_function() {
+    println "This is a function!"
 }
 a_function() //=> "This is a function!"
 
 // If the function just returns an expression, simply use the `=` operator.
-let sum(a, b) = a + b
+fn sum(a, b) -> a + b
 
 // You can move the argument list to the right of the function name. That
 // is a function expression or anonymous function.
-let anon = () -> write "This is an anonymous function!"
+let anon = () -> { print "This is an anonymous function!" }
 // Mentioning the argument types is optional, as they are inferred.
 
 // Functions are first-class, so you can pass them around to other functions.
@@ -106,7 +113,7 @@ let anon = () -> write "This is an anonymous function!"
 // signature and body, and it basically is another parameter passed into
 // the function (implicitly or explicitly, based on what you wish), except
 // for the fact that its a type and not a value.
-let map<T>(f fun(T) T, l list<T>) list<T> =
+fn map<T>(f fun(T) T, l list<T>) list<T> ->
     // Pattern matching! `match` is basically a switch statement on steroids.
     // Note that `match` is an expression, not a statement.
     // However, you can use it as a statement too, since its arms may be
@@ -118,23 +125,23 @@ let map<T>(f fun(T) T, l list<T>) list<T> =
 
 // Note: You don't need to specify the type of the function arguments and 
 // return types. They are inferred.
-write map((x -> x * 2), [1, 2, 3, 4, 5]) //=> [2, 4, 6, 8, 10]
+print map((x -> x * 2), [1, 2, 3, 4, 5]) //=> [2, 4, 6, 8, 10]
 
 // Functions can return multiple values.
 // Multiple return values are not the same as tuples.
-let swap(a, b) = (b, a)
+fn swap(a, b) -> (b, a)
 
 // Where clauses also exist.
 // They are used to specify constraints on generic types.
-let print<T>(x T) where T.is_stringable() {
-    writeln x.to_string()
+fn print<T>(x T) where T.is_stringable() {
+    println x.to_string()
 }
 
 print(something_that_is_definetely_not_stringable)
 //! compile error at print(): Where clause evaluated to false
 
 // OOPy stuff!
-let Person = class {
+class Person {
     const name string
     const age int
 
@@ -144,14 +151,15 @@ let Person = class {
         this.age = age
     }
 
-    create_greeting() {
+    // All methods implicitly take `this` as the first argument.
+    fn create_greeting() {
         return f"Hello, I'm {this.name}!"
     }
 
     // All fields and functions are private by default, except
     // for constructors.
-    pub greet() {
-        writeln this.create_greeting()
+    pub fn greet() {
+        println this.create_greeting()
     }
 }
 
@@ -160,7 +168,7 @@ let me = Person("Sam", 21)
 me.greet() //=> "Hello, I'm Sam!"
 
 // You can inherit from other classes.
-let Student = class is Person {
+class Student is Person {
     const school string
 
     construct new(name, age, school) {
@@ -169,9 +177,9 @@ let Student = class is Person {
     }
 
     // Methods with the same name as the parent class override them.
-    pub greet() {
-        writeln this.create_greeting()
-        writeln f"I go to {this.school}"
+    pub fn greet() {
+        println super.create_greeting()
+        println f"I go to {this.school}"
     }
 }
 
@@ -183,7 +191,7 @@ let Student = class is Person {
 
 // Let's check out result first.
 // Define your own error types with the `Error` class.
-let DivideByZeroError = class is Error {
+class DivideByZeroError is Error {
     // This is a getter. It is called when you access the `message` field.
     // The error class defines this `message` getter which is used
     // to provide custom error messages on whatever inherits it.
@@ -193,7 +201,7 @@ let DivideByZeroError = class is Error {
 // This function returns result<float, DivideByZeroError>.
 // A result type is either a value enclosed in ok() or an value associated
 // with an error enclosed in err().
-let divide(a, b) =
+fn divide(a, b) ->
     match b {
         0 => err(DivideByZeroError())
         _ => ok(a / b)
@@ -212,15 +220,15 @@ let expects = divide(10, 0).expect("Can't set b as zero")
 
 // A better idea is to use match to handle the result.
 match divide(10, 2) {
-    ok(x) => writeln f"10 / 2 = {x}"
-    err(e) => writeln e
+    ok(x) => println f"10 / 2 = {x}"
+    err(e) => println e
 } //=> 10 / 2 = 5
 
 // Even better, unwrap_or() and unwrap_or_else() let you provide a default
 // value or function to call if the result is an error.
 let answer = divide(10, 0).unwrap_or(0) //=> 0
 let answer = divide(10, 0).unwrap_or_else((e) -> {
-    writeln e
+    println e
     return 0
 }) //=> "Cannot divide by zero!"
    //=> 0
@@ -229,7 +237,7 @@ let answer = divide(10, 0).unwrap_or_else((e) -> {
 // An option type is either a value enclosed in `some()` or a nonexistent
 // value, represented as the variant `none`.
 // Here's an example, using a function to get the first element of a list.
-let get_first(l) =
+fn get_first(l) ->
     match l {
         // when the list is empty, return none
         [] => none
@@ -239,5 +247,5 @@ let get_first(l) =
 // You can handle option types with unwrap, expect, match etc. just like you
 // would with results.
 let a = get_first([1, 2, 3]).unwrap() //=> 1
-let b = get_first([]).unwrap() //! panic at "Tried to unwrap none"
+let b = get_first([]).unwrap() //! panic: "Can't unwrap none"
 let c = get_first([]).expect("List is empty") //! panic at "List is empty"

@@ -3,8 +3,8 @@
 // end expect
 
 if false {
-    write "How did this happen"
+    print "How did this happen"
 } else {
-    write "of course"
+    print "of course"
 }
 

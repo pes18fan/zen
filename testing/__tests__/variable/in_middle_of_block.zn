@@ -7,11 +7,11 @@
 
 {
     let a = "a"
-    write a
+    print a
     let b = a + " b"
-    write b
+    print b
     let c = a + " c"
-    write c
+    print c
     let d = b + " d"
-    write d
+    print d
 }

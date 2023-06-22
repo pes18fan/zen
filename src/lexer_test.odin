@@ -28,7 +28,7 @@ test_lexer_default :: proc (t: ^tt.T) {
 `// this is a comment
 let foo = () {
     if not false {
-        write str
+        print str
     }
 }
 
@@ -57,7 +57,7 @@ let test = () {
         Token{type = .NOT, lexeme = "not", line = 3},
         Token{type = .FALSE, lexeme = "false", line = 3},
         Token{type = .LSQUIRLY, lexeme = "{", line = 3},
-        Token{type = .WRITE, lexeme = "write", line = 4},
+        Token{type = .PRINT, lexeme = "print", line = 4},
         Token{type = .IDENT, lexeme = "str", line = 4},
         Token{type = .SEMI, lexeme = ";", line = 4},
         Token{type = .RSQUIRLY, lexeme = "}", line = 5},

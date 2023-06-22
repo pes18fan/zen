@@ -40,6 +40,8 @@ def test(folder)
 
       if status == 0
         if multiline_output_match?(output, expect)
+          puts expect
+          puts output
           puts "#{COL_GREEN}PASSED#{RESET} with expected output"
           $passed += 1
         else
@@ -59,6 +61,10 @@ def test(folder)
             puts "Got:\n#{error}"
             $failed += 1
           end
+        else
+          puts "#{COL_RED}FAILED#{RESET} with error"
+          puts error
+          $failed += 1
         end
       end
 

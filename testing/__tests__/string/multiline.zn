@@ -7,4 +7,4 @@
 let a = "1
 2
 3"
-write a
+print a
