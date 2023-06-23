@@ -1,0 +1,34 @@
+// expect:
+// 1
+// 2
+// 3
+// 0
+// 1
+// 2
+// 0
+// 1
+// 0
+// 1
+// end expect
+
+// basic
+for let c = 0; c < 3; {
+    print c = c + 1;
+}
+
+// full loop
+for let a = 0; a < 3; a = a + 1 {
+    print a;
+}
+
+// no variable
+let i = 0;
+for ; i < 2; i = i + 1 {
+    print i;        
+}
+
+// no increment
+for let i = 0; i < 2; {
+    print i;
+    i = i + 1;
+}

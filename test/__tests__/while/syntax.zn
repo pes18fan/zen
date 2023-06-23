@@ -1,0 +1,18 @@
+// expect:
+// 1
+// 2
+// 3
+// 0
+// 1
+// 2
+// end expect
+
+// only a block body allowed
+let c = 0;
+while c < 3 { print c = c + 1; }
+
+let a = 0;
+while a < 3 {
+    print a;
+    a = a + 1;
+}

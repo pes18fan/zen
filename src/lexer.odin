@@ -11,14 +11,15 @@ TokenType :: enum {
     STAR, NEWLINE,
 
     // one or two character tokens
-    BANG_EQUAL, EQUAL, EQUAL_EQUAL,
-    GREATER, GREATER_EQUAL, LESS, LESS_EQUAL,
+    ARROW, BANG_EQUAL, DOT_DOT_EQUAL, DOT_DOT,
+    EQUAL, EQUAL_EQUAL, GREATER, GREATER_EQUAL, LESS, 
+    LESS_EQUAL,
 
     // literals
     IDENT, STRING, NUMBER,
 
     // keywords
-    AND, BREAK, ELSE, FALSE, FINAL, FOR, FUN,
+    AND, BREAK, ELSE, FALSE, FINAL, FOR, FN,
     IF, IMPORT, IN, LET, NIL, NOT, OR, PRINT,
     RETURN, TRUE, WHILE,
 
@@ -173,47 +174,7 @@ This is the way it works:
 */
 @(private="file")
 insert_semis :: proc (tokens: []Token) -> []Token {
-    defer delete(tokens)
-    result := make([dynamic]Token, 0, 0)
-
-    if len(tokens) == 1 && tokens[0].type == .EOF {
-        append(&result, tokens[0])
-        return result[:]
-    }
-
-    for i, idx in tokens {
-        if i.type != .NEWLINE && i.type != .EOF || i.type == .SEMI {
-            append(&result, i)
-            continue
-        }
-
-        if idx == 0 { continue }
-
-        #partial switch tokens[idx - 1].type {
-            case .IDENT, .NUMBER, .STRING, .NIL, .TRUE, .FALSE,
-                .BREAK, .RETURN, .RPAREN: {
-                if i.type != .EOF {
-                    #partial switch tokens[idx + 1].type {
-                        case .PLUS, .MINUS, .STAR, .SLASH, .BANG_EQUAL, .EQUAL,
-                        .EQUAL_EQUAL, .GREATER, .GREATER_EQUAL, .LESS,
-                        .LESS_EQUAL, .AND, .OR, .DOT: continue
-                    }
-                }
-
-                append(&result, Token{
-                    type = .SEMI,
-                    lexeme = ";",
-                    line = tokens[idx - 1].line,
-                })
-            }
-        }
-
-        if i.type == .EOF {
-            append(&result, i)
-        }
-    }
-
-    return result[:]
+    unimplemented("Automatic semicolon insertion: To be implemented later")
 }
 
 /*
@@ -227,12 +188,11 @@ skip_whitespace :: proc (l: ^Lexer) {
         c := peek(l)
 
         switch c {
-            case ' ':  fallthrough
-            case '\r': fallthrough
-            case '\t':
+            case '\n': 
+                l.line += 1
+                fallthrough
+            case '\t', '\v', '\f', '\r', ' ':
                 advance(l)
-            /* ! Code that is only a comment causes a segfault, due to issues
-             * in insert_semis(). */
             case '/':
                 if peek_next(l) == '/' {
                     for peek(l) != '\n' && !is_at_end(l) {
@@ -275,7 +235,7 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
                     case 'a': return check_keyword(l, 2, 3, "lse", .FALSE)
                     case 'i': return check_keyword(l, 2, 3, "nal", .FINAL)
                     case 'o': return check_keyword(l, 2, 1, "r", .FOR)
-                    case 'u': return check_keyword(l, 2, 1, "n", .FUN)
+                    case 'n': return .FN
                 }
             }
         }
@@ -379,15 +339,17 @@ lex_token :: proc (l: ^Lexer) -> Token {
         case '}':  return make_token(l, .RSQUIRLY)
         case ';':  return make_token(l, .SEMI)
         case ',':  return make_token(l, .COMMA)
-        case '.':  return make_token(l, .DOT)
-        case '-':  return make_token(l, .MINUS)
+        case '.':
+            if match(l, '.') {
+                return make_token(l,
+                    match(l, '=') ? .DOT_DOT_EQUAL : .DOT_DOT)
+            }
+            return make_token(l, .DOT)
+        case '-':  return make_token(l,
+                match(l, '>') ? .ARROW : .MINUS)
         case '+':  return make_token(l, .PLUS)
         case '/':  return make_token(l, .SLASH)
         case '*':  return make_token(l, .STAR)
-        case '\n': {
-            l.line += 1
-            return make_token(l, .NEWLINE)
-        }
         case '!':
             if match(l, '=') {
                 return make_token(l, .BANG_EQUAL)
@@ -428,7 +390,5 @@ lex :: proc (l: ^Lexer) -> (tokens: []Token, err: ErrorToken) {
         if token.type == TokenType.EOF { break }
     }
 
-    tokens = insert_semis(toks[:])
-
-    return tokens, nil
+    return toks[:], nil
 }

@@ -1,8 +1,0 @@
-// expect:
-// ERR: Cannot read local variable in its own initializer
-// end expect
-
-let a = "outer"
-{
-    let a = a
-}

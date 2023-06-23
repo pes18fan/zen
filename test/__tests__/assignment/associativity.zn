@@ -1,0 +1,15 @@
+// expect:
+// c
+// c
+// c
+// end expect
+
+let a = "a";
+let b = "b";
+let c = "c";
+
+// assignment is right-associative.
+a = b = c;
+print a;
+print b;
+print c;

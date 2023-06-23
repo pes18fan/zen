@@ -1,6 +1,0 @@
-// expect:
-// ok
-// end expect
-
-final a = "ok"
-print a

@@ -1,0 +1,12 @@
+// DRAFT
+// expect:
+// ERR: Invalid assignment target.
+// end expect
+
+class Foo {
+    Foo() {
+        this = "value";
+    }
+}
+
+Foo();

@@ -35,7 +35,7 @@ test_all: _pretest
     #!/usr/bin/env bash
     cd bin/test/
     odin test ../../src/
-    cd ../../testing/
+    cd ../../test/
     echo ""
     if ! command -v ruby >/dev/null 2>&1; then
         echo "Ruby needed to run the tests!"

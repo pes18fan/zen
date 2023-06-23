@@ -1,7 +1,0 @@
-// expect:
-// nil
-// end expect
-
-let a = "1"
-let a
-print a

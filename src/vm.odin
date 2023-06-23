@@ -196,12 +196,21 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                     return .INTERPRET_RUNTIME_ERROR
                 }
             }
+            case .OP_RANGE_INCLUSIVE: {
+                end := as_number(vm_pop(v))
+                start := as_number(vm_pop(v))
+                vm_push(v, range_val(start, end, .INCLUSIVE))
+            }
+            case .OP_RANGE_EXCLUSIVE: {
+                end := as_number(vm_pop(v))
+                start := as_number(vm_pop(v))
+                vm_push(v, range_val(start, end, .EXCLUSIVE))
+            }
             case .OP_EQUAL: {
                 b := vm_pop(v)
                 a := vm_pop(v)
                 vm_push(v, bool_val(values_equal(a, b)))
             }
-            // TODO: Get rid of the below repitition for binary operations
             case .OP_GREATER: binary_op(v, bool, '>') or_return
             case .OP_LESS:    binary_op(v, bool, '<') or_return
             case .OP_ADD:      
@@ -240,6 +249,9 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                 if is_falsey(vm_peek(v, 0)) {
                     v.ip += offset
                 }
+            case .OP_LOOP:
+                offset := read_short(v)
+                v.ip -= offset
             case .OP_RETURN: 
                 // Exit interpreter.
                 return .INTERPRET_OK

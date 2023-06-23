@@ -26,17 +26,17 @@ expect_tokens_equal :: proc (want: []Token, got: []Token) ->
 test_lexer_default :: proc (t: ^tt.T) {
     source := 
 `// this is a comment
-let foo = () {
+fn foo() {
     if not false {
-        print str
+        print str;
     }
 }
 
-let add = (a, b) { return a + b }
+fn add(a, b) { return a + b; }
 
-let test = () {
-    foo("just a little lexer exercise")
-    println(add(1, 2))
+fn test() {
+    foo("just a little lexer exercise");
+    println(add(1, 2));
 }`
     
     lx := init_lexer(source)
@@ -47,9 +47,8 @@ let test = () {
     defer delete(got)
 
     want := []Token{
-        Token{type = .LET, lexeme = "let", line = 2},
+        Token{type = .FN, lexeme = "fn", line = 2},
         Token{type = .IDENT, lexeme = "foo", line = 2},
-        Token{type = .EQUAL, lexeme = "=", line = 2},
         Token{type = .LPAREN, lexeme = "(", line = 2},
         Token{type = .RPAREN, lexeme = ")", line = 2},
         Token{type = .LSQUIRLY, lexeme = "{", line = 2},
@@ -62,9 +61,8 @@ let test = () {
         Token{type = .SEMI, lexeme = ";", line = 4},
         Token{type = .RSQUIRLY, lexeme = "}", line = 5},
         Token{type = .RSQUIRLY, lexeme = "}", line = 6},
-        Token{type = .LET, lexeme = "let", line = 8},
+        Token{type = .FN, lexeme = "fn", line = 8},
         Token{type = .IDENT, lexeme = "add", line = 8},
-        Token{type = .EQUAL, lexeme = "=", line = 8},
         Token{type = .LPAREN, lexeme = "(", line = 8},
         Token{type = .IDENT, lexeme = "a", line = 8},
         Token{type = .COMMA, lexeme = ",", line = 8},
@@ -75,10 +73,10 @@ let test = () {
         Token{type = .IDENT, lexeme = "a", line = 8},
         Token{type = .PLUS, lexeme = "+", line = 8},
         Token{type = .IDENT, lexeme = "b", line = 8},
+        Token{type = .SEMI, lexeme = ";", line = 8},
         Token{type = .RSQUIRLY, lexeme = "}", line = 8},
-        Token{type = .LET, lexeme = "let", line = 10},
+        Token{type = .FN, lexeme = "fn", line = 10},
         Token{type = .IDENT, lexeme = "test", line = 10},
-        Token{type = .EQUAL, lexeme = "=", line = 10},
         Token{type = .LPAREN, lexeme = "(", line = 10},
         Token{type = .RPAREN, lexeme = ")", line = 10},
         Token{type = .LSQUIRLY, lexeme = "{", line = 10},
@@ -113,7 +111,7 @@ test_lexer_chained_calls :: proc (t: ^tt.T) {
     source :=
 `some_string
     .reverse()
-    .capitalize()`
+    .capitalize();`
 
     lx := init_lexer(source)
     got, err := lex(&lx)
@@ -132,6 +130,7 @@ test_lexer_chained_calls :: proc (t: ^tt.T) {
         Token{type = .IDENT, lexeme = "capitalize", line = 3},
         Token{type = .LPAREN, lexeme = "(", line = 3},
         Token{type = .RPAREN, lexeme = ")", line = 3},
+        Token{type = .SEMI, lexeme = ";", line = 3},
     }
     
     ok, wanted, recieved := expect_tokens_equal(want, got)

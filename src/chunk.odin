@@ -18,6 +18,8 @@ OpCode :: enum {
     OP_GET_GLOBAL,
     OP_DEFINE_GLOBAL,
     OP_SET_GLOBAL,
+    OP_RANGE_INCLUSIVE,
+    OP_RANGE_EXCLUSIVE,
     OP_EQUAL,
     OP_GREATER,
     OP_LESS,
@@ -30,6 +32,7 @@ OpCode :: enum {
     OP_WRITE,
     OP_JUMP,
     OP_JUMP_IF_FALSE,
+    OP_LOOP,
     OP_RETURN,
 }
 

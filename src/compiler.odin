@@ -35,6 +35,7 @@ Precedence :: enum {
     COMPARISON,  // < > <= >=
     TERM,        // + -
     FACTOR,      // * /
+    RANGE,       // ..= ..
     UNARY,       // not -
     CALL,        // . ()
     PRIMARY,
@@ -164,6 +165,16 @@ emit_bytes :: proc (p: ^Parser, byait1: byte, byait2: byte) {
     emit_byte(p, byait2)
 }
 
+emit_loop :: proc (p: ^Parser, loop_start: int) {
+    emit_byte(p, byte(OpCode.OP_LOOP))
+
+    offset := len(p.compiling_chunk.code) - loop_start + 2
+    if offset > U16_MAX { error(p, "Loop body too large.") }
+
+    emit_byte(p, (u8(offset) >> 8) & 0xff)
+    emit_byte(p, u8(offset) & 0xff)
+}
+
 /*
 Write a jump instruction to the current chunk.
 Initially writes only placeholder bytes for the jump offset, which
@@ -286,16 +297,18 @@ binary :: proc (p: ^Parser, can_assign: bool) {
     parse_precedence(p, Precedence(byte(rule.precedence) + 1))
 
     #partial switch operator_type {
-        case .BANG_EQUAL: emit_bytes(p, byte(OP_EQUAL), byte(OP_NOT))
-        case .EQUAL_EQUAL: emit_byte(p, byte(OP_EQUAL))
-        case .GREATER: emit_byte(p, byte(OP_GREATER))
+        case .DOT_DOT_EQUAL: emit_byte(p, byte(OP_RANGE_INCLUSIVE))
+        case .DOT_DOT:       emit_byte(p, byte(OP_RANGE_EXCLUSIVE))
+        case .BANG_EQUAL:    emit_bytes(p, byte(OP_EQUAL), byte(OP_NOT))
+        case .EQUAL_EQUAL:   emit_byte(p, byte(OP_EQUAL))
+        case .GREATER:       emit_byte(p, byte(OP_GREATER))
         case .GREATER_EQUAL: emit_bytes(p, byte(OP_LESS), byte(OP_NOT))
-        case .LESS: emit_byte(p, byte(OP_LESS))
-        case .LESS_EQUAL: emit_bytes(p, byte(OP_GREATER), byte(OP_NOT))
-        case .MINUS: emit_byte(p, byte(OP_SUBTRACT))
-        case .PLUS: emit_byte(p, byte(OP_ADD))
-        case .SLASH: emit_byte(p, byte(OP_DIVIDE))
-        case .STAR: emit_byte(p, byte(OP_MULTIPLY))
+        case .LESS:          emit_byte(p, byte(OP_LESS))
+        case .LESS_EQUAL:    emit_bytes(p, byte(OP_GREATER), byte(OP_NOT))
+        case .MINUS:         emit_byte(p, byte(OP_SUBTRACT))
+        case .PLUS:          emit_byte(p, byte(OP_ADD))
+        case .SLASH:         emit_byte(p, byte(OP_DIVIDE))
+        case .STAR:          emit_byte(p, byte(OP_MULTIPLY))
         case: return // Unreachable.
     }
 }
@@ -441,6 +454,8 @@ rules: []ParseRule = {
     TokenType.RSQUIRLY      = ParseRule{ nil,      nil,    .NONE },
     TokenType.COMMA         = ParseRule{ nil,      nil,    .NONE },
     TokenType.DOT           = ParseRule{ nil,      nil,    .NONE },
+    TokenType.DOT_DOT_EQUAL = ParseRule{ nil,      binary, .RANGE },
+    TokenType.DOT_DOT       = ParseRule{ nil,      binary, .RANGE },
     TokenType.MINUS         = ParseRule{ unary,    binary, .TERM },
     TokenType.PLUS          = ParseRule{ nil,      binary, .TERM },
     TokenType.SEMI          = ParseRule{ nil,      nil,    .NONE },
@@ -462,7 +477,7 @@ rules: []ParseRule = {
     TokenType.FALSE         = ParseRule{ literal,  nil,    .NONE },
     TokenType.FINAL         = ParseRule{ nil,      nil,    .NONE },
     TokenType.FOR           = ParseRule{ nil,      nil,    .NONE },
-    TokenType.FUN           = ParseRule{ nil,      nil,    .NONE },
+    TokenType.FN            = ParseRule{ nil,      nil,    .NONE },
     TokenType.IF            = ParseRule{ nil,      nil,    .NONE },
     TokenType.IMPORT        = ParseRule{ nil,      nil,    .NONE },
     TokenType.IN            = ParseRule{ nil,      nil,    .NONE },
@@ -644,13 +659,11 @@ expression :: proc (p: ^Parser) {
 /* Parse a block. */
 @(private="file")
 block :: proc (p: ^Parser) {
-    begin_scope(p)
     for !check(p, .RSQUIRLY) && !check(p, .EOF) {
         declaration(p)
     }
 
     consume(p, .RSQUIRLY, "Expect '}' after block.")
-    end_scope(p)
 }
 
 /* Parse a name binding. */
@@ -683,6 +696,55 @@ expression_statement :: proc (p: ^Parser) {
     emit_byte(p, byte(OpCode.OP_POP))
 }
 
+@(private="file")
+for_statement :: proc (p: ^Parser) {
+    begin_scope(p)
+    if match(p, .SEMI) {
+        // No initializer.
+    } else if match(p, .LET) {
+        let_declaration(p)
+    } else {
+        expression_statement(p)
+    }
+
+    loop_start := len(p.compiling_chunk.code)
+    exit_jump := -1
+    if !match(p, .SEMI) {
+        expression(p)
+        consume(p, .SEMI, "Expect ';' after loop condition.")
+
+        // Jump out of the loop if the condition is false.
+        exit_jump = emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
+        emit_byte(p, byte(OpCode.OP_POP)) // Condition.
+    }
+
+    // Jump over the increment, run the body, and jump back to the
+    // increment, then go to the next iteration.
+    if !match(p, .LSQUIRLY) {
+        body_jump := emit_jump(p, byte(OpCode.OP_JUMP))
+        increment_start := len(p.compiling_chunk.code)
+
+        expression(p)
+        emit_byte(p, byte(OpCode.OP_POP))
+        consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
+
+        emit_loop(p, loop_start)
+        loop_start = increment_start
+        patch_jump(p, body_jump)
+    }
+
+    block(p)
+
+    emit_loop(p, loop_start)
+
+    if exit_jump != -1 {
+        patch_jump(p, exit_jump)
+        emit_byte(p, byte(OpCode.OP_POP)) // Condition.
+    }
+
+    end_scope(p)
+}
+
 /* Parse an if statement. */
 @(private="file")
 if_statement :: proc (p: ^Parser) {
@@ -691,7 +753,10 @@ if_statement :: proc (p: ^Parser) {
 
     then_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
     emit_byte(p, byte(OpCode.OP_POP))
+
+    begin_scope(p)
     block(p)
+    end_scope(p)
 
     else_jump := emit_jump(p, byte(OpCode.OP_JUMP))
 
@@ -713,6 +778,26 @@ print_statement :: proc (p: ^Parser) {
     emit_byte(p, byte(OpCode.OP_WRITE))
 }
 
+/* Parse a while statment. */
+@(private="file")
+while_statement :: proc (p: ^Parser) {
+    loop_start := len(p.compiling_chunk.code)
+    expression(p)
+    consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
+
+    exit_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
+    emit_byte(p, byte(OpCode.OP_POP))
+
+    begin_scope(p)
+    block(p)
+    end_scope(p)
+
+    emit_loop(p, loop_start)
+
+    patch_jump(p, exit_jump)
+    emit_byte(p, byte(OpCode.OP_POP))
+}
+
 /* 
 Discard all tokens until reaching a synchronization point, like a
 statement terminator or any tokens that begin a statement. 
@@ -727,7 +812,7 @@ synchronize :: proc (p: ^Parser) {
         }
 
         #partial switch p.current.type {
-            case .FUN, .FOR, .IF, .LET, .PRINT, .RETURN:
+            case .FN, .FOR, .IF, .LET, .PRINT, .RETURN, .WHILE:
                 return
             case: // Do nothing.
         }
@@ -757,8 +842,14 @@ statement :: proc (p: ^Parser) {
         print_statement(p)
     } else if match(p, .IF) {
         if_statement(p)
+    } else if match(p, .WHILE) {
+        while_statement(p)
+    } else if match(p, .FOR) {
+        for_statement(p)
     } else if match(p, .LSQUIRLY) {
+        begin_scope(p)
         block(p)
+        end_scope(p)
     } else {
         expression_statement(p)
     }
@@ -768,7 +859,8 @@ statement :: proc (p: ^Parser) {
 Compile the provided slice of tokens into a bytecode chunk. 
 The compile function also takes in a pointer to a globals table. The main 
 reason behind this is to keep track of any final variables declared. This is 
-useful in the REPL but not so much in a file.
+useful in the REPL but not so much in a file, since in the REPL the compiler
+recompiles every line but that's not necessary in a file.
 
 TODO: Find a better way to store global variables so that this whole
 table-passing thing isn't necessary.

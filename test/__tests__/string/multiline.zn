@@ -1,0 +1,10 @@
+// expect:
+// 1
+// 2
+// 3
+// end expect
+
+let a = "1
+2
+3";
+print a;

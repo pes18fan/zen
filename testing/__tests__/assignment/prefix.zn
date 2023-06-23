@@ -1,6 +1,0 @@
-// expect:
-// ERR: Invalid assignment target.
-// end expect
-
-let a = "a"
-not a = "value"

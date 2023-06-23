@@ -1,0 +1,5 @@
+// expect:
+// ERR: Expect variable name
+// end expect
+
+let nil = "value";
