@@ -96,7 +96,7 @@ print_value :: proc (value: Value) {
             print_object(v)
         case Range:
             fmt.printf("%d%s%d", 
-                v.start, is_inclusive(v) ? "..=" : "..", v.end)
+                v.start, v.type == .INCLUSIVE ? "..=" : "..", v.end)
         case: fmt.print("nil")
     }
 }
@@ -111,6 +111,7 @@ values_equal :: proc (a: Value, b: Value) -> bool {
         case bool: return v == as_bool(b)
         case f64:  return v == as_number(a)
         case ^Obj: return as_obj(a) == as_obj(b)
+        case Range: return v == as_range(b)
         case: return true
     }  
 }

@@ -2,6 +2,7 @@ package zen
 
 import "core:fmt"
 import "core:mem"
+import "core:math"
 import "core:strings"
 
 /* The maximum size for the stack. Going past this causes a stack overflow. */
@@ -76,6 +77,17 @@ free_VM :: proc (vm: ^VM) {
     delete(vm.stack)
 }
 
+@(private="file")
+is_integer :: proc (value: Value) -> bool {
+    return is_number(value) &&
+        as_number(value) == math.floor(as_number(value))
+}
+
+@(private="file")
+to_integer :: proc (value: Value) -> int {
+    return int(as_number(value))
+}
+
 /* Reads a byte from the chunk and increments the instruction pointer. */
 @(private="file")
 read_byte :: proc (vm: ^VM) -> byte #no_bounds_check {
@@ -105,7 +117,7 @@ Performs a binary operation on the top two values of the stack. In zen, a
 binary operator can only return either a 64-bit float or a boolean. 
 */
 @(private="file")
-binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> InterpretResult {
+binary_op :: proc (v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
     if !is_number(vm_peek(v, 0)) || !is_number(vm_peek(v, 1)) {
         vm_panic(v, "Operands for '%c' must be numbers.", op)
         return .INTERPRET_RUNTIME_ERROR
@@ -117,10 +129,10 @@ binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> InterpretResult {
     switch typeid_of(Returns) {
         case f64:
             switch op {
-                case '+': vm_push(v, number_val(a + b))
-                case '-': vm_push(v, number_val(a - b))
-                case '*': vm_push(v, number_val(a * b))
-                case '/': {
+                case "+": vm_push(v, number_val(a + b))
+                case "-": vm_push(v, number_val(a - b))
+                case "*": vm_push(v, number_val(a * b))
+                case "/": {
                     if b == 0 {
                         vm_panic(v, "Cannot divide by zero.")
                         return .INTERPRET_RUNTIME_ERROR
@@ -128,10 +140,32 @@ binary_op :: proc (v: ^VM, $Returns: typeid, op: byte) -> InterpretResult {
                     vm_push(v, number_val(a / b))
                 }
             }
-        case bool:
-            switch op {
-                case '>': vm_push(v, bool_val(a > b))
-                case '<': vm_push(v, bool_val(a < b))
+            case bool: {
+                switch op {
+                    case ">": vm_push(v, bool_val(a > b))
+                    case "<": vm_push(v, bool_val(a < b))
+                }
+            }
+            case Range: {
+                if !is_integer(b) || !is_integer(a) {
+                    vm_panic(v, "Operands for '..' must be integers.")
+                            return .INTERPRET_RUNTIME_ERROR
+                }
+
+                switch op {
+                    case "..":
+                        vm_push(v, range_val(Range {
+                            start = to_integer(a),
+                            end = to_integer(b),
+                            type = .INCLUSIVE,
+                        }))
+                    case "..=":
+                        vm_push(v, range_val(Range {
+                            start = to_integer(a),
+                            end = to_integer(b),
+                            type = .EXCLUSIVE,
+                        }))
+                }
             }
         case: unreachable()
     }
@@ -187,7 +221,7 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                 name := read_string(v)
                 table_set(&v.globals, name, vm_peek(v, 0))
                 vm_pop(v)
-            case .OP_SET_GLOBAL: {
+            case .OP_SET_GLOBAL:
                 name := read_string(v)
 
                 if table_set(&v.globals, name, vm_peek(v, 0)) {
@@ -195,24 +229,15 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                     vm_panic(v, "Undefined variable '%s'.", name.chars)
                     return .INTERPRET_RUNTIME_ERROR
                 }
-            }
-            case .OP_RANGE_INCLUSIVE: {
-                end := as_number(vm_pop(v))
-                start := as_number(vm_pop(v))
-                vm_push(v, range_val(start, end, .INCLUSIVE))
-            }
-            case .OP_RANGE_EXCLUSIVE: {
-                end := as_number(vm_pop(v))
-                start := as_number(vm_pop(v))
-                vm_push(v, range_val(start, end, .EXCLUSIVE))
-            }
+            case .OP_RANGE_INCLUSIVE: binary_op(v, Range, "..") or_return
+            case .OP_RANGE_EXCLUSIVE: binary_op(v, Range, "..=") or_return
             case .OP_EQUAL: {
                 b := vm_pop(v)
                 a := vm_pop(v)
                 vm_push(v, bool_val(values_equal(a, b)))
             }
-            case .OP_GREATER: binary_op(v, bool, '>') or_return
-            case .OP_LESS:    binary_op(v, bool, '<') or_return
+            case .OP_GREATER: binary_op(v, bool, ">") or_return
+            case .OP_LESS:    binary_op(v, bool, "<") or_return
             case .OP_ADD:      
                 if is_string(vm_peek(v, 0)) && 
                     is_string(vm_peek(v, 1)) {
@@ -227,9 +252,9 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                         "Operands must be two numbers or two strings.")
                     return .INTERPRET_RUNTIME_ERROR
                 }
-            case .OP_SUBTRACT: binary_op(v, f64, '-') or_return
-            case .OP_MULTIPLY: binary_op(v, f64, '*') or_return
-            case .OP_DIVIDE:   binary_op(v, f64, '/') or_return
+            case .OP_SUBTRACT: binary_op(v, f64, "+") or_return
+            case .OP_MULTIPLY: binary_op(v, f64, "*") or_return
+            case .OP_DIVIDE:   binary_op(v, f64, "/") or_return
             case .OP_NOT:
                 vm_push(v, bool_val(is_falsey(vm_pop(v))))
             case .OP_NEGATE:

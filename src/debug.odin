@@ -4,43 +4,44 @@ import "core:fmt"
 
 @(private="file")
 simple_instruction :: proc (name: string, offset: int) -> int {
-    fmt.printf("%s\n", name)
+    fmt.eprintf("%s\n", name)
     return offset + 1
 }
 
 @(private="file")
 byte_instruction :: proc (name: string, c: ^Chunk, offset: int) -> int {
     slot := c.code[offset + 1]
-    fmt.printf("%-16s %4d\n", name, slot)
+    fmt.eprintf("%-16s %4d\n", name, slot)
     return offset + 2
 }
 
 @(private="file")
-jump_instruction :: proc (name: string, sign: int, c: ^Chunk, offset: int) -> int {
+jump_instruction :: proc (name: string, sign: int, c: ^Chunk, 
+        offset: int) -> int {
     jump := int(c.code[offset + 1]) << 8
     jump |= int(c.code[offset + 2])
-    fmt.printf("%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump)
+    fmt.eprintf("%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump)
     return offset + 3
 }
 
 @(private="file")
 constant_instruction :: proc (name: string, c: ^Chunk, offset: int) -> int {
     constant := c.code[offset + 1]
-    fmt.printf("%-16s %4d '", name, constant)
+    fmt.eprintf("%-16s %4d '", name, constant)
     print_value(c.constants.values[constant])
-    fmt.printf("'\n")
+    fmt.eprintf("'\n")
     return offset + 2
 }
 
 /* Disassembles the instruction at the provided offset. */
 disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
-    fmt.printf("%04d ", offset)
+    fmt.eprintf("%04d ", offset)
 
     if offset > 0 && 
         get_line(c.lines, offset) == get_line(c.lines, offset - 1) {
-        fmt.printf("   | ")
+        fmt.eprintf("   | ")
     } else {
-        fmt.printf("%4d ", get_line(c.lines, offset))
+        fmt.eprintf("%4d ", get_line(c.lines, offset))
     }
 
     instruction := c.code[offset]
@@ -65,6 +66,10 @@ disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
             return constant_instruction("OP_DEFINE_GLOBAL", c, offset)
         case .OP_EQUAL:
             return simple_instruction("OP_EQUAL", offset)
+        case .OP_RANGE_INCLUSIVE:
+            return simple_instruction("OP_RANGE_INCLUSIVE", offset)
+        case .OP_RANGE_EXCLUSIVE:
+            return simple_instruction("OP_RANGE_EXCLUSIVE", offset)
         case .OP_SET_GLOBAL:
             return constant_instruction("OP_SET_GLOBAL", c, offset)
         case .OP_GREATER:
@@ -104,7 +109,7 @@ Prints a header for each chunk, then loops through the bytecode,
 disassembling each instruction one by one.
 */
 disassemble :: proc (c: ^Chunk, name: string) {
-    fmt.printf("== %s ==\n", name)
+    fmt.eprintf("== %s ==\n", name)
 
     for i := 0; i < len(c.code); {
         i = disassemble_instruction(c, i)
