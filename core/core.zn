@@ -1,0 +1,61 @@
+class Sequence {
+    pub fn all(f) {
+        for item in this {
+            if !f(item) { return false; }
+        }
+        true
+    }
+
+    pub fn any(f) {
+        for item in this {
+            if f(item) { return true; }
+        }
+        false
+    }
+
+    pub fn has?(elem) {
+        for item in this {
+            if item == elem { return true; }
+        }
+        false
+    }
+
+    pub fn map(f) ->
+        match this {
+            [] -> [],
+            [head, ..tail] -> [f(head), ..tail.map(f)]
+        };
+
+    pub fn fold(acc, f) ->
+        match this {
+            [] -> acc,
+            [head, ..tail] -> tail.fold(f(acc, head), f)
+        };
+
+    pub fn where(f) ->
+        match this {
+            [] -> [],
+            [head, ..tail] ->
+                f(head) ?
+                    [head, ..tail.where(f)] :
+                    tail.where(f)
+        };
+
+    pub fn join(sep) ->
+        match this {
+            [] -> "",
+            [head, ..tail] ->
+                tail.fold(head.to_string, 
+                    (acc, item) -> acc + sep + item.to_string)
+        };
+
+    get count -> this.fold(0, (acc, _) -> acc + 1);
+
+    pub fn count(f) -> this.where(f).count;
+
+    get is_empty -> this.count == 0;
+}
+
+class List is Sequence {
+    get to_string -> "[" + this.join(", ") + "]";
+}

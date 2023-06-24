@@ -32,7 +32,7 @@ fn foo() {
     }
 }
 
-fn add(a, b) { return a + b; }
+pub fn add(a, b) -> a + b;
 
 fn test() {
     foo("just a little lexer exercise");
@@ -61,6 +61,7 @@ fn test() {
         Token{type = .SEMI, lexeme = ";", line = 4},
         Token{type = .RSQUIRLY, lexeme = "}", line = 5},
         Token{type = .RSQUIRLY, lexeme = "}", line = 6},
+        Token{type = .PUB, lexeme = "pub", line = 8},
         Token{type = .FN, lexeme = "fn", line = 8},
         Token{type = .IDENT, lexeme = "add", line = 8},
         Token{type = .LPAREN, lexeme = "(", line = 8},
@@ -68,13 +69,11 @@ fn test() {
         Token{type = .COMMA, lexeme = ",", line = 8},
         Token{type = .IDENT, lexeme = "b", line = 8},
         Token{type = .RPAREN, lexeme = ")", line = 8},
-        Token{type = .LSQUIRLY, lexeme = "{", line = 8},
-        Token{type = .RETURN, lexeme = "return", line = 8},
+        Token{type = .ARROW, lexeme = "->", line = 8},
         Token{type = .IDENT, lexeme = "a", line = 8},
         Token{type = .PLUS, lexeme = "+", line = 8},
         Token{type = .IDENT, lexeme = "b", line = 8},
         Token{type = .SEMI, lexeme = ";", line = 8},
-        Token{type = .RSQUIRLY, lexeme = "}", line = 8},
         Token{type = .FN, lexeme = "fn", line = 10},
         Token{type = .IDENT, lexeme = "test", line = 10},
         Token{type = .LPAREN, lexeme = "(", line = 10},

@@ -11,16 +11,15 @@ TokenType :: enum {
     STAR, NEWLINE,
 
     // one or two character tokens
-    ARROW, BANG_EQUAL, DOT_DOT_EQUAL, DOT_DOT,
-    EQUAL, EQUAL_EQUAL, GREATER, GREATER_EQUAL, LESS, 
-    LESS_EQUAL,
+    ARROW, BANG_EQUAL, EQUAL, EQUAL_EQUAL, GREATER, 
+    GREATER_EQUAL, LESS, LESS_EQUAL,
 
     // literals
     IDENT, STRING, NUMBER,
 
     // keywords
-    AND, BREAK, ELSE, FALSE, FINAL, FOR, FN,
-    IF, IMPORT, IN, LET, NIL, NOT, OR, PRINT,
+    AND, BREAK, CONTINUE, ELSE, FALSE, FINAL, FOR, FN,
+    IF, IMPORT, IN, LET, NIL, NOT, OR, PRINT, PUB,
     RETURN, TRUE, WHILE,
 
     ILLEGAL, EOF,
@@ -228,6 +227,7 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
     switch utf8.rune_at(l.source, l.start) {
         case 'a': return check_keyword(l, 1, 2, "nd", .AND)
         case 'b': return check_keyword(l, 1, 4, "reak", .BREAK)
+        case 'c': return check_keyword(l, 1, 7, "ontinue", .CONTINUE)
         case 'e': return check_keyword(l, 1, 3, "lse", .ELSE)
         case 'f': {
             if l.current - l.start > 1 {
@@ -258,7 +258,14 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
             }
         }
         case 'o': return check_keyword(l, 1, 1, "r", .OR)
-        case 'p': return check_keyword(l, 1, 4, "rint", .PRINT)
+        case 'p': {
+            if l.current - l.start > 1 {
+                switch utf8.rune_at(l.source, l.start + 1) {
+                    case 'r': return check_keyword(l, 2, 3, "int", .PRINT)
+                    case 'u': return check_keyword(l, 2, 1, "b", .PUB)
+                }
+            }
+        }
         case 'r': return check_keyword(l, 1, 5, "eturn", .RETURN)
         case 't': return check_keyword(l, 1, 3, "rue", .TRUE)
         case 'w': return check_keyword(l, 1, 4, "hile", .WHILE)
@@ -339,12 +346,7 @@ lex_token :: proc (l: ^Lexer) -> Token {
         case '}':  return make_token(l, .RSQUIRLY)
         case ';':  return make_token(l, .SEMI)
         case ',':  return make_token(l, .COMMA)
-        case '.':
-            if match(l, '.') {
-                return make_token(l,
-                    match(l, '=') ? .DOT_DOT_EQUAL : .DOT_DOT)
-            }
-            return make_token(l, .DOT)
+        case '.':  return make_token(l, .DOT)
         case '-':  return make_token(l,
                 match(l, '>') ? .ARROW : .MINUS)
         case '+':  return make_token(l, .PLUS)

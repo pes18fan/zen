@@ -13,17 +13,15 @@ in the union, or nil.
 Value :: union {
     bool,
     f64,
-    Range,
     ^Obj,
 }
 
-type_of_value :: proc (value: Value) -> typeid {
+type_of_value :: proc (value: Value) -> string {
     switch v in value {
-        case bool: return bool
-        case f64: return f64
-        case ^Obj: return ^Obj
-        case Range: return Range
-        case: return nil
+        case bool: return "boolean"
+        case f64: return "number"
+        case ^Obj: return type_of_obj(v)
+        case: return "nil"
     }
 }
 
@@ -44,12 +42,10 @@ is_obj :: proc (value: Value) -> bool {
 as_obj :: proc (value: Value) -> ^Obj { return value.(^Obj) }
 as_bool :: proc (value: Value) -> bool { return value.(bool) }
 as_number :: proc (value: Value) -> f64 { return value.(f64) }
-as_range :: proc (value: Value) -> Range { return value.(Range) }
 
 bool_val :: proc (value: bool) -> Value { return Value(value) }
 nil_val :: proc () -> Value { return Value(nil) }
 number_val :: proc (value: f64) -> Value { return Value(value) }
-range_val :: proc (value: Range) -> Value { return Value(value) }
 obj_val :: proc (value: ^Obj) -> Value { return Value(value) }
 
 /* 
@@ -84,19 +80,17 @@ is_integer :: proc (value: f64) -> bool {
 /* Print out `value` in a human-readable format. */
 print_value :: proc (value: Value) {
     switch v in value {
-        case bool: 
+        case bool:
             fmt.print(v ? "true" : "false")
         case f64:
             if is_integer(v) {
+                assert(v == math.floor(v))
                 fmt.printf("%d", int(v))
             } else {
                 fmt.printf("%g", v)
             }
         case ^Obj:
             print_object(v)
-        case Range:
-            fmt.printf("%d%s%d", 
-                v.start, v.type == .INCLUSIVE ? "..=" : "..", v.end)
         case: fmt.print("nil")
     }
 }
@@ -109,9 +103,8 @@ values_equal :: proc (a: Value, b: Value) -> bool {
 
     switch v in a {
         case bool: return v == as_bool(b)
-        case f64:  return v == as_number(a)
+        case f64:  return v == as_number(b)
         case ^Obj: return as_obj(a) == as_obj(b)
-        case Range: return v == as_range(b)
         case: return true
     }  
 }

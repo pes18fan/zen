@@ -66,10 +66,6 @@ disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
             return constant_instruction("OP_DEFINE_GLOBAL", c, offset)
         case .OP_EQUAL:
             return simple_instruction("OP_EQUAL", offset)
-        case .OP_RANGE_INCLUSIVE:
-            return simple_instruction("OP_RANGE_INCLUSIVE", offset)
-        case .OP_RANGE_EXCLUSIVE:
-            return simple_instruction("OP_RANGE_EXCLUSIVE", offset)
         case .OP_SET_GLOBAL:
             return constant_instruction("OP_SET_GLOBAL", c, offset)
         case .OP_GREATER:
@@ -88,8 +84,8 @@ disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
             return simple_instruction("OP_NOT", offset)
         case .OP_NEGATE:
             return simple_instruction("OP_NEGATE", offset)
-        case .OP_WRITE:
-            return simple_instruction("OP_WRITE", offset)
+        case .OP_PRINT:
+            return simple_instruction("OP_PRINT", offset)
         case .OP_JUMP:
             return jump_instruction("OP_JUMP", 1, c, offset)
         case .OP_JUMP_IF_FALSE:

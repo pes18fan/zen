@@ -39,6 +39,14 @@ is_obj_type :: #force_inline proc (value: Value, type: ObjType) -> bool {
     return is_obj(value) && as_obj(value).type == type
 }
 
+type_of_obj :: proc (obj: ^Obj) -> string {
+    switch obj.type {
+        case .STRING: return "string"
+    }
+
+    unreachable()
+}
+
 allocate_obj :: proc (vm: ^VM, $T: typeid, type: ObjType) -> ^Obj {
     obj := new(T)
     obj.type = type

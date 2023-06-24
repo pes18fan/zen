@@ -35,7 +35,6 @@ Precedence :: enum {
     COMPARISON,  // < > <= >=
     TERM,        // + -
     FACTOR,      // * /
-    RANGE,       // ..= ..
     UNARY,       // not -
     CALL,        // . ()
     PRIMARY,
@@ -64,6 +63,11 @@ Local :: struct {
     final: bool,
 }
 
+Loop :: struct {
+    start: int,
+    scope_depth: int,
+}
+
 /*
 A struct that holds variables and scope info.
 */
@@ -71,6 +75,8 @@ Compiler :: struct {
     globals: ^Table,
     locals: [U8_COUNT]Local,
     local_count: int,
+    loops: [U8_COUNT]Loop,
+    loop_count: int,
     scope_depth: int,
 }
 
@@ -242,6 +248,7 @@ final variables' "finality" can be preserved in the global scope.
 init_compiler :: proc (globals: ^Table) -> Compiler {
     return Compiler {
         local_count = 0,
+        loop_count = 0,
         scope_depth = 0,
         globals = globals,
     }
@@ -297,8 +304,6 @@ binary :: proc (p: ^Parser, can_assign: bool) {
     parse_precedence(p, Precedence(byte(rule.precedence) + 1))
 
     #partial switch operator_type {
-        case .DOT_DOT_EQUAL: emit_byte(p, byte(OP_RANGE_INCLUSIVE))
-        case .DOT_DOT:       emit_byte(p, byte(OP_RANGE_EXCLUSIVE))
         case .BANG_EQUAL:    emit_bytes(p, byte(OP_EQUAL), byte(OP_NOT))
         case .EQUAL_EQUAL:   emit_byte(p, byte(OP_EQUAL))
         case .GREATER:       emit_byte(p, byte(OP_GREATER))
@@ -454,8 +459,6 @@ rules: []ParseRule = {
     TokenType.RSQUIRLY      = ParseRule{ nil,      nil,    .NONE },
     TokenType.COMMA         = ParseRule{ nil,      nil,    .NONE },
     TokenType.DOT           = ParseRule{ nil,      nil,    .NONE },
-    TokenType.DOT_DOT_EQUAL = ParseRule{ nil,      binary, .RANGE },
-    TokenType.DOT_DOT       = ParseRule{ nil,      binary, .RANGE },
     TokenType.MINUS         = ParseRule{ unary,    binary, .TERM },
     TokenType.PLUS          = ParseRule{ nil,      binary, .TERM },
     TokenType.SEMI          = ParseRule{ nil,      nil,    .NONE },
@@ -733,6 +736,7 @@ for_statement :: proc (p: ^Parser) {
         patch_jump(p, body_jump)
     }
 
+    begin_loop(p, loop_start)
     block(p)
 
     emit_loop(p, loop_start)
@@ -742,6 +746,7 @@ for_statement :: proc (p: ^Parser) {
         emit_byte(p, byte(OpCode.OP_POP)) // Condition.
     }
 
+    end_loop(p)
     end_scope(p)
 }
 
@@ -775,13 +780,56 @@ if_statement :: proc (p: ^Parser) {
 print_statement :: proc (p: ^Parser) {
     expression(p)
     consume(p, .SEMI, "Expect ';' after value.")
-    emit_byte(p, byte(OpCode.OP_WRITE))
+    emit_byte(p, byte(OpCode.OP_PRINT))
+}
+
+@(private="file")
+begin_loop :: proc (p: ^Parser, loop_start: int) {
+    if p.current_compiler.loop_count >= U8_COUNT {
+        error(p, "Too many nested loops.")
+        return
+    }
+
+    loop := &p.current_compiler.loops[p.current_compiler.loop_count]
+    p.current_compiler.loop_count += 1
+    loop.start = loop_start
+    loop.scope_depth = p.current_compiler.scope_depth
+}
+
+@(private="file")
+end_loop :: proc (p: ^Parser) {
+    assert(p.current_compiler.loop_count > 0)
+    p.current_compiler.loop_count -= 1
+}
+
+@(private="file")
+continue_statement :: proc (p: ^Parser) {
+    if p.current_compiler.loop_count == 0 {
+        error(p, "Cannot use 'continue' outside a loop.")
+        return
+    }
+
+    consume(p, .SEMI, "Expect ';' after 'continue'.")
+
+    loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
+
+    // Discard correct number of values from the stack.
+    for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
+        local := &p.current_compiler.locals[i]
+        if local.depth < loop.scope_depth {
+            break
+        }
+    }
+
+    emit_loop(p, loop.start)
 }
 
 /* Parse a while statment. */
 @(private="file")
 while_statement :: proc (p: ^Parser) {
     loop_start := len(p.compiling_chunk.code)
+
+    begin_loop(p, loop_start)
     expression(p)
     consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
 
@@ -796,6 +844,7 @@ while_statement :: proc (p: ^Parser) {
 
     patch_jump(p, exit_jump)
     emit_byte(p, byte(OpCode.OP_POP))
+    end_loop(p)
 }
 
 /* 
@@ -812,7 +861,7 @@ synchronize :: proc (p: ^Parser) {
         }
 
         #partial switch p.current.type {
-            case .FN, .FOR, .IF, .LET, .PRINT, .RETURN, .WHILE:
+            case .FN, .FOR, .IF, .LET, .PRINT, .PUB, .RETURN, .WHILE:
                 return
             case: // Do nothing.
         }
@@ -838,7 +887,9 @@ declaration :: proc (p: ^Parser) {
 /* Parse a statement. */
 @(private="file")
 statement :: proc (p: ^Parser) {
-    if match(p, .PRINT) {
+    if match(p, .CONTINUE) {
+        continue_statement(p)
+    } else if match(p, .PRINT) {
         print_statement(p)
     } else if match(p, .IF) {
         if_statement(p)

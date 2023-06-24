@@ -77,17 +77,6 @@ free_VM :: proc (vm: ^VM) {
     delete(vm.stack)
 }
 
-@(private="file")
-is_integer :: proc (value: Value) -> bool {
-    return is_number(value) &&
-        as_number(value) == math.floor(as_number(value))
-}
-
-@(private="file")
-to_integer :: proc (value: Value) -> int {
-    return int(as_number(value))
-}
-
 /* Reads a byte from the chunk and increments the instruction pointer. */
 @(private="file")
 read_byte :: proc (vm: ^VM) -> byte #no_bounds_check {
@@ -119,7 +108,9 @@ binary operator can only return either a 64-bit float or a boolean.
 @(private="file")
 binary_op :: proc (v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
     if !is_number(vm_peek(v, 0)) || !is_number(vm_peek(v, 1)) {
-        vm_panic(v, "Operands for '%c' must be numbers.", op)
+        vm_panic(v,
+            "Expected numbers as operands to '%s', got %v and %v instead.",
+            op, type_of_value(vm_peek(v, 1)), type_of_value(vm_peek(v, 0)))
         return .INTERPRET_RUNTIME_ERROR
     }
 
@@ -129,7 +120,6 @@ binary_op :: proc (v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
     switch typeid_of(Returns) {
         case f64:
             switch op {
-                case "+": vm_push(v, number_val(a + b))
                 case "-": vm_push(v, number_val(a - b))
                 case "*": vm_push(v, number_val(a * b))
                 case "/": {
@@ -144,27 +134,6 @@ binary_op :: proc (v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
                 switch op {
                     case ">": vm_push(v, bool_val(a > b))
                     case "<": vm_push(v, bool_val(a < b))
-                }
-            }
-            case Range: {
-                if !is_integer(b) || !is_integer(a) {
-                    vm_panic(v, "Operands for '..' must be integers.")
-                            return .INTERPRET_RUNTIME_ERROR
-                }
-
-                switch op {
-                    case "..":
-                        vm_push(v, range_val(Range {
-                            start = to_integer(a),
-                            end = to_integer(b),
-                            type = .INCLUSIVE,
-                        }))
-                    case "..=":
-                        vm_push(v, range_val(Range {
-                            start = to_integer(a),
-                            end = to_integer(b),
-                            type = .EXCLUSIVE,
-                        }))
                 }
             }
         case: unreachable()
@@ -229,8 +198,6 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                     vm_panic(v, "Undefined variable '%s'.", name.chars)
                     return .INTERPRET_RUNTIME_ERROR
                 }
-            case .OP_RANGE_INCLUSIVE: binary_op(v, Range, "..") or_return
-            case .OP_RANGE_EXCLUSIVE: binary_op(v, Range, "..=") or_return
             case .OP_EQUAL: {
                 b := vm_pop(v)
                 a := vm_pop(v)
@@ -239,20 +206,21 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
             case .OP_GREATER: binary_op(v, bool, ">") or_return
             case .OP_LESS:    binary_op(v, bool, "<") or_return
             case .OP_ADD:      
-                if is_string(vm_peek(v, 0)) && 
-                    is_string(vm_peek(v, 1)) {
+                b := vm_pop(v)
+                a := vm_pop(v)
+                if is_string(a) && is_string(b) {
                     concatenate(v)
-                } else if is_number(vm_peek(v, 0)) && 
-                    is_number(vm_peek(v, 1)) {
-                    b := as_number(vm_pop(v))
-                    a := as_number(vm_pop(v))
+                } else if is_number(a) && is_number(b) {
+                    b := as_number(b)
+                    a := as_number(a)
                     vm_push(v, number_val(a + b))
                 } else {
                     vm_panic(v, 
-                        "Operands must be two numbers or two strings.")
+                        "Expected two numbers or two strings as operands to '+', got %v and %v instead.",
+                        type_of_value(a), type_of_value(b))
                     return .INTERPRET_RUNTIME_ERROR
                 }
-            case .OP_SUBTRACT: binary_op(v, f64, "+") or_return
+            case .OP_SUBTRACT: binary_op(v, f64, "-") or_return
             case .OP_MULTIPLY: binary_op(v, f64, "*") or_return
             case .OP_DIVIDE:   binary_op(v, f64, "/") or_return
             case .OP_NOT:
@@ -263,7 +231,7 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                     return .INTERPRET_RUNTIME_ERROR
                 }
                 vm_push(v, number_val(-as_number(vm_pop(v))))
-            case .OP_WRITE:
+            case .OP_PRINT:
                 print_value(vm_pop(v))
                 fmt.printf("\n")
             case .OP_JUMP:
