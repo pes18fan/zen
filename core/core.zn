@@ -1,18 +1,23 @@
-class Sequence {
+final Sequence = class {
+    // Check if all the elements in the sequence satisfy the predicate.
     pub fn all(f) {
+        if this.empty? { return false; }
         for item in this {
-            if !f(item) { return false; }
+            if not f(item) { return false; }
         }
         true
     }
 
+    // Check if any of the elements in the sequence satisfy the predicate.
     pub fn any(f) {
+        if this.empty? { return false; }
         for item in this {
             if f(item) { return true; }
         }
         false
     }
-
+    
+    // Check if the sequence has the given element.
     pub fn has?(elem) {
         for item in this {
             if item == elem { return true; }
@@ -20,18 +25,21 @@ class Sequence {
         false
     }
 
+    // Apply a function to each element in the sequence.
     pub fn map(f) ->
         match this {
             [] -> [],
             [head, ..tail] -> [f(head), ..tail.map(f)]
         };
 
+    // Reduce the sequence to a single value as per the provided function.
     pub fn fold(acc, f) ->
         match this {
             [] -> acc,
             [head, ..tail] -> tail.fold(f(acc, head), f)
         };
 
+    // Return a new sequence with only the elements that satisfy the predicate.
     pub fn where(f) ->
         match this {
             [] -> [],
@@ -41,6 +49,8 @@ class Sequence {
                     tail.where(f)
         };
 
+    // Join the elements of the sequence into a string, seperated by the given
+    // string.
     pub fn join(sep) ->
         match this {
             [] -> "",
@@ -49,13 +59,57 @@ class Sequence {
                     (acc, item) -> acc + sep + item.to_string)
         };
 
-    get count -> this.fold(0, (acc, _) -> acc + 1);
+    pub fn swap(i, j) {
+        let tmp = this[i];
+        this[i] = this[j];
+        this[j] = tmp;
+    }
+    
+    pub fn operator +(other) ->
+        match this {
+            [] -> other,
+            [head, ..tail] -> [head, ..tail + other]
+        };
 
-    pub fn count(f) -> this.where(f).count;
+    // The number of elements in the sequence.
+    get len -> this.fold(0, (acc, _) -> acc + 1);
 
-    get is_empty -> this.count == 0;
+    // The number of elements in the sequence satisfying the given predicate.
+    pub fn len(f) -> this.where(f).len;
+
+    // Check if the sequence is empty.
+    get empty? -> this.len == 0;
 }
 
-class List is Sequence {
+// A list is a contiguous and growable sequence of elements.
+final List = class is Sequence {
     get to_string -> "[" + this.join(", ") + "]";
+
+    pub fn sort() -> this.quicksort(this, 0, this.len - 1);
+
+    fn quicksort(arr, lo, hi) {
+        if this.empty? { return this; }
+
+        final pivot_idx = this.partition(this, lo, hi);
+
+        this.quicksort(arr, lo, pivot_idx - 1);
+        this.quicksort(arr, pivot_idx + 1, hi);
+    }
+
+    fn partition(f, lo, hi) {
+        final pivot = this[hi];
+        let idx = lo - 1;
+
+        for i in lo..hi {
+            if this[i] <= pivot {
+                idx += 1;
+                this.swap(i, idx);
+            }
+        }
+
+        idx += 1;
+        this.swap(idx, hi);
+
+        idx
+    }
 }

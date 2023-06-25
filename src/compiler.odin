@@ -66,6 +66,7 @@ Local :: struct {
 Loop :: struct {
     start: int,
     scope_depth: int,
+    breaks: [dynamic]int,
 }
 
 /*
@@ -254,6 +255,18 @@ init_compiler :: proc (globals: ^Table) -> Compiler {
     }
 }
 
+/*
+Free the dynamic array of break jump offsets. 
+TODO: Nothing else really needs to be freed, so this stands out. Find a
+better way to do this.
+*/
+@(private="file")
+free_loops :: proc (p: ^Parser) {
+    for i in p.current_compiler.loops {
+        delete(i.breaks)
+    }
+}
+
 /* Emit a return instruction and decode the RLE-encoded lines. */
 @(private="file")
 end_compiler :: proc (p: ^Parser) {
@@ -264,6 +277,8 @@ end_compiler :: proc (p: ^Parser) {
             disassemble(p.compiling_chunk, "code")
         }
     }
+
+    free_loops(p)
 }
 
 /* Begin a new scope. */
@@ -699,6 +714,140 @@ expression_statement :: proc (p: ^Parser) {
     emit_byte(p, byte(OpCode.OP_POP))
 }
 
+/* Parse an if statement. */
+@(private="file")
+if_statement :: proc (p: ^Parser) {
+    expression(p)
+    consume(p, .LSQUIRLY, "Expect '{' after if condition.")
+
+    then_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
+    emit_byte(p, byte(OpCode.OP_POP))
+
+    begin_scope(p)
+    block(p)
+    end_scope(p)
+
+    else_jump := emit_jump(p, byte(OpCode.OP_JUMP))
+
+    patch_jump(p, then_jump)
+    emit_byte(p, byte(OpCode.OP_POP))
+
+    if match(p, .ELSE) {
+        consume(p, .LSQUIRLY, "Expect '{' after else.")
+        block(p)
+    }
+    patch_jump(p, else_jump)
+}
+
+/* Parse a `write` statement. */
+@(private="file")
+print_statement :: proc (p: ^Parser) {
+    expression(p)
+    consume(p, .SEMI, "Expect ';' after value.")
+    emit_byte(p, byte(OpCode.OP_PRINT))
+}
+
+@(private="file")
+begin_loop :: proc (p: ^Parser, loop_start: int) {
+    if p.current_compiler.loop_count >= U8_COUNT {
+        error(p, "Too many nested loops.")
+        return
+    }
+
+    loop := &p.current_compiler.loops[p.current_compiler.loop_count]
+    p.current_compiler.loop_count += 1
+    loop.start = loop_start
+    loop.scope_depth = p.current_compiler.scope_depth
+}
+
+@(private="file")
+end_loop :: proc (p: ^Parser) {
+    assert(p.current_compiler.loop_count > 0)
+    patch_breaks(p)
+    p.current_compiler.loop_count -= 1
+}
+
+
+/*
+Patch the jump offsets of any break statements present in the current loop.
+Called right after a loop is parsed. 
+*/
+@(private="file")
+patch_breaks :: proc (p: ^Parser) {
+    loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
+
+    for i in loop.breaks {
+        patch_jump(p, i)
+    }
+}
+
+/* Parse a `break` statement. */
+@(private="file")
+break_statement :: proc (p: ^Parser) {
+    if p.current_compiler.loop_count == 0 {
+        error(p, "Cannot 'break' outside a loop.")
+        return
+    }
+
+    consume(p, .SEMI, "Expect ';' after 'break'.")
+
+    loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
+    append(&loop.breaks, emit_jump(p, byte(OpCode.OP_JUMP)))
+
+    // Discard correct number of values from the stack.
+    for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
+        local := &p.current_compiler.locals[i]
+        if local.depth < loop.scope_depth {
+            break
+        }
+    }
+}
+
+@(private="file")
+continue_statement :: proc (p: ^Parser) {
+    if p.current_compiler.loop_count == 0 {
+        error(p, "Cannot use 'continue' outside a loop.")
+        return
+    }
+
+    consume(p, .SEMI, "Expect ';' after 'continue'.")
+
+    loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
+
+    // Discard correct number of values from the stack.
+    for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
+        local := &p.current_compiler.locals[i]
+        if local.depth < loop.scope_depth {
+            break
+        }
+    }
+
+    emit_loop(p, loop.start)
+}
+
+/* Parse a while statment. */
+@(private="file")
+while_statement :: proc (p: ^Parser) {
+    loop_start := len(p.compiling_chunk.code)
+
+    begin_loop(p, loop_start)
+    expression(p)
+    consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
+
+    exit_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
+    emit_byte(p, byte(OpCode.OP_POP))
+
+    begin_scope(p)
+    block(p)
+    end_scope(p)
+
+    emit_loop(p, loop_start)
+
+    patch_jump(p, exit_jump)
+    emit_byte(p, byte(OpCode.OP_POP))
+    end_loop(p)
+}
+
 @(private="file")
 for_statement :: proc (p: ^Parser) {
     begin_scope(p)
@@ -750,103 +899,6 @@ for_statement :: proc (p: ^Parser) {
     end_scope(p)
 }
 
-/* Parse an if statement. */
-@(private="file")
-if_statement :: proc (p: ^Parser) {
-    expression(p)
-    consume(p, .LSQUIRLY, "Expect '{' after if condition.")
-
-    then_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
-    emit_byte(p, byte(OpCode.OP_POP))
-
-    begin_scope(p)
-    block(p)
-    end_scope(p)
-
-    else_jump := emit_jump(p, byte(OpCode.OP_JUMP))
-
-    patch_jump(p, then_jump)
-    emit_byte(p, byte(OpCode.OP_POP))
-
-    if match(p, .ELSE) {
-        consume(p, .LSQUIRLY, "Expect '{' after else.")
-        block(p)
-    }
-    patch_jump(p, else_jump)
-}
-
-/* Parse a `write` statement. */
-@(private="file")
-print_statement :: proc (p: ^Parser) {
-    expression(p)
-    consume(p, .SEMI, "Expect ';' after value.")
-    emit_byte(p, byte(OpCode.OP_PRINT))
-}
-
-@(private="file")
-begin_loop :: proc (p: ^Parser, loop_start: int) {
-    if p.current_compiler.loop_count >= U8_COUNT {
-        error(p, "Too many nested loops.")
-        return
-    }
-
-    loop := &p.current_compiler.loops[p.current_compiler.loop_count]
-    p.current_compiler.loop_count += 1
-    loop.start = loop_start
-    loop.scope_depth = p.current_compiler.scope_depth
-}
-
-@(private="file")
-end_loop :: proc (p: ^Parser) {
-    assert(p.current_compiler.loop_count > 0)
-    p.current_compiler.loop_count -= 1
-}
-
-@(private="file")
-continue_statement :: proc (p: ^Parser) {
-    if p.current_compiler.loop_count == 0 {
-        error(p, "Cannot use 'continue' outside a loop.")
-        return
-    }
-
-    consume(p, .SEMI, "Expect ';' after 'continue'.")
-
-    loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
-
-    // Discard correct number of values from the stack.
-    for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
-        local := &p.current_compiler.locals[i]
-        if local.depth < loop.scope_depth {
-            break
-        }
-    }
-
-    emit_loop(p, loop.start)
-}
-
-/* Parse a while statment. */
-@(private="file")
-while_statement :: proc (p: ^Parser) {
-    loop_start := len(p.compiling_chunk.code)
-
-    begin_loop(p, loop_start)
-    expression(p)
-    consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
-
-    exit_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
-    emit_byte(p, byte(OpCode.OP_POP))
-
-    begin_scope(p)
-    block(p)
-    end_scope(p)
-
-    emit_loop(p, loop_start)
-
-    patch_jump(p, exit_jump)
-    emit_byte(p, byte(OpCode.OP_POP))
-    end_loop(p)
-}
-
 /* 
 Discard all tokens until reaching a synchronization point, like a
 statement terminator or any tokens that begin a statement. 
@@ -887,7 +939,9 @@ declaration :: proc (p: ^Parser) {
 /* Parse a statement. */
 @(private="file")
 statement :: proc (p: ^Parser) {
-    if match(p, .CONTINUE) {
+    if match(p, .BREAK) {
+        break_statement(p)
+    } else if match(p, .CONTINUE) {
         continue_statement(p)
     } else if match(p, .PRINT) {
         print_statement(p)

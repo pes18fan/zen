@@ -3,8 +3,8 @@
 // ERR: Invalid assignment target.
 // end expect
 
-class Foo {
-    Foo() {
+let Foo = class {
+    pub fn init() {
         this = "value";
     }
 }
