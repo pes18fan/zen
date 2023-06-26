@@ -1,0 +1,1 @@
+continue; // ERR: Cannot use 'continue' outside a loop.

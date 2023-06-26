@@ -1,0 +1,1 @@
+fn f() 123; // ERR: Expect '{' before function body

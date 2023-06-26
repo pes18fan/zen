@@ -1,8 +1,4 @@
-// expect:
-// ERR: name in this scope already exists
-// end expect
-
 {
     let a = "value";
-    let a = "other";
+    let a = "other"; // ERR: name in this scope already exists
 }

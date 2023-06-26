@@ -4,8 +4,8 @@ import "io" // Import the io package from the standard library.
 import "./hello" // Import the hello package from a directory called hello.
 
 // Hello world!
-println "Hello, world!"
-println "Hello, again!"; // Semicolons are optional.
+print "Hello, world!"
+print "Hello, again!"; // Semicolons are optional.
 
 let name = "Sam" // Create a variable!
 let another_name string = "Jamie" // Explicitly type it
@@ -27,17 +27,34 @@ final (
 
 
 // Strings can be subscripted and have convenience methods too.
-println name[0] //=> "S"
-println name.len //=> 3
-println name.upcase() //=> "SAM"
+print name[0] //=> "S"
+print name.len //=> 3
+print name.upcase() //=> "SAM"
 
-println f"{nice} is very nice indeed" // String interpolation!
+print f"{nice} is very nice indeed" // String interpolation!
 
 // Conditionals!
 if false {
-    println "How did this happen!"
+    print "How did this happen!"
 } else if true {
-    println "This is supposed to happen"
+    print "This is supposed to happen"
+}
+
+let a = rand_int(0, 10)
+
+match a {
+    0 => print "a is 0"
+    1 => print "a is 1"
+    2 => print "a is 2"
+    3 => print "a is 3"
+    4 => print "a is 4"
+    5 => print "a is 5"
+    6 => print "a is 6"
+    7 => print "a is 7"
+    8 => print "a is 8"
+    9 => print "a is 9"
+    10 => print "a is 10"
+    _ => print "a is not between 0 and 10"
 }
 
 let hmm = nice == 69 ? "Nice" : "Not nice" // Ternary operator!
@@ -59,8 +76,8 @@ for i < 10 { // While loops are spelled "for" in zen.
 
 // Lists!
 let lst []int = [1, 2, 3, 4, 5]
-println lst[0] //=> 1
-println lst.len //=> 5
+print lst[0] //=> 1
+print lst.len //=> 5
 
 lst.push(6) // Add an element to the end of the list.
 print lst.last() //=> 6
@@ -90,28 +107,28 @@ let people map[string]int = #{
     "Alex": 19,
 }
 
-println people["Sam"] //=> 21
-println people.size //=> 3
+print people["Sam"] //=> 21
+print people.size //=> 3
 
 // You can check if a map contains a key with the `has_key?` method.
 if people.has_key?("Sam") {
-    println "Sam is in the map"
+    print "Sam is in the map"
 }
 
 // You can loop through maps with `for`.
 for name, age in people {
-    println f"{name} is {age} years old"
+    print f"{name} is {age} years old"
 } //=> Sam is 21 years old
   //=> Jamie is 20 years old
   //=> Alex is 19 years old
 
 // Functions!
 fn a_function() {
-    println "This is a function!"
+    print "This is a function!"
 }
 a_function() //=> "This is a function!"
 
-// If the function just returns an expression, simply use the `->` operator.
+// If the function just returns an expression, simply use the `=>` operator.
 fn sum(a, b) -> a + b
 
 // Anonymous functions have no name. Here, we assign it to a variable, so it
@@ -127,7 +144,7 @@ let anon = () -> { print "This is an anonymous function!" }
 // signature and body, and it basically is another parameter passed into
 // the function (implicitly or explicitly, based on what you wish), except
 // for the fact that its a type and not a value.
-fn map<T>(f fun(T) T, l list<T>) list<T> ->
+fn map<T>(f fun(T) T, l list<T>) list<T> =>
     // Pattern matching! `match` is basically a switch statement on steroids.
     // Note that `match` is an expression, not a statement.
     // However, you can use it as a statement too, since its arms may be
@@ -139,7 +156,7 @@ fn map<T>(f fun(T) T, l list<T>) list<T> ->
 
 // Note: You don't need to specify the type of the function arguments and 
 // return types. They are inferred.
-print map((x -> x * 2), [1, 2, 3, 4, 5]) //=> [2, 4, 6, 8, 10]
+print map((x -> x * 2), [1, 2, 3, 4, 5]) //-> [2, 4, 6, 8, 10]
 
 // Functions can return multiple values.
 // Multiple return values are not the same as tuples.
@@ -151,14 +168,14 @@ fn print<T>(x T)
 where 
     T.is_stringable() 
 {
-    println x.to_string()
+    print x.to_string()
 }
 
 print(something_that_is_definetely_not_stringable)
 //! compile error at print(): Where clause evaluated to false
 
 // OOPy stuff!
-class Person {
+final Person = class {
     final (
         name string
         age int
@@ -178,7 +195,7 @@ class Person {
     // All fields and functions are private by default, except
     // for constructors.
     pub fn greet() {
-        println this.create_greeting()
+        print this.create_greeting()
     }
 }
 
@@ -187,7 +204,7 @@ let me = Person("Sam", 21)
 me.greet() //=> "Hello, I'm Sam!"
 
 // You can inherit from other classes.
-class Student is Person {
+final Student = class is Person {
     const school string
 
     construct new(name, age, school) {
@@ -197,8 +214,8 @@ class Student is Person {
 
     // Methods with the same name as the parent class override them.
     pub fn greet() {
-        println super.create_greeting()
-        println f"I go to {this.school}"
+        print super.create_greeting()
+        print f"I go to {this.school}"
     }
 }
 
@@ -210,7 +227,7 @@ class Student is Person {
 
 // Let's check out result first.
 // Define your own error types with the `Error` class.
-class DivideByZeroError is Error {
+final DivideByZeroError = class is Error {
     // This is a getter. It is called when you access the `message` field.
     // The error class defines this `message` getter which is used
     // to provide custom error messages on whatever inherits it.
@@ -229,7 +246,7 @@ fn divide(a, b) ->
 // Use unwrap() to get the value out of an option or result.
 // If the option or result is empty or an error, it will panic with the
 // default error message.
-let answer = divide(10, 2).unwrap() //=> 5
+let answer = divide(10, 2).unwrap() //-> 5
 let error = divide(10, 0).unwrap() 
 //! panic at DivideByZeroError "Cannot divide by zero!"
 
@@ -239,15 +256,15 @@ let expects = divide(10, 0).expect("Can't set b as zero")
 
 // A better idea is to use match to handle the result.
 match divide(10, 2) {
-    ok(x) => println f"10 / 2 = {x}"
-    err(e) => println e
+    ok(x) => print f"10 / 2 = {x}"
+    err(e) => print e
 } //=> 10 / 2 = 5
 
 // Even better, unwrap_or() and unwrap_or_else() let you provide a default
 // value or function to call if the result is an error.
 let answer = divide(10, 0).unwrap_or(0) //=> 0
 let answer = divide(10, 0).unwrap_or_else((e) -> {
-    println e
+    print e
     return 0
 }) //=> "Cannot divide by zero!"
    //=> 0

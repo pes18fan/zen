@@ -1,0 +1,56 @@
+let x = 1;
+// no default clause
+switch x {
+    0 => print "zero!";
+    1 => print "one!";
+}
+// expect: one!
+
+let y = 3;
+switch y {
+    0 => print "zero!";
+    1 => print "one!";
+}
+// expects nothing, since no default clause
+
+let z = 1;
+switch z {
+    0 => print "zero!";
+    1 => print "one!";
+    1 => print "dupe one!";
+    else => print "neither!";
+}
+// expect: one!
+
+let a = 5;
+switch a {} // expects nothing
+
+let b = "apple";
+switch b {
+    "banana" => print "fruit: banana";
+    "apple" => print "fruit: apple";
+    "orange" => print "fruit: orange";
+    else => print "unknown fruit";
+}
+// expect: fruit: apple
+
+// block statements
+// BUGGED: prints '3' instead of 'zero!'. Upon further inspection, it was found
+// that, the value of the global variable `y` has somehow become equal to that 
+// of the local variable 'zero' inside the 0 case below. Seems to occur when
+// local variables are declared after a "unsuccessful" switch statement, i.e.
+// one that does not match any of the cases and has no `else` clause.
+// Investigating at the moment.
+let c = 0;
+switch c {
+    0 => {
+        let zero = "zero!";
+        print zero; // expect: zero!
+    }
+    1 => {
+        print "one!";
+    }
+    else => {
+        print "neither!";
+    }
+}

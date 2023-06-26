@@ -1,7 +1,3 @@
-// expect:
-// ERR: Invalid assignment target.
-// end expect
-
 let a = "a";
 let b = "b";
-a + b = "value";
+a + b = "value"; // ERR: Invalid assignment target.

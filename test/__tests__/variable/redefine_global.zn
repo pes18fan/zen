@@ -1,7 +1,3 @@
-// expect:
-// 2
-// end expect
-
 let a = "1";
 let a = "2";
-print a;
+print a; // expect: 2

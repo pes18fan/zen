@@ -165,6 +165,11 @@ emit_byte :: proc (p: ^Parser, byait: byte) {
     write_chunk(p.compiling_chunk, byait, p.previous.line)
 }
 
+@(private="file")
+emit_opcode :: proc (p: ^Parser, oc: OpCode) {
+    write_chunk(p.compiling_chunk, byte(oc), p.previous.line)
+}
+
 /* Write two bytes to the current chunk. */
 @(private="file")
 emit_bytes :: proc (p: ^Parser, byait1: byte, byait2: byte) {
@@ -172,8 +177,18 @@ emit_bytes :: proc (p: ^Parser, byait1: byte, byait2: byte) {
     emit_byte(p, byait2)
 }
 
+@(private="file")
+emit_opcodes :: proc (p: ^Parser, oc1: OpCode, oc2: OpCode) {
+    emit_opcode(p, oc1)
+    emit_opcode(p, oc2)
+}
+
+emit_pop :: proc (p: ^Parser) {
+    emit_opcode(p, .OP_POP)
+}
+
 emit_loop :: proc (p: ^Parser, loop_start: int) {
-    emit_byte(p, byte(OpCode.OP_LOOP))
+    emit_opcode(p, .OP_LOOP)
 
     offset := len(p.compiling_chunk.code) - loop_start + 2
     if offset > U16_MAX { error(p, "Loop body too large.") }
@@ -188,8 +203,8 @@ Initially writes only placeholder bytes for the jump offset, which
 will be filled in later.
 */
 @(private="file")
-emit_jump :: proc (p: ^Parser, instruction: byte) -> int {
-    emit_byte(p, instruction)
+emit_jump :: proc (p: ^Parser, instruction: OpCode) -> int {
+    emit_opcode(p, instruction)
     emit_byte(p, 0xff)
     emit_byte(p, 0xff)
     return len(p.compiling_chunk.code) - 2
@@ -198,7 +213,7 @@ emit_jump :: proc (p: ^Parser, instruction: byte) -> int {
 /* Write a OP_RETURN to the current chunk. */
 @(private="file")
 emit_return :: proc (p: ^Parser) {
-    emit_byte(p, byte(OpCode.OP_RETURN))
+    emit_opcode(p, .OP_RETURN)
 }
 
 /* 
@@ -298,7 +313,7 @@ end_scope :: proc (p: ^Parser) {
     for p.current_compiler.local_count > 0 &&
         p.current_compiler.locals[p.current_compiler.local_count - 1].depth > 
             p.current_compiler.scope_depth {
-        emit_byte(p, byte(OpCode.OP_POP))
+        emit_pop(p)
         p.current_compiler.local_count -= 1
     }
 }
@@ -312,23 +327,21 @@ get_rule :: proc (type: TokenType) -> ^ParseRule {
 /* Parse a binary expression and emit it to the chunk. */
 @(private="file")
 binary :: proc (p: ^Parser, can_assign: bool) {
-    using OpCode
-
     operator_type := p.previous.type
     rule := get_rule(operator_type)
     parse_precedence(p, Precedence(byte(rule.precedence) + 1))
 
     #partial switch operator_type {
-        case .BANG_EQUAL:    emit_bytes(p, byte(OP_EQUAL), byte(OP_NOT))
-        case .EQUAL_EQUAL:   emit_byte(p, byte(OP_EQUAL))
-        case .GREATER:       emit_byte(p, byte(OP_GREATER))
-        case .GREATER_EQUAL: emit_bytes(p, byte(OP_LESS), byte(OP_NOT))
-        case .LESS:          emit_byte(p, byte(OP_LESS))
-        case .LESS_EQUAL:    emit_bytes(p, byte(OP_GREATER), byte(OP_NOT))
-        case .MINUS:         emit_byte(p, byte(OP_SUBTRACT))
-        case .PLUS:          emit_byte(p, byte(OP_ADD))
-        case .SLASH:         emit_byte(p, byte(OP_DIVIDE))
-        case .STAR:          emit_byte(p, byte(OP_MULTIPLY))
+        case .BANG_EQUAL:    emit_opcodes(p, .OP_EQUAL, .OP_NOT)
+        case .EQUAL_EQUAL:   emit_opcode(p, .OP_EQUAL)
+        case .GREATER:       emit_opcode(p, .OP_GREATER)
+        case .GREATER_EQUAL: emit_opcodes(p, .OP_LESS, .OP_NOT)
+        case .LESS:          emit_opcode(p, .OP_LESS)
+        case .LESS_EQUAL:    emit_opcodes(p, .OP_GREATER, .OP_NOT)
+        case .MINUS:         emit_opcode(p, .OP_SUBTRACT)
+        case .PLUS:          emit_opcode(p, .OP_ADD)
+        case .SLASH:         emit_opcode(p, .OP_DIVIDE)
+        case .STAR:          emit_opcode(p, .OP_MULTIPLY)
         case: return // Unreachable.
     }
 }
@@ -336,12 +349,10 @@ binary :: proc (p: ^Parser, can_assign: bool) {
 /* Parse a literal value and emit it to the chunk. */
 @(private="file")
 literal :: proc (p: ^Parser, can_assign: bool) {
-    using OpCode
-
     #partial switch p.previous.type {
-        case .FALSE: emit_byte(p, byte(OP_FALSE))
-        case .NIL: emit_byte(p, byte(OP_NIL))
-        case .TRUE: emit_byte(p, byte(OP_TRUE))
+        case .FALSE: emit_opcode(p, .OP_FALSE)
+        case .NIL:   emit_opcode(p, .OP_NIL)
+        case .TRUE:  emit_opcode(p, .OP_TRUE)
         case: return // Unreachable.
     }
 }
@@ -369,11 +380,11 @@ number :: proc (p: ^Parser, can_assign: bool) {
 }
 
 or_ :: proc (p: ^Parser, can_assign: bool) {
-    else_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
-    end_jump := emit_jump(p, byte(OpCode.OP_JUMP))
+    else_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+    end_jump := emit_jump(p, .OP_JUMP)
 
     patch_jump(p, else_jump)
-    emit_byte(p, byte(OpCode.OP_POP))
+    emit_pop(p)
 
     parse_precedence(p, .OR)
     patch_jump(p, end_jump)
@@ -400,7 +411,7 @@ named_variable :: proc (p: ^Parser, name: Token,
     possible_local := resolve_local(p, &name)
 
     if possible_local != -1 {
-        arg = u8(possible_local)
+        arg = byte(possible_local)
         get_op = byte(OpCode.OP_GET_LOCAL)
         set_op = byte(OpCode.OP_SET_LOCAL)
     } else {
@@ -452,7 +463,6 @@ variable :: proc (p: ^Parser, can_assign: bool) {
 /* Parse a unary expression. */
 @(private="file")
 unary :: proc (p: ^Parser, can_assign: bool) {
-    using OpCode
     operator_type := p.previous.type
 
     // Compile the operand.
@@ -460,8 +470,8 @@ unary :: proc (p: ^Parser, can_assign: bool) {
 
     // Emit the operator instruction.
     #partial switch operator_type {
-        case .NOT: emit_byte(p, byte(OP_NOT))
-        case .MINUS: emit_byte(p, byte(OP_NEGATE))
+        case .NOT:   emit_opcode(p, .OP_NOT)
+        case .MINUS: emit_opcode(p, .OP_NEGATE)
         case: return // Unreachable.
     }
 }
@@ -650,7 +660,7 @@ mark_initialized :: proc (p: ^Parser) {
 
 /* Define a local or global name binding. */
 @(private="file")
-define_variable :: proc (p: ^Parser, global: u8) {
+define_variable :: proc (p: ^Parser, global: byte) {
     if p.current_compiler.scope_depth > 0 { 
         mark_initialized(p)
         return 
@@ -660,9 +670,9 @@ define_variable :: proc (p: ^Parser, global: u8) {
 }
 
 and_ :: proc (p: ^Parser, can_assign: bool) {
-    end_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
+    end_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
 
-    emit_byte(p, byte(OpCode.OP_POP))
+    emit_pop(p)
     parse_precedence(p, .AND)
 
     patch_jump(p, end_jump)
@@ -688,22 +698,27 @@ block :: proc (p: ^Parser) {
 @(private="file")
 let_declaration :: proc (p: ^Parser) {
     final := p.previous.type == .FINAL
-    global := parse_variable(p, 
-        final ? "Expect final variable name." : "Expect variable name.", final)
 
-    if match(p, .EQUAL) {
-        expression(p)
-    } else {
-        if final {
-            error(p, "Final variables must be initialized.")
+    for {
+        global := parse_variable(p, 
+            final ? "Expect final variable name." : "Expect variable name.", final)
+
+        if match(p, .EQUAL) {
+            expression(p)
         } else {
-            emit_byte(p, byte(OpCode.OP_NIL))
+            if final {
+                error(p, "Final variables must be initialized.")
+            } else {
+                emit_byte(p, byte(OpCode.OP_NIL))
+            }
         }
+
+        define_variable(p, global)
+
+        if !match(p, .COMMA) { break }
     }
 
     consume(p, .SEMI, "Expect ';' after variable declaration.")
-
-    define_variable(p, global)
 }
 
 /* Parse an expression statement. */
@@ -711,7 +726,7 @@ let_declaration :: proc (p: ^Parser) {
 expression_statement :: proc (p: ^Parser) {
     expression(p)
     consume(p, .SEMI, "Expect ';' after expression.")
-    emit_byte(p, byte(OpCode.OP_POP))
+    emit_pop(p)
 }
 
 /* Parse an if statement. */
@@ -720,17 +735,17 @@ if_statement :: proc (p: ^Parser) {
     expression(p)
     consume(p, .LSQUIRLY, "Expect '{' after if condition.")
 
-    then_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
-    emit_byte(p, byte(OpCode.OP_POP))
+    then_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+    emit_pop(p)
 
     begin_scope(p)
     block(p)
     end_scope(p)
 
-    else_jump := emit_jump(p, byte(OpCode.OP_JUMP))
+    else_jump := emit_jump(p, .OP_JUMP)
 
     patch_jump(p, then_jump)
-    emit_byte(p, byte(OpCode.OP_POP))
+    emit_pop(p)
 
     if match(p, .ELSE) {
         consume(p, .LSQUIRLY, "Expect '{' after else.")
@@ -792,7 +807,7 @@ break_statement :: proc (p: ^Parser) {
     consume(p, .SEMI, "Expect ';' after 'break'.")
 
     loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
-    append(&loop.breaks, emit_jump(p, byte(OpCode.OP_JUMP)))
+    append(&loop.breaks, emit_jump(p, .OP_JUMP))
 
     // Discard correct number of values from the stack.
     for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
@@ -825,6 +840,53 @@ continue_statement :: proc (p: ^Parser) {
     emit_loop(p, loop.start)
 }
 
+/*
+Parse a switch statement.
+Still a work in progress.
+*/
+@(private="file")
+switch_statement :: proc (p: ^Parser) {
+    case_jumps_to_end: [dynamic]int
+    defer delete(case_jumps_to_end)
+    expression(p)
+    consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
+
+    for i := 0; !match(p, .RSQUIRLY); i += 1 {
+        if i >= U8_COUNT {
+            error(p, "Too many cases in switch statement.")
+            return
+        }
+        assert(i < U8_COUNT)
+
+        if match(p, .ELSE) {
+            emit_pop(p)
+            consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
+            statement(p)
+            append(&case_jumps_to_end, emit_jump(p, .OP_JUMP))
+            consume(p, .RSQUIRLY, "'else' must be the last case.")
+            break
+        }
+
+        emit_opcode(p, .OP_DUP)
+        expression(p)
+        emit_opcode(p, .OP_EQUAL)
+        case_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+        emit_opcode(p, .OP_POP_IF_TRUE)
+        
+        consume(p, .FAT_ARROW, "Expect '=>' after case.")
+        statement(p)
+        append(&case_jumps_to_end, emit_jump(p, .OP_JUMP))
+    
+        patch_jump(p, case_jump)
+        emit_pop(p)
+    }
+
+    for jump in case_jumps_to_end {
+        patch_jump(p, jump)
+    }
+    emit_pop(p)
+}
+
 /* Parse a while statment. */
 @(private="file")
 while_statement :: proc (p: ^Parser) {
@@ -834,8 +896,8 @@ while_statement :: proc (p: ^Parser) {
     expression(p)
     consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
 
-    exit_jump := emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
-    emit_byte(p, byte(OpCode.OP_POP))
+    exit_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+    emit_pop(p)
 
     begin_scope(p)
     block(p)
@@ -844,7 +906,7 @@ while_statement :: proc (p: ^Parser) {
     emit_loop(p, loop_start)
 
     patch_jump(p, exit_jump)
-    emit_byte(p, byte(OpCode.OP_POP))
+    emit_pop(p)
     end_loop(p)
 }
 
@@ -866,18 +928,18 @@ for_statement :: proc (p: ^Parser) {
         consume(p, .SEMI, "Expect ';' after loop condition.")
 
         // Jump out of the loop if the condition is false.
-        exit_jump = emit_jump(p, byte(OpCode.OP_JUMP_IF_FALSE))
-        emit_byte(p, byte(OpCode.OP_POP)) // Condition.
+        exit_jump = emit_jump(p, .OP_JUMP_IF_FALSE)
+        emit_pop(p) // Condition.
     }
 
     // Jump over the increment, run the body, and jump back to the
     // increment, then go to the next iteration.
     if !match(p, .LSQUIRLY) {
-        body_jump := emit_jump(p, byte(OpCode.OP_JUMP))
+        body_jump := emit_jump(p, .OP_JUMP)
         increment_start := len(p.compiling_chunk.code)
 
         expression(p)
-        emit_byte(p, byte(OpCode.OP_POP))
+        emit_pop(p)
         consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
 
         emit_loop(p, loop_start)
@@ -892,7 +954,7 @@ for_statement :: proc (p: ^Parser) {
 
     if exit_jump != -1 {
         patch_jump(p, exit_jump)
-        emit_byte(p, byte(OpCode.OP_POP)) // Condition.
+        emit_pop(p) // Condition.
     }
 
     end_loop(p)
@@ -913,7 +975,7 @@ synchronize :: proc (p: ^Parser) {
         }
 
         #partial switch p.current.type {
-            case .FN, .FOR, .IF, .LET, .PRINT, .PUB, .RETURN, .WHILE:
+            case .FN, .FOR, .IF, .LET, .PRINT, .PUB, .SWITCH, .RETURN, .WHILE:
                 return
             case: // Do nothing.
         }
@@ -939,24 +1001,19 @@ declaration :: proc (p: ^Parser) {
 /* Parse a statement. */
 @(private="file")
 statement :: proc (p: ^Parser) {
-    if match(p, .BREAK) {
-        break_statement(p)
-    } else if match(p, .CONTINUE) {
-        continue_statement(p)
-    } else if match(p, .PRINT) {
-        print_statement(p)
-    } else if match(p, .IF) {
-        if_statement(p)
-    } else if match(p, .WHILE) {
-        while_statement(p)
-    } else if match(p, .FOR) {
-        for_statement(p)
-    } else if match(p, .LSQUIRLY) {
-        begin_scope(p)
-        block(p)
-        end_scope(p)
-    } else {
-        expression_statement(p)
+    switch {
+        case match(p, .BREAK): break_statement(p)
+        case match(p, .CONTINUE): continue_statement(p)
+        case match(p, .FOR): for_statement(p)
+        case match(p, .LSQUIRLY): 
+            begin_scope(p)
+            block(p)
+            end_scope(p)
+        case match(p, .IF): if_statement(p)
+        case match(p, .PRINT): print_statement(p)
+        case match(p, .SWITCH): switch_statement(p)
+        case match(p, .WHILE): while_statement(p)
+        case: expression_statement(p)
     }
 }
 

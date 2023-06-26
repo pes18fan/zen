@@ -1,5 +1,1 @@
-// expect:
-// ERR: Expect variable name
-// end expect
-
-let nil = "value";
+let nil = "value"; // ERR: Expect variable name

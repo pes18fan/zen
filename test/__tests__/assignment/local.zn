@@ -1,19 +1,11 @@
-// expect:
-// before
-// before
-// after
-// arg
-// arg
-// end expect
-
 {
     let a = "before";
-    print a;
-    print a;
+    print a; // expect: before
+    print a; // expect: before
 
     a = "after";
-    print a;
+    print a; // expect: after
 
-    print a = "arg";
-    print a;
+    print a = "arg"; // expect: arg
+    print a; // expect: arg
 }

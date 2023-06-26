@@ -1,0 +1,3 @@
+fn f(a, b) {}
+
+fn(1); // ERR: Expected 2 arguments but got 1.

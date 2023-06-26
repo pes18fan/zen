@@ -11,8 +11,8 @@ TokenType :: enum {
     STAR, NEWLINE,
 
     // one or two character tokens
-    ARROW, BANG_EQUAL, EQUAL, EQUAL_EQUAL, GREATER, 
-    GREATER_EQUAL, LESS, LESS_EQUAL,
+    ARROW, BANG_EQUAL, EQUAL, EQUAL_EQUAL, FAT_ARROW, 
+    GREATER, GREATER_EQUAL, LESS, LESS_EQUAL,
 
     // literals
     IDENT, STRING, NUMBER,
@@ -20,7 +20,7 @@ TokenType :: enum {
     // keywords
     AND, BREAK, CONTINUE, ELSE, FALSE, FINAL, FOR, FN,
     IF, IMPORT, IN, LET, NIL, NOT, OR, PRINT, PUB,
-    RETURN, TRUE, WHILE,
+    RETURN, SWITCH, TRUE, WHILE,
 
     ILLEGAL, EOF,
 }
@@ -267,6 +267,7 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
             }
         }
         case 'r': return check_keyword(l, 1, 5, "eturn", .RETURN)
+        case 's': return check_keyword(l, 1, 5, "witch", .SWITCH)
         case 't': return check_keyword(l, 1, 3, "rue", .TRUE)
         case 'w': return check_keyword(l, 1, 4, "hile", .WHILE)
     }
@@ -357,6 +358,9 @@ lex_token :: proc (l: ^Lexer) -> Token {
                 return make_token(l, .BANG_EQUAL)
             }
         case '=':
+            if match(l, '>') {
+                return make_token(l, .FAT_ARROW)
+            }
             return make_token(l,
                 match(l, '=') ? .EQUAL_EQUAL : .EQUAL)
         case '<':

@@ -1,6 +1,2 @@
-// expect:
-// ok
-// end expect
-
 final a = "ok";
-print a;
+print a; // expect: ok

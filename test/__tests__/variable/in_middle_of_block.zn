@@ -1,17 +1,10 @@
-// expect:
-// a
-// a b
-// a c
-// a b d
-// end expect
-
 {
     let a = "a";
-    print a;
+    print a; // expect: a
     let b = a + " b";
-    print b;
+    print b; // expect: a b
     let c = a + " c";
-    print c;
+    print c; // expect: a c
     let d = b + " d";
-    print d;
+    print d; // expect: a b d
 }

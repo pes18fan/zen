@@ -1,10 +1,6 @@
-// expect:
-// outer
-// end expect
-
 {
     let a = "outer";
     {
-        print a;
+        print a; // expect: outer
     }
 }

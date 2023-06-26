@@ -1,10 +1,6 @@
-// expect:
-// of course
-// end expect
-
 if false {
     print "How did this happen";
 } else {
-    print "of course";
+    print "of course"; // expect: of course
 }
 

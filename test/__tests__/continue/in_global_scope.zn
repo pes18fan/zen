@@ -1,5 +1,0 @@
-// expect:
-// ERR: Cannot use 'continue' outside a loop
-// end expect
-
-continue;

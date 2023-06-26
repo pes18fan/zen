@@ -1,9 +1,5 @@
-// expect:
-// ok
-// end expect
-
 if false {
     print not_defined;
 }
 
-print "ok";
+print "ok"; // expect: ok

@@ -74,7 +74,6 @@ end
 def read_expected_output(path)
   expected_output = ""
   expected_error = ""
-  read_output = false
   wants_error = false
   is_draft = false
 
@@ -83,18 +82,20 @@ def read_expected_output(path)
       if line.strip == "// DRAFT"
         is_draft = true
         break
-      elsif line.strip == "// expect:"
-        read_output = true
-        next
-      elsif read_output && line.strip == "// end expect"
-        read_output = false
-        break
-      elsif read_output && line.start_with?("// ERR: ")
-        wants_error = true
-        expected_error += line.sub("// ERR: ", "")
-      elsif read_output && line.start_with?("// ")
-        expected_output += line.sub("// ", "")
       end
+
+      extracted_out = line.strip.scan(/\/\/ expect: (.*)/).flatten.first || ""
+      extracted_error = line.strip.scan(/\/\/ ERR: (.*)/).flatten.first || ""
+
+      extracted_out += "\n" unless extracted_out.empty?
+      extracted_error += "\n" unless extracted_error.empty?
+
+      if !extracted_error.empty? && !wants_error
+        wants_error = true
+      end
+
+      expected_output += extracted_out
+      expected_error += extracted_error
     end
   end
 

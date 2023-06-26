@@ -171,6 +171,12 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
             case .OP_TRUE:     vm_push(v, bool_val(true))
             case .OP_FALSE:    vm_push(v, bool_val(false))
             case .OP_POP:      vm_pop(v)
+            case .OP_POP_IF_TRUE: {
+                if !is_falsey(vm_peek(v, 0)) {
+                    vm_pop(v)
+                }
+            }
+            case .OP_DUP:      vm_push(v, vm_peek(v, 0))
             case .OP_GET_LOCAL:
                 slot := read_byte(v)
                 vm_push(v, v.stack[slot])
@@ -209,7 +215,8 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
                 b := vm_pop(v)
                 a := vm_pop(v)
                 if is_string(a) && is_string(b) {
-                    concatenate(v)
+                    concatenate(v,
+                        as_string(a), as_string(b))
                 } else if is_number(a) && is_number(b) {
                     b := as_number(b)
                     a := as_number(a)
@@ -297,10 +304,7 @@ is_falsey :: proc (value: Value) -> bool {
 }
 
 /* Concatenate two strings. */
-concatenate :: proc (vm: ^VM) {
-    b := as_string(vm_pop(vm))
-    a := as_string(vm_pop(vm))
-
+concatenate :: proc (vm: ^VM, a: ^ObjString, b: ^ObjString) {
     length := len(a.chars) + len(b.chars)
     chars := make([]byte, length)
     i := 0

@@ -1,14 +1,9 @@
-// expect:
-// first
-// second
-// end expect
-
 {
     let a = "first";
-    print a;
+    print a; // expect: first
 }
 
 {
     let a = "second";
-    print a;
+    print a; // expect: second
 }

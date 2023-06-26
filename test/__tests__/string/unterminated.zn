@@ -1,5 +1,1 @@
-// expect:
-// ERR: Unterminated string
-// end expect
-
-"this string has no closing quote
+"this string has no closing quote // ERR: Unterminated string

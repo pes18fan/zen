@@ -1,5 +1,1 @@
-// expect:
-// ERR: Undefined variable
-// end expect
-
-unknown = "what";
+unknown = "what"; // ERR: Undefined variable
