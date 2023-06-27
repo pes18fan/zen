@@ -842,11 +842,13 @@ continue_statement :: proc (p: ^Parser) {
 
 /*
 Parse a switch statement.
-Still a work in progress.
+I plan to make these into expressions, but for now they're statements.
 */
 @(private="file")
 switch_statement :: proc (p: ^Parser) {
     case_jumps_to_end: [dynamic]int
+    has_else_clause := false
+
     defer delete(case_jumps_to_end)
     expression(p)
     consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
@@ -859,7 +861,9 @@ switch_statement :: proc (p: ^Parser) {
         assert(i < U8_COUNT)
 
         if match(p, .ELSE) {
-            emit_pop(p)
+            has_else_clause = true
+            emit_pop(p) // Pop the switch value.
+
             consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
             statement(p)
             append(&case_jumps_to_end, emit_jump(p, .OP_JUMP))
@@ -871,8 +875,12 @@ switch_statement :: proc (p: ^Parser) {
         expression(p)
         emit_opcode(p, .OP_EQUAL)
         case_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
-        emit_opcode(p, .OP_POP_IF_TRUE)
         
+        // If a case matches, pop out both the residual boolean comparison
+        // and the switch value. We can do this since the switch statement
+        // is exhaustive.
+        emit_pop(p)
+        emit_pop(p)
         consume(p, .FAT_ARROW, "Expect '=>' after case.")
         statement(p)
         append(&case_jumps_to_end, emit_jump(p, .OP_JUMP))
@@ -881,10 +889,14 @@ switch_statement :: proc (p: ^Parser) {
         emit_pop(p)
     }
 
+    if !has_else_clause {
+        error(p, "Switch statement must have an 'else' clause.")
+        return
+    }
+
     for jump in case_jumps_to_end {
         patch_jump(p, jump)
     }
-    emit_pop(p)
 }
 
 /* Parse a while statment. */

@@ -13,7 +13,6 @@ OpCode :: enum {
     OP_TRUE,
     OP_FALSE,
     OP_POP,
-    OP_POP_IF_TRUE,
     OP_DUP,
     OP_GET_LOCAL,
     OP_SET_LOCAL,

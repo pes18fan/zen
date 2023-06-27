@@ -171,11 +171,6 @@ run :: proc (v: ^VM) -> InterpretResult #no_bounds_check {
             case .OP_TRUE:     vm_push(v, bool_val(true))
             case .OP_FALSE:    vm_push(v, bool_val(false))
             case .OP_POP:      vm_pop(v)
-            case .OP_POP_IF_TRUE: {
-                if !is_falsey(vm_peek(v, 0)) {
-                    vm_pop(v)
-                }
-            }
             case .OP_DUP:      vm_push(v, vm_peek(v, 0))
             case .OP_GET_LOCAL:
                 slot := read_byte(v)
