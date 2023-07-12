@@ -127,7 +127,7 @@ table_add_all :: proc (from: ^Table, to: ^Table) {
 
 table_find_string :: proc (table: ^Table, str: string, 
     hash: u32) -> ^ObjString {
-    if table.count == 0 do return nil
+    if table.count == 0 { return nil }
 
     index := hash % u32(table.capacity)
     for {
@@ -150,6 +150,7 @@ grow_capacity :: proc (capacity: int) -> int {
     return capacity < 8 ? 8 : capacity * 2
 }
 
+/* Print out a string representation of the table. For debug purposes. */
 table_stringify :: proc (table: ^Table) {
     for i in 0..<table.capacity {
         entry := &table.entries[i]

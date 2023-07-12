@@ -4,7 +4,6 @@ import "core:fmt"
 import "core:mem"
 import "core:os"
 import "core:strings"
-import "core:time"
 
 /* Fire up a REPL. */
 @(private="file")
@@ -41,7 +40,7 @@ repl :: proc (vm: ^VM) -> int {
 read_file :: proc (path: string) -> (string, bool) {
     data, ok := os.read_entire_file_from_filename(path)
     if !ok {
-        fmt.printf("Could not open file \"%s\".", path)
+        fmt.printf("Could not open file \"%s\". Does it exist?", path)
         return "", false
     }
     

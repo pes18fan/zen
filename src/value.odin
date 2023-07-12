@@ -25,28 +25,28 @@ type_of_value :: proc (value: Value) -> string {
     }
 }
 
-is_bool :: proc (value: Value) -> bool {
+is_bool :: #force_inline proc (value: Value) -> bool {
     _, ok := value.(bool)
     return ok
 }
-is_nil :: proc (value: Value) -> bool { return value == nil }
-is_number :: proc (value: Value) -> bool {
+is_nil :: #force_inline proc (value: Value) -> bool { return value == nil }
+is_number :: #force_inline proc (value: Value) -> bool {
     _, ok := value.(f64)
     return ok
 }
-is_obj :: proc (value: Value) -> bool {
+is_obj :: #force_inline proc (value: Value) -> bool {
     _, ok := value.(^Obj)
     return ok
 }
 
-as_obj :: proc (value: Value) -> ^Obj { return value.(^Obj) }
-as_bool :: proc (value: Value) -> bool { return value.(bool) }
-as_number :: proc (value: Value) -> f64 { return value.(f64) }
+as_obj :: #force_inline proc (value: Value) -> ^Obj { return value.(^Obj) }
+as_bool :: #force_inline proc (value: Value) -> bool { return value.(bool) }
+as_number :: #force_inline proc (value: Value) -> f64 { return value.(f64) }
 
-bool_val :: proc (value: bool) -> Value { return Value(value) }
-nil_val :: proc () -> Value { return Value(nil) }
-number_val :: proc (value: f64) -> Value { return Value(value) }
-obj_val :: proc (value: ^Obj) -> Value { return Value(value) }
+bool_val :: #force_inline proc (value: bool) -> Value { return Value(value) }
+nil_val :: #force_inline proc () -> Value { return Value(nil) }
+number_val :: #force_inline proc (value: f64) -> Value { return Value(value) }
+obj_val :: #force_inline proc (value: ^Obj) -> Value { return Value(value) }
 
 /* 
 A wrapper around a dynamic array that works as a constant pool for values. 

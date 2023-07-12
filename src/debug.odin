@@ -41,7 +41,7 @@ disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
         get_line(c.lines, offset) == get_line(c.lines, offset - 1) {
         fmt.eprintf("   | ")
     } else {
-        fmt.eprintf("%4d ", get_line(c.lines, offset))
+        fmt.eprintf("   %d ", get_line(c.lines, offset))
     }
 
     instruction := c.code[offset]
@@ -94,6 +94,8 @@ disassemble_instruction :: proc (c: ^Chunk, offset: int) -> int {
             return jump_instruction("OP_JUMP_IF_FALSE", 1, c, offset)
         case .OP_LOOP:
             return jump_instruction("OP_LOOP", -1, c, offset) 
+        case .OP_CALL:
+            return byte_instruction("OP_CALL", c, offset)
         case .OP_RETURN:
             return simple_instruction("OP_RETURN", offset)
         case:

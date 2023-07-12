@@ -1,3 +1,3 @@
-fn f(a, b) {}
+func f(a, b) {}
 
-fn(1); // ERR: Expected 2 arguments but got 1.
+f(1); // ERR: Expected 2 arguments but got 1.

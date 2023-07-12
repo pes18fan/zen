@@ -18,11 +18,11 @@ TokenType :: enum {
     IDENT, STRING, NUMBER,
 
     // keywords
-    AND, BREAK, CONTINUE, ELSE, FALSE, FINAL, FOR, FN,
+    AND, BREAK, CONTINUE, ELSE, FALSE, FINAL, FOR, FUNC,
     IF, IMPORT, IN, LET, NIL, NOT, OR, PRINT, PUB,
     RETURN, SWITCH, TRUE, WHILE,
 
-    ILLEGAL, EOF,
+    EOF,
 }
 
 /* A token in the source. */
@@ -61,12 +61,11 @@ Reports a syntax error. Assumes that `token` is an illegal token since only
 illegal tokens are returned on syntax errors. 
 */
 @(private="file")
-syntax_error :: proc (l: ^Lexer, token: Token) -> Token {
-    fmt.eprintf("\e[31msyntax error:\e[0m ")
-    fmt.eprintf("%s\n", token.lexeme)
-    fmt.eprintf("  on [line %d]\n", token.line)
+syntax_error :: proc (l: ^Lexer, message: string) {
+    fmt.eprint(COL_RED, "syntax error:", RESET)
+    fmt.eprintf("%s\n", message)
+    fmt.eprintf("  on [line %d]\n", l.line)
     l.had_error = true
-    return token
 }
 
 /* Returns true if `c` is alphanumeric, or a question mark. */
@@ -141,16 +140,6 @@ make_token :: proc (l: ^Lexer, type: TokenType) -> Token {
     return Token {
         type = type,
         lexeme = l.source[l.start:l.current],
-        line = l.line,
-    }
-}
-
-/* Return an error/"illegal" token. */
-@(private="file")
-illegal :: proc (l: ^Lexer, message: string) -> Token {
-    return Token {
-        type = TokenType.ILLEGAL,
-        lexeme = message,
         line = l.line,
     }
 }
@@ -235,16 +224,16 @@ ident_type :: proc (l: ^Lexer) -> TokenType {
                     case 'a': return check_keyword(l, 2, 3, "lse", .FALSE)
                     case 'i': return check_keyword(l, 2, 3, "nal", .FINAL)
                     case 'o': return check_keyword(l, 2, 1, "r", .FOR)
-                    case 'n': return .FN
+                    case 'u': return check_keyword(l, 2, 2, "nc", .FUNC)
                 }
             }
         }
         case 'i': {
             if l.current - l.start > 1 {
                 switch utf8.rune_at(l.source, l.start + 1) {
-                    case 'f': return .IF
+                    case 'f': return check_keyword(l, 2, 0, "", .IF)
                     case 'm': return check_keyword(l, 2, 4, "port", .IMPORT)
-                    case 'n': return .IN
+                    case 'n': return check_keyword(l, 2, 0, "", .IN)
                 }
             }
         }
@@ -308,7 +297,7 @@ tok_number :: proc (l: ^Lexer) -> Token {
 
 /* Consume a string. */
 @(private="file")
-tok_string :: proc (l: ^Lexer) -> Token {
+tok_string :: proc (l: ^Lexer) -> Maybe(Token) {
     // Consume characters until the closing quote.
     for peek(l) != '"' && !is_at_end(l) {
         if peek(l) == '\n' {
@@ -318,7 +307,8 @@ tok_string :: proc (l: ^Lexer) -> Token {
     }
 
     if is_at_end(l) {
-        return syntax_error(l, illegal(l, "Unterminated string."))
+        syntax_error(l, "Unterminated string.")
+        return nil
     }
 
     // Consume the closing quote.
@@ -328,7 +318,7 @@ tok_string :: proc (l: ^Lexer) -> Token {
 
 /* Lex a token. */
 @(private="file")
-lex_token :: proc (l: ^Lexer) -> Token {
+lex_token :: proc (l: ^Lexer) -> Maybe(Token) {
     skip_whitespace(l)
     l.start = l.current
 
@@ -373,22 +363,23 @@ lex_token :: proc (l: ^Lexer) -> Token {
             return tok_string(l)
     }
 
-    return syntax_error(l, 
-        illegal(l, fmt.tprintf("Unexpected character '%c'.", previous(l))))
+    syntax_error(l, 
+        fmt.tprintf("Unexpected character '%c'.", previous(l)))
+    return nil
 }
 
 /*
 Lex the tokens. If an ILLEGAL token is found, it is returned as the error.
 */
-lex :: proc (l: ^Lexer) -> (tokens: []Token, err: ErrorToken) {
+lex :: proc (l: ^Lexer) -> (tokens: []Token, success: bool) {
     toks := make([dynamic]Token, 0, 0)
 
     for {
-        token := lex_token(l)
+        token, ok := lex_token(l).?
 
-        if l.had_error {
+        if !ok {
             delete(toks)
-            return nil, token
+            return nil, false
         }
 
         append(&toks, token)
@@ -396,5 +387,5 @@ lex :: proc (l: ^Lexer) -> (tokens: []Token, err: ErrorToken) {
         if token.type == TokenType.EOF { break }
     }
 
-    return toks[:], nil
+    return toks[:], true
 }

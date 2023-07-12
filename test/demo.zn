@@ -57,7 +57,7 @@ match a {
     _ => print "a is not between 0 and 10"
 }
 
-let hmm = nice == 69 ? "Nice" : "Not nice" // Ternary operator!
+let hmm = "Nice" if nice == 69 else "Not nice" // Ternary if-else
 
 // Loops.
 // All loops are for loops.
@@ -123,13 +123,13 @@ for name, age in people {
   //=> Alex is 19 years old
 
 // Functions!
-fn a_function() {
+func a_function() {
     print "This is a function!"
 }
 a_function() //=> "This is a function!"
 
 // If the function just returns an expression, simply use the `=>` operator.
-fn sum(a, b) -> a + b
+func sum(a, b) -> a + b
 
 // Anonymous functions have no name. Here, we assign it to a variable, so it
 // isn't really anonymous anymore.
@@ -144,7 +144,7 @@ let anon = () -> { print "This is an anonymous function!" }
 // signature and body, and it basically is another parameter passed into
 // the function (implicitly or explicitly, based on what you wish), except
 // for the fact that its a type and not a value.
-fn map<T>(f fun(T) T, l list<T>) list<T> =>
+func map<T>(f fun(T) T, l list<T>) list<T> =>
     // Pattern matching! `match` is basically a switch statement on steroids.
     // Note that `match` is an expression, not a statement.
     // However, you can use it as a statement too, since its arms may be
@@ -160,11 +160,11 @@ print map((x -> x * 2), [1, 2, 3, 4, 5]) //-> [2, 4, 6, 8, 10]
 
 // Functions can return multiple values.
 // Multiple return values are not the same as tuples.
-fn swap(a, b) -> (b, a)
+func swap(a, b) -> (b, a)
 
 // Where clauses also exist.
 // They are used to specify constraints on generic types.
-fn print<T>(x T)
+func print<T>(x T)
 where 
     T.is_stringable() 
 {
@@ -188,13 +188,13 @@ final Person = class {
     }
 
     // All methods implicitly take `this` as the first argument.
-    fn create_greeting() {
+    func create_greeting() {
         return f"Hello, I'm {this.name}!"
     }
 
     // All fields and functions are private by default, except
     // for constructors.
-    pub fn greet() {
+    pub func greet() {
         print this.create_greeting()
     }
 }
@@ -213,7 +213,7 @@ final Student = class is Person {
     }
 
     // Methods with the same name as the parent class override them.
-    pub fn greet() {
+    pub func greet() {
         print super.create_greeting()
         print f"I go to {this.school}"
     }
@@ -237,7 +237,7 @@ final DivideByZeroError = class is Error {
 // This function returns result<float, DivideByZeroError>.
 // A result type is either a value enclosed in ok() or an value associated
 // with an error enclosed in err().
-fn divide(a, b) ->
+func divide(a, b) ->
     match b {
         0 => err(DivideByZeroError())
         _ => ok(a / b)
@@ -273,7 +273,7 @@ let answer = divide(10, 0).unwrap_or_else((e) -> {
 // An option type is either a value enclosed in `some()` or a nonexistent
 // value, represented as the variant `none`.
 // Here's an example, using a function to get the first element of a list.
-fn get_first(l) ->
+func get_first(l) ->
     match l {
         // when the list is empty, return none
         [] => none

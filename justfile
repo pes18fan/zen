@@ -1,8 +1,9 @@
 oc := "odin"
-target_dbg := "bin/dbg/zen"
+target_dbg := "bin/dbg/dzen"
 target_rel := "bin/rel/zen"
 
 alias r := rel
+alias t := test_all
 
 _default: dbg
 
@@ -25,6 +26,21 @@ dbg *args="": _predbg
 # Create a release build optimized for speed.
 rel *args="": _prerel
     {{ oc }} build src/ -out:{{ target_rel }} -o:speed {{ args }}
+
+# Benchmark the release build against another command.
+bench command="" against="":
+    #!/usr/bin/env bash
+    if ! command -v hyperfine >/dev/null 2>&1; then
+        echo "hyperfine needed to run the benchmarks!"
+        exit 1
+    fi
+    hyperfine -N --warmup 3 --min-runs 5 --export-markdown ./etc/bench.md \
+        'bin/rel/zen {{ command }}' \
+        '{{ against }}'
+
+# Clean build artifacts.
+clean:
+    rm -rf bin/**
 
 # Generate documentation in the doc/ folder.
 doc: _predoc

@@ -47,7 +47,7 @@ fn test() {
     defer delete(got)
 
     want := []Token{
-        Token{type = .FN, lexeme = "fn", line = 2},
+        Token{type = .FUNC, lexeme = "func", line = 2},
         Token{type = .IDENT, lexeme = "foo", line = 2},
         Token{type = .LPAREN, lexeme = "(", line = 2},
         Token{type = .RPAREN, lexeme = ")", line = 2},
@@ -62,7 +62,7 @@ fn test() {
         Token{type = .RSQUIRLY, lexeme = "}", line = 5},
         Token{type = .RSQUIRLY, lexeme = "}", line = 6},
         Token{type = .PUB, lexeme = "pub", line = 8},
-        Token{type = .FN, lexeme = "fn", line = 8},
+        Token{type = .FUNC, lexeme = "func", line = 8},
         Token{type = .IDENT, lexeme = "add", line = 8},
         Token{type = .LPAREN, lexeme = "(", line = 8},
         Token{type = .IDENT, lexeme = "a", line = 8},
@@ -74,7 +74,7 @@ fn test() {
         Token{type = .PLUS, lexeme = "+", line = 8},
         Token{type = .IDENT, lexeme = "b", line = 8},
         Token{type = .SEMI, lexeme = ";", line = 8},
-        Token{type = .FN, lexeme = "fn", line = 10},
+        Token{type = .FUNC, lexeme = "func", line = 10},
         Token{type = .IDENT, lexeme = "test", line = 10},
         Token{type = .LPAREN, lexeme = "(", line = 10},
         Token{type = .RPAREN, lexeme = ")", line = 10},

@@ -1,6 +1,6 @@
 // DRAFT
 let Foo = class {
-    pub fn init() {
+    pub func init() {
         this = "value";
     }
 }

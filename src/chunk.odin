@@ -32,6 +32,7 @@ OpCode :: enum {
     OP_JUMP,
     OP_JUMP_IF_FALSE,
     OP_LOOP,
+    OP_CALL,
     OP_RETURN,
 }
 
@@ -85,7 +86,8 @@ get_line :: proc (lines: [dynamic]int, offset: int) -> int {
         }
     }
 
-    fmt.eprintln("Reached unreachable code: Invalid line number offset")
+    fmt.eprint(COL_RED, "bug: ", RESET)
+    fmt.eprintf("Failed to find line number for offset %d\n", offset)
     unreachable()
 }
 

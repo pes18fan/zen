@@ -1,6 +1,6 @@
 final Sequence = class {
     // Check if all the elements in the sequence satisfy the predicate.
-    pub fn all(f) {
+    pub func all(f) {
         if this.empty? { return false; }
         for item in this {
             if not f(item) { return false; }
@@ -9,7 +9,7 @@ final Sequence = class {
     }
 
     // Check if any of the elements in the sequence satisfy the predicate.
-    pub fn any(f) {
+    pub func any(f) {
         if this.empty? { return false; }
         for item in this {
             if f(item) { return true; }
@@ -18,7 +18,7 @@ final Sequence = class {
     }
     
     // Check if the sequence has the given element.
-    pub fn has?(elem) {
+    pub func has?(elem) {
         for item in this {
             if item == elem { return true; }
         }
@@ -26,21 +26,21 @@ final Sequence = class {
     }
 
     // Apply a function to each element in the sequence.
-    pub fn map(f) ->
+    pub func map(f) ->
         match this {
             [] -> [],
             [head, ..tail] -> [f(head), ..tail.map(f)]
         };
 
     // Reduce the sequence to a single value as per the provided function.
-    pub fn fold(acc, f) ->
+    pub func fold(acc, f) ->
         match this {
             [] -> acc,
             [head, ..tail] -> tail.fold(f(acc, head), f)
         };
 
     // Return a new sequence with only the elements that satisfy the predicate.
-    pub fn where(f) ->
+    pub func where(f) ->
         match this {
             [] -> [],
             [head, ..tail] ->
@@ -51,7 +51,7 @@ final Sequence = class {
 
     // Join the elements of the sequence into a string, seperated by the given
     // string.
-    pub fn join(sep) ->
+    pub func join(sep) ->
         match this {
             [] -> "",
             [head, ..tail] ->
@@ -59,13 +59,13 @@ final Sequence = class {
                     (acc, item) -> acc + sep + item.to_string)
         };
 
-    pub fn swap(i, j) {
+    pub func swap(i, j) {
         let tmp = this[i];
         this[i] = this[j];
         this[j] = tmp;
     }
     
-    pub fn operator +(other) ->
+    pub func operator +(other) ->
         match this {
             [] -> other,
             [head, ..tail] -> [head, ..tail + other]
@@ -75,7 +75,7 @@ final Sequence = class {
     get len -> this.fold(0, (acc, _) -> acc + 1);
 
     // The number of elements in the sequence satisfying the given predicate.
-    pub fn len(f) -> this.where(f).len;
+    pub func len(f) -> this.where(f).len;
 
     // Check if the sequence is empty.
     get empty? -> this.len == 0;
@@ -85,9 +85,9 @@ final Sequence = class {
 final List = class is Sequence {
     get to_string -> "[" + this.join(", ") + "]";
 
-    pub fn sort() -> this.quicksort(this, 0, this.len - 1);
+    pub func sort() -> this.quicksort(this, 0, this.len - 1);
 
-    fn quicksort(arr, lo, hi) {
+    func quicksort(arr, lo, hi) {
         if this.empty? { return this; }
 
         final pivot_idx = this.partition(this, lo, hi);
@@ -96,7 +96,7 @@ final List = class is Sequence {
         this.quicksort(arr, pivot_idx + 1, hi);
     }
 
-    fn partition(f, lo, hi) {
+    func partition(f, lo, hi) {
         final pivot = this[hi];
         let idx = lo - 1;
 
