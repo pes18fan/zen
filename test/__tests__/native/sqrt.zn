@@ -1,0 +1,3 @@
+print sqrt(16); // expect: 4
+print sqrt(9); // expect: 3
+print sqrt(2.25); // expect: 1.500

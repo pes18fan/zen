@@ -150,7 +150,7 @@ ILLEGAL token variant.
 advance :: proc(p: ^Parser) #no_bounds_check {
 	p.previous = p.current
 
-	if p.current.type == .EOF { return }
+	if p.current.type == .EOF {return}
 
 	p.current = p.tokens[p.curr_idx]
 	p.curr_idx += 1
@@ -166,7 +166,14 @@ consume :: proc(p: ^Parser, type: TokenType, message: string) {
 		return
 	}
 
-	error_at_current(p, message)
+	error_at_current(
+		p,
+		fmt.tprintf(
+			"%s Got %s instead.",
+			message,
+			"nothing" if p.current.type == .EOF else p.current.lexeme,
+		),
+	)
 }
 
 /* Check if the token to be consumed is of the provided type. */
@@ -319,7 +326,7 @@ init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
 
 	c.function = new_function(p.vm)
 	// DON'T FORGET to set current_compiler to the new compiler!
-	
+
 	// Took me WAAAAAAAAAAY too long to figure out I was missing this.
 	p.current_compiler = c
 
@@ -369,9 +376,7 @@ end_scope :: proc(p: ^Parser) {
 	p.current_compiler.scope_depth -= 1
 
 	for p.current_compiler.local_count > 0 &&
-	    p.current_compiler.locals[
-			    p.current_compiler.local_count - 1 \
-		    ].depth >
+	    p.current_compiler.locals[p.current_compiler.local_count - 1].depth >
 		    p.current_compiler.scope_depth {
 		emit_pop(p)
 		p.current_compiler.local_count -= 1
@@ -906,7 +911,7 @@ if_statement :: proc(p: ^Parser) {
 	patch_jump(p, else_jump)
 }
 
-/* Parse a `write` statement. */
+/* Parse a `print` statement. */
 @(private = "file")
 print_statement :: proc(p: ^Parser) {
 	expression(p)

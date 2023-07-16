@@ -1,0 +1,1 @@
+print parse("definitely not a number"); // ERR: Cannot parse
