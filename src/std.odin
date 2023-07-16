@@ -16,6 +16,7 @@ init_natives :: proc(vm: ^VM) {
 	define_native(vm, "chomp", chomp_native, arity = 1)
 	define_native(vm, "len", len_native, arity = 1)
 	define_native(vm, "gsub", gsub_native, arity = 3)
+	define_native(vm, "panic", panic_native, arity = 1)
 }
 
 /* Get the current UNIX time in seconds. */
@@ -33,6 +34,12 @@ gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	return obj_val(copy_string(vm, string(buf[:n]))), true
+}
+
+/* Panic the VM with a custom message. */
+panic_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	vm_panic(vm, "%s", as_string(args[0]).chars)
+	return nil, false
 }
 
 /* 
