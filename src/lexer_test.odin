@@ -33,23 +33,23 @@ expect_tokens_equal :: proc(
 @(test)
 test_lexer_default :: proc(t: ^tt.T) {
 	source := `// this is a comment
-fn foo() {
+func foo() {
     if not false {
         print str;
     }
 }
 
-pub fn add(a, b) -> a + b;
+pub func add(a, b) -> a + b;
 
-fn test() {
+func test() {
     foo("just a little lexer exercise");
     println(add(1, 2));
 }`
 
 	lx := init_lexer(source)
-	got, err := lex(&lx)
-	if err != nil {
-		tt.fail_now(t, err.(Token).lexeme)
+	got, ok := lex(&lx)
+	if !ok {
+		tt.fail_now(t, "lexer error")
 	}
 	defer delete(got)
 
@@ -105,8 +105,8 @@ fn test() {
 		Token{type = .EOF, lexeme = "", line = 13},
 	}
 
-	ok, wanted, recieved := expect_tokens_equal(want, got)
-	if !ok {
+	are_equal, wanted, recieved := expect_tokens_equal(want, got)
+	if !are_equal {
 		tt.errorf(t, "want %s, got %s", wanted, recieved)
 	}
 }
@@ -118,9 +118,9 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
     .capitalize();`
 
 	lx := init_lexer(source)
-	got, err := lex(&lx)
-	if err != nil {
-		tt.fail_now(t, err.(Token).lexeme)
+	got, ok := lex(&lx)
+	if !ok {
+		tt.fail_now(t, "lexer error")
 	}
 	defer delete(got)
 
@@ -137,8 +137,8 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
 		Token{type = .SEMI, lexeme = ";", line = 3},
 	}
 
-	ok, wanted, recieved := expect_tokens_equal(want, got)
-	if !ok {
+	are_equal, wanted, recieved := expect_tokens_equal(want, got)
+	if !are_equal {
 		tt.errorf(t, "want %s, got %s", wanted, recieved)
 	}
 }

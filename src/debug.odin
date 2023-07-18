@@ -68,6 +68,10 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_EQUAL", offset)
 	case .OP_SET_GLOBAL:
 		return constant_instruction("OP_SET_GLOBAL", c, offset)
+	case .OP_GET_UPVALUE:
+		return byte_instruction("OP_GET_UPVALUE", c, offset)
+	case .OP_SET_UPVALUE:
+		return byte_instruction("OP_SET_UPVALUE", c, offset)
 	case .OP_GREATER:
 		return simple_instruction("OP_GREATER", offset)
 	case .OP_LESS:
@@ -94,6 +98,34 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return jump_instruction("OP_LOOP", -1, c, offset)
 	case .OP_CALL:
 		return byte_instruction("OP_CALL", c, offset)
+	case .OP_CLOSURE:
+		{
+			offset := offset
+			offset += 1
+			constant := c.code[offset]
+			fmt.eprintf("%-16s %4d ", "OP_CLOSURE", constant)
+			print_value(c.constants.values[constant])
+			fmt.eprintln()
+
+			function := as_function(c.constants.values[constant])
+			for j in 0 ..< function.upvalue_count {
+				is_local := bool(c.code[offset])
+				offset += 1
+				index := c.code[offset]
+				offset += 1
+
+				fmt.eprintf(
+					"%04d	  |                     %s %d\n",
+					offset - 2,
+					is_local ? "local" : "upvalue",
+					index,
+				)
+			}
+
+			return offset
+		}
+	case .OP_CLOSE_UPVALUE:
+		return simple_instruction("OP_CLOSE_UPVALUE", offset)
 	case .OP_RETURN:
 		return simple_instruction("OP_RETURN", offset)
 	case:

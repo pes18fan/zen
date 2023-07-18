@@ -65,9 +65,20 @@ Variability :: enum {
 A local variable.
 */
 Local :: struct {
-	name:  Token,
-	depth: int,
-	final: Variability,
+	name:        Token,
+	depth:       int,
+	final:       Variability,
+	is_captured: bool,
+}
+
+/*
+An upvalue. References a local variable in an enclosing function.
+Each closure keeps an array of upvalues, which include all the variables
+that the closure closes over.
+*/
+Upvalue :: struct {
+	index:    int,
+	is_local: bool,
 }
 
 /*
@@ -103,6 +114,7 @@ Compiler :: struct {
 	globals:     ^Table, // Hash table storing global variables.
 	locals:      [U8_COUNT]Local, // Array of local variables. 
 	local_count: int, // Number of local variables.
+	upvalues:    [U8_COUNT]Upvalue, // Array of upvalues.
 	loops:       [U8_COUNT]Loop, // Array of loops.
 	loop_count:  int, // Number of loops.
 	scope_depth: int, // The number of blocks currently in scope.
@@ -325,8 +337,8 @@ init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
 	}
 
 	c.function = new_function(p.vm)
+	
 	// DON'T FORGET to set current_compiler to the new compiler!
-
 	// Took me WAAAAAAAAAAY too long to figure out I was missing this.
 	p.current_compiler = c
 
@@ -338,6 +350,7 @@ init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
 	local := &p.current_compiler.locals[p.current_compiler.local_count]
 	c.local_count += 1
 	local.depth = 0
+	local.is_captured = false // You can't capture the slot zero function.
 	local.name.lexeme = ""
 }
 
@@ -373,12 +386,20 @@ This also pops off any local variables that were declared in the scope.
 */
 @(private = "file")
 end_scope :: proc(p: ^Parser) {
-	p.current_compiler.scope_depth -= 1
+	curr := p.current_compiler
+	curr.scope_depth -= 1
 
-	for p.current_compiler.local_count > 0 &&
-	    p.current_compiler.locals[p.current_compiler.local_count - 1].depth >
-		    p.current_compiler.scope_depth {
-		emit_pop(p)
+	for curr.local_count > 0 &&
+	    curr.locals[curr.local_count - 1].depth >
+		    curr.scope_depth {
+		/* If the local was captured, close its upvalue instead of popping it
+		to allow closures to work. Closing the upvalue requires no operand,
+		since the upvalue to close is right on top of the stack at this point. */
+		if curr.locals[curr.local_count - 1].is_captured {
+			emit_opcode(p, .OP_CLOSE_UPVALUE)
+		} else {
+			emit_pop(p)
+		}
 		p.current_compiler.local_count -= 1
 	}
 }
@@ -493,12 +514,17 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 	name := name
 	get_op, set_op: u8
 	arg: u8
-	possible_local := resolve_local(p, &name)
+	possible_local := resolve_local(p, p.current_compiler, &name)
+	possible_upvalue := resolve_upvalue(p, p.current_compiler, &name)
 
 	if possible_local != -1 {
-		arg = byte(possible_local)
+		arg = u8(possible_local)
 		get_op = byte(OpCode.OP_GET_LOCAL)
 		set_op = byte(OpCode.OP_SET_LOCAL)
+	} else if possible_upvalue != -1 {
+		arg = u8(possible_upvalue)
+		get_op = byte(OpCode.OP_GET_UPVALUE)
+		set_op = byte(OpCode.OP_SET_UPVALUE)
 	} else {
 		arg = identifier_constant(p, &name)
 		get_op = byte(OpCode.OP_GET_GLOBAL)
@@ -649,9 +675,10 @@ identifiers_equal :: proc(a: ^Token, b: ^Token) -> bool {
 Resolve a local name binding from the Compiler struct.
 */
 @(private = "file")
-resolve_local :: proc(p: ^Parser, name: ^Token) -> int {
-	for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
-		local := &p.current_compiler.locals[i]
+resolve_local :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
+	// Look for the name in the local scopes of the current function.
+	for i := compiler.local_count - 1; i >= 0; i -= 1 {
+		local := &compiler.locals[i]
 		if identifiers_equal(name, &local.name) {
 			if local.depth == -1 {
 				error(p, "Cannot read local variable in its own initializer.")
@@ -660,6 +687,68 @@ resolve_local :: proc(p: ^Parser, name: ^Token) -> int {
 		}
 	}
 
+	// Not found in the scopes of the current function.
+	return -1
+}
+
+@(private = "file")
+add_upvalue :: proc(p: ^Parser, compiler: ^Compiler, index: u8, is_local: bool) -> int {
+	upvalue_count := compiler.function.upvalue_count
+
+	// Check if the function already has the upvalue we're about to add.
+	for i in 0 ..< upvalue_count {
+		upvalue := &compiler.upvalues[i]
+		if upvalue.index == int(index) && upvalue.is_local == is_local {
+			return i
+		}
+	}
+
+	if upvalue_count == U8_COUNT {
+		error(p, "Too many closure variables in function.")
+		return 0
+	}
+
+	// Add the upvalue.
+	defer compiler.function.upvalue_count += 1
+	compiler.upvalues[upvalue_count].is_local = is_local
+	compiler.upvalues[upvalue_count].index = int(index)
+	return compiler.function.upvalue_count
+}
+
+@(private = "file")
+resolve_upvalue :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
+	/* Base case 1: We reached the end of the compiler stack, so the name is probably in the
+	global scope. */
+	if compiler.enclosing == nil {return -1}
+
+	/* Look for the name in the enclosing function's local scope. 
+	Base case 2: If we find the name there, return it. */
+	local := resolve_local(p, compiler.enclosing, name)
+	if local != -1 {
+		// Mark the local as captured.
+		compiler.enclosing.locals[local].is_captured = true
+		/* is_local is true since we're capturing a local variable from the
+		immediately enclosing function. */
+		return add_upvalue(p, compiler, u8(local), true)
+	}
+
+	/* Recursively look for an upvalue in the enclosing function. */
+	upvalue := resolve_upvalue(p, compiler.enclosing, name)
+	if upvalue != -1 {
+		/* Once the local variable is found in the most deeply nested recursive call, 
+		which is the outermost function, capture it as an upvalue, add it to the 
+		current (outermost) function's upvalue list and return the index. That 
+		returns to the inner function's declaration, which captures the upvalue
+		from that surrounding function from where we just returned, and so on, 
+		until we eventually return to the function declaration where the
+		identifier we are looking for appears. */
+		/* The boolean is_local flag is false since here, we're capturing an
+		upvalue which captures either a local variable of its surrounding
+		function or another upvalue. */
+		return add_upvalue(p, compiler, u8(upvalue), false)
+	}
+
+	// Nope, didn't find anything.
 	return -1
 }
 
@@ -679,6 +768,7 @@ add_local :: proc(p: ^Parser, name: Token, final: Variability) {
 	local.name = name
 	local.depth = -1
 	local.final = final
+	local.is_captured = false
 }
 
 /* 
@@ -833,7 +923,17 @@ function :: proc(p: ^Parser, type: FunctionType) {
 	block(p)
 
 	function := end_compiler(p)
-	emit_bytes(p, byte(OpCode.OP_CONSTANT), make_constant(p, obj_val(function)))
+	emit_bytes(p, byte(OpCode.OP_CLOSURE), make_constant(p, obj_val(function)))
+
+	/* OP_CLOSURE has a variably sized encoding. For each upvalue captured by
+	the closure, there are two single-byte operands: a boolean indicating
+	whether the upvalue captures a local variable in the immediately enclosing
+	function (1) or one of that function's upvalues (0), and the local slot or upvalue
+	index to capture. */
+	for i in 0 ..< function.upvalue_count {
+		emit_byte(p, 1 if compiler.upvalues[i].is_local else 0)
+		emit_byte(p, u8(compiler.upvalues[i].index))
+	}
 }
 
 /* 

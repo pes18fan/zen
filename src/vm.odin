@@ -19,7 +19,7 @@ its own `ip`, and when we return from the function, the VM jumps back to the
 `ip` of the caller's callframe.
 */
 CallFrame :: struct {
-	function: ^ObjFunction,
+	closure: ^ObjClosure,
 
 	/* Pointer to the current instruction in the frame. */
 	ip:       ^byte,
@@ -47,6 +47,9 @@ VM :: struct {
 	compiler_globals: Table,
 	strings:          Table,
 
+	/* Linked list of all open upvalues. */
+	open_upvalues:    ^ObjUpvalue,
+
 	/* Linked list of all objects allocated by the VM. */
 	objects:          ^Obj,
 }
@@ -67,8 +70,8 @@ vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
 
 	for i := vm.frame_count - 1; i >= 0; i -= 1 {
 		frame := &vm.frames[i]
-		function := frame.function
-		instruction := mem.ptr_sub(frame.ip, &frame.function.chunk.code[0]) - 1
+		function := frame.closure.function
+		instruction := mem.ptr_sub(frame.ip, &function.chunk.code[0]) - 1
 		line := get_line(function.chunk.lines, instruction)
 
 		fmt.eprintf("  from [line %d] in", line)
@@ -99,6 +102,7 @@ reset_stack :: proc(vm: ^VM) {
 	}
 	vm.chunk = nil
 	vm.frame_count = 0
+	vm.open_upvalues = nil
 }
 
 /* Returns a newly created VM. */
@@ -106,6 +110,7 @@ init_VM :: proc() -> VM {
 	vm := VM {
 		chunk            = nil,
 		stack            = make([dynamic]Value, 0, 0),
+		open_upvalues	 = nil,
 		objects          = nil,
 		globals          = init_table(),
 		compiler_globals = init_table(),
@@ -137,7 +142,7 @@ read_byte :: #force_inline proc(frame: ^CallFrame) -> byte #no_bounds_check {
 /* Reads a constant from the chunk and pushes it onto the stack. */
 @(private = "file")
 read_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
-	return frame.function.chunk.constants.values[read_byte(frame)]
+	return frame.closure.function.chunk.constants.values[read_byte(frame)]
 }
 
 @(private = "file")
@@ -216,7 +221,6 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 	for {
 		when ODIN_DEBUG {
-			offset := mem.ptr_sub(frame.ip, &frame.function.chunk.code[0])
 			fmt.printf("          ")
 			for value in vm.stack {
 				fmt.printf("[ ")
@@ -224,7 +228,8 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				fmt.printf(" ]")
 			}
 			fmt.printf("\n")
-			disassemble_instruction(&frame.function.chunk, offset)
+			offset := mem.ptr_sub(frame.ip, &frame.closure.function.chunk.code[0])
+			disassemble_instruction(&frame.closure.function.chunk, offset)
 		}
 
 		instruction := OpCode(read_byte(frame))
@@ -271,6 +276,15 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				vm_panic(vm, "Undefined variable '%s'.", name.chars)
 				return .INTERPRET_RUNTIME_ERROR
 			}
+		case .OP_GET_UPVALUE: {
+			slot := read_byte(frame)
+			vm_push(vm, frame.closure.upvalues[slot].location^)
+		}
+		case .OP_SET_UPVALUE: {
+			slot := read_byte(frame)
+			// Take the value on top of the stack and store it into the slot.
+			frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
+		}
 		case .OP_EQUAL:
 			{
 				b := vm_pop(vm)
@@ -334,10 +348,38 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				return .INTERPRET_RUNTIME_ERROR
 			}
 			frame = &vm.frames[vm.frame_count - 1]
-		// TODO: fix the function objects staying on the stack after a call
+		case .OP_CLOSURE:
+			{
+				function := as_function(read_constant(frame))
+				closure := new_closure(vm, function)
+				vm_push(vm, obj_val(closure))
+				
+				for i in 0 ..< closure.upvalue_count {
+					is_local := bool(read_byte(frame))
+					index := read_byte(frame)
+
+					if is_local {
+						// Close over a local var of the surrounding function.
+						closure.upvalues[i] = capture_upvalue(vm, &frame.slots[index])
+					} else {
+						// Capture an upvalue from the surrounding function.
+						/* When the OP_CLOSURE instruction is being executed,
+						the surrounding function of that closure is at the top
+						of the callstack, so we can just pick it up from the
+						current CalLFrame. */
+						closure.upvalues[i] = frame.closure.upvalues[index]
+					}
+				}
+			}
+		case .OP_CLOSE_UPVALUE: {
+			close_upvalues(vm, &vm.stack[len(vm.stack) - 1])
+			vm_pop(vm)
+		}
 		case .OP_RETURN:
 			{
-				result := vm_pop(vm)
+				result := vm_pop(vm) // Retrieve the return value from the stack.
+				// Close any upvalues that were captured inside the returning function.
+				close_upvalues(vm, &frame.slots[0])
 				vm.frame_count -= 1
 				if vm.frame_count == 0 {
 					vm_pop(vm)
@@ -345,10 +387,10 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				}
 
 				// Pop all the args and the function itself off the stack.
-				for _ in 0 ..= int(frame.function.arity) {
+				for _ in 0 ..= int(frame.closure.function.arity) {
 					vm_pop(vm)
 				}
-				vm_push(vm, result)
+				vm_push(vm, result) // Push the return value back to the stack.
 				frame = &vm.frames[vm.frame_count - 1]
 			}
 		}
@@ -370,7 +412,10 @@ interpret :: proc(vm: ^VM, source: string) -> InterpretResult {
 	}
 
 	vm_push(vm, obj_val(fn))
-	call(vm, fn, 0) // The script itself is a function, so call it.
+	closure := new_closure(vm, fn)
+	vm_pop(vm)
+	vm_push(vm, obj_val(closure))
+	call(vm, closure, 0) // The script itself is a function, so call it.
 
 	return run(vm)
 }
@@ -405,9 +450,9 @@ Call a function.
 Simply initializes the next CallFrame on the stack.
 */
 @(private = "file")
-call :: proc(vm: ^VM, function: ^ObjFunction, arg_count: int) -> bool {
-	if arg_count != int(function.arity) {
-		vm_panic(vm, "Expected %d arguments but got %d.", function.arity, arg_count)
+call :: proc(vm: ^VM, closure: ^ObjClosure, arg_count: int) -> bool {
+	if arg_count != int(closure.function.arity) {
+		vm_panic(vm, "Expected %d arguments but got %d.", closure.function.arity, arg_count)
 		return false
 	}
 
@@ -418,8 +463,8 @@ call :: proc(vm: ^VM, function: ^ObjFunction, arg_count: int) -> bool {
 
 	frame := &vm.frames[vm.frame_count]
 	vm.frame_count += 1
-	frame.function = function
-	frame.ip = &function.chunk.code[0]
+	frame.closure = closure
+	frame.ip = &closure.function.chunk.code[0]
 
 	// Subtract the length of the stack by the number of args, and by 1 for the
 	// function itself, to get the beginning of the frame.
@@ -432,8 +477,10 @@ call :: proc(vm: ^VM, function: ^ObjFunction, arg_count: int) -> bool {
 call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 	if is_obj(callee) {
 		#partial switch obj_type(callee) {
-		case .FUNCTION:
-			return call(vm, as_function(callee), arg_count)
+		/* We only handle ObjClosures here, since all ObjFunctions are wrapped
+		into closures as soon as they're pulled out of the constant table. */
+		case .CLOSURE:
+			return call(vm, as_closure(callee), arg_count)
 		case .NATIVE:
 			if arg_count != as_native_obj(callee).arity {
 				vm_panic(
@@ -462,6 +509,46 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 
 	vm_panic(vm, "Can only call functions and classes.")
 	return false
+}
+
+/* Capture the provided stack slot as an upvalue. */
+@(private = "file")
+capture_upvalue :: proc(vm: ^VM, local: ^Value) -> ^ObjUpvalue {
+	prev_upvalue: ^ObjUpvalue = nil
+	upvalue := vm.open_upvalues
+
+	// Look for an existing upvalue before creating a new one.
+	for upvalue != nil && upvalue.location > local {
+		prev_upvalue = upvalue
+		upvalue = upvalue.next_upvalue
+	}
+
+	// Return it if it already exists.
+	if upvalue != nil && upvalue.location == local {
+		return upvalue
+	}
+
+	created_upvalue := new_upvalue(vm, local)
+	created_upvalue.next = upvalue
+
+	if prev_upvalue == nil {
+		vm.open_upvalues = created_upvalue
+	} else {
+		prev_upvalue.next = created_upvalue
+	}
+
+	return created_upvalue
+}
+
+/* Close all upvalues up to and including the provided stack slot. */
+@(private = "file")
+close_upvalues :: proc(vm: ^VM, last: ^Value) {
+	for vm.open_upvalues != nil && vm.open_upvalues.location >= last {
+		upvalue := vm.open_upvalues
+		upvalue.closed = upvalue.location^
+		upvalue.location = &upvalue.closed
+		vm.open_upvalues = upvalue.next_upvalue
+	}
 }
 
 /* Concatenate two strings. */

@@ -17,6 +17,8 @@ init_natives :: proc(vm: ^VM) {
 	define_native(vm, "len", len_native, arity = 1)
 	define_native(vm, "gsub", gsub_native, arity = 3)
 	define_native(vm, "panic", panic_native, arity = 1)
+	define_native(vm, "upcase", upcase_native, arity = 1)
+	define_native(vm, "downcase", downcase_native, arity = 1)
 }
 
 /* Get the current UNIX time in seconds. */
@@ -117,4 +119,36 @@ gsub_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	return obj_val(copy_string(vm, str)), true
+}
+
+/* Turn all the characters of a string into uppercase. */
+upcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "upcase() requires a string, not a %v.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	str, err := strings.to_upper(as_string(args[0]).chars)
+	if err != nil {
+		vm_panic(vm, "Allocator error on upcase(): %s", err)
+		return nil, false
+	}
+
+	return obj_val(take_string(vm, str)), true
+}
+
+/* Turn all the characters of a string into lowercase. */
+downcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "downcase() requires a string, not a %v.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	str, err := strings.to_lower(as_string(args[0]).chars)
+	if err != nil {
+		vm_panic(vm, "Allocator error on downcase(): %s", err)
+		return nil, false
+	}
+
+	return obj_val(take_string(vm, str)), true
 }
