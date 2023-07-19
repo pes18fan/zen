@@ -39,7 +39,7 @@ func foo() {
     }
 }
 
-pub func add(a, b) -> a + b;
+pub func add(a, b) => a + b;
 
 func test() {
     foo("just a little lexer exercise");
@@ -76,7 +76,7 @@ func test() {
 		Token{type = .COMMA, lexeme = ",", line = 8},
 		Token{type = .IDENT, lexeme = "b", line = 8},
 		Token{type = .RPAREN, lexeme = ")", line = 8},
-		Token{type = .ARROW, lexeme = "->", line = 8},
+		Token{type = .FAT_ARROW, lexeme = "=>", line = 8},
 		Token{type = .IDENT, lexeme = "a", line = 8},
 		Token{type = .PLUS, lexeme = "+", line = 8},
 		Token{type = .IDENT, lexeme = "b", line = 8},

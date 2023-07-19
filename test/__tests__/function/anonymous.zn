@@ -1,0 +1,5 @@
+let square = func(x) {
+   return x * x;
+};
+
+print square(6); // expect: 36

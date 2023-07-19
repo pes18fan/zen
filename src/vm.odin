@@ -64,7 +64,7 @@ InterpretResult :: enum {
 
 /* Raise a runtime error. */
 vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
-	fmt.eprint(COL_RED, "panic:", RESET)
+	fmt.eprintf("%spanic:%s ", COL_RED, RESET)
 	fmt.eprintf("%s", fmt.tprintf(format, ..args))
 	fmt.eprintln()
 

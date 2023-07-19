@@ -20,7 +20,6 @@ TokenType :: enum {
 	NEWLINE,
 
 	// one or two character tokens
-	ARROW,
 	BANG_EQUAL,
 	EQUAL,
 	EQUAL_EQUAL,
@@ -87,7 +86,7 @@ illegal tokens are returned on syntax errors.
 */
 @(private = "file")
 syntax_error :: proc(l: ^Lexer, message: string) {
-	fmt.eprint(COL_RED, "syntax error:", RESET)
+	fmt.eprintf("%ssyntax error:%s ", COL_RED, RESET)
 	fmt.eprintf("%s\n", message)
 	fmt.eprintf("  on [line %d]\n", l.line)
 	l.had_error = true
@@ -390,7 +389,7 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case '.':
 		return make_token(l, .DOT)
 	case '-':
-		return make_token(l, match(l, '>') ? .ARROW : .MINUS)
+		return make_token(l, .MINUS)
 	case '+':
 		return make_token(l, .PLUS)
 	case '/':

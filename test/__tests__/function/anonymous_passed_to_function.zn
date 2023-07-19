@@ -1,0 +1,11 @@
+func repeat(fn, times) {
+    for let i = 0; i < times; i = i + 1 {
+        fn();
+    }
+}
+
+repeat(func() {
+    print "epic!";
+}, 2);
+// expect: epic!
+// expect: epic!

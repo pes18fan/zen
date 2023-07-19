@@ -70,7 +70,14 @@ sqrt_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil, false
 	}
 
-	return number_val(math.sqrt(as_number(args[0]))), true
+	n := as_number(args[0])
+
+	if n < 0 {
+		vm_panic(vm, "Cannot find the square root of a negative number.")
+		return nil, false
+	}
+
+	return number_val(math.sqrt(n)), true
 }
 
 /* Trim whitespace from both sides of a string. */

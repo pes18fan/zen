@@ -97,6 +97,7 @@ The type of a function. The "top level" of a program, called "script" here,
 is also considered an implicit function.
 */
 FunctionType :: enum {
+	LAMBDA,
 	FUNCTION,
 	SCRIPT,
 }
@@ -129,7 +130,7 @@ current_chunk :: proc(p: ^Parser) -> ^Chunk {
 error_at :: proc(p: ^Parser, token: ^Token, message: string) {
 	if p.panic_mode do return
 	p.panic_mode = true
-	fmt.eprint(COL_RED, "compile error", RESET)
+	fmt.eprintf("%scompile error%s ", COL_RED, RESET)
 
 	if token.type == TokenType.EOF {
 		fmt.eprintf("at end")
@@ -337,13 +338,15 @@ init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
 	}
 
 	c.function = new_function(p.vm)
-	
+
 	// DON'T FORGET to set current_compiler to the new compiler!
 	// Took me WAAAAAAAAAAY too long to figure out I was missing this.
 	p.current_compiler = c
 
-	if type != .SCRIPT {
+	if type != .SCRIPT && type != .LAMBDA {
 		c.function.name = copy_string(p.vm, p.previous.lexeme)
+	} else if type == .LAMBDA {
+		c.function.name = copy_string(p.vm, "lambda")
 	}
 
 	// The first slot is always the function itself.
@@ -389,9 +392,7 @@ end_scope :: proc(p: ^Parser) {
 	curr := p.current_compiler
 	curr.scope_depth -= 1
 
-	for curr.local_count > 0 &&
-	    curr.locals[curr.local_count - 1].depth >
-		    curr.scope_depth {
+	for curr.local_count > 0 && curr.locals[curr.local_count - 1].depth > curr.scope_depth {
 		/* If the local was captured, close its upvalue instead of popping it
 		to allow closures to work. Closing the upvalue requires no operand,
 		since the upvalue to close is right on top of the stack at this point. */
@@ -567,6 +568,11 @@ variable :: proc(p: ^Parser, can_assign: bool) {
 	named_variable(p, p.previous, can_assign)
 }
 
+@(private = "file")
+lambda :: proc(p: ^Parser, can_assign: bool) {
+	function(p, .LAMBDA)
+}
+
 /* Parse a unary expression. */
 @(private = "file")
 unary :: proc(p: ^Parser, can_assign: bool) {
@@ -615,7 +621,7 @@ rules: []ParseRule = {
 	TokenType.FALSE = ParseRule{literal, nil, .NONE},
 	TokenType.FINAL = ParseRule{nil, nil, .NONE},
 	TokenType.FOR = ParseRule{nil, nil, .NONE},
-	TokenType.FUNC = ParseRule{nil, nil, .NONE},
+	TokenType.FUNC = ParseRule{lambda, nil, .NONE},
 	TokenType.IF = ParseRule{nil, nil, .NONE},
 	TokenType.IMPORT = ParseRule{nil, nil, .NONE},
 	TokenType.IN = ParseRule{nil, nil, .NONE},
@@ -901,7 +907,11 @@ function :: proc(p: ^Parser, type: FunctionType) {
     Compiler itself is ended when we reach the end of the function body. */
 	begin_scope(p)
 
-	consume(p, .LPAREN, "Expect '(' after function name.")
+	if type != .LAMBDA {
+		consume(p, .LPAREN, "Expect '(' after function name.")
+	} else {
+		consume(p, .LPAREN, "Expect '(' after 'func'.")
+	}
 
 	if !check(p, .RPAREN) {
 		for {
@@ -919,8 +929,15 @@ function :: proc(p: ^Parser, type: FunctionType) {
 	}
 
 	consume(p, .RPAREN, "Expect ')' after function parameters.")
-	consume(p, .LSQUIRLY, "Expect '{' before function body.")
-	block(p)
+
+	if match(p, .FAT_ARROW) {
+		arrow_function(p);
+	} else if match(p, .LSQUIRLY) {
+		block(p)
+	} else {
+		error(p, "Expect '=>' or '{' after function parameter list.")
+	}
+	
 
 	function := end_compiler(p)
 	emit_bytes(p, byte(OpCode.OP_CLOSURE), make_constant(p, obj_val(function)))
@@ -937,11 +954,25 @@ function :: proc(p: ^Parser, type: FunctionType) {
 }
 
 /* 
+Parse the return value of an arrow function.
+As simple as parsing the expression and inserting a return instruction.
+*/
+@(private = "file")
+arrow_function :: proc(p: ^Parser) {
+	expression(p)
+	consume(p, .SEMI, "Expect ';' after arrow function.")
+
+	emit_opcode(p, .OP_RETURN)
+
+	p.current_compiler.function.has_returned = true
+}
+
+/* 
 Parse a function declaration. 
 Functions are first class, so they are parsed like variables.
 */
 @(private = "file")
-fn_declaration :: proc(p: ^Parser) {
+func_declaration :: proc(p: ^Parser) {
 	global := parse_variable(p, "Expect function name.", .VAR)
 	mark_initialized(p)
 	function(p, .FUNCTION)
@@ -961,6 +992,11 @@ let_declaration :: proc(p: ^Parser) {
 		)
 
 		if match(p, .EQUAL) {
+			/* Need to do this to allow anonymous functions to recurse by
+			referring to the name they've been bound to. */
+			if check(p, .FUNC) {
+				mark_initialized(p)
+			}
 			expression(p)
 		} else {
 			if final == .FINAL {
@@ -1036,7 +1072,11 @@ return_statement :: proc(p: ^Parser) {
 		emit_opcode(p, .OP_RETURN)
 	}
 
-	p.current_compiler.function.has_returned = true
+	/* Set a flag to true if the function returns in its outermost scope.
+	This flag is to check if the function needs an implicit return in the end. */
+	if p.current_compiler.scope_depth == 0 {
+		p.current_compiler.function.has_returned = true
+	}
 }
 
 /* Add a loop to the current compiler's loop stack. */
@@ -1292,7 +1332,7 @@ declaration :: proc(p: ^Parser) {
 	case match(p, .LET) || match(p, .FINAL):
 		let_declaration(p)
 	case match(p, .FUNC):
-		fn_declaration(p)
+		func_declaration(p)
 	case:
 		statement(p)
 	}
