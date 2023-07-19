@@ -931,7 +931,7 @@ function :: proc(p: ^Parser, type: FunctionType) {
 	consume(p, .RPAREN, "Expect ')' after function parameters.")
 
 	if match(p, .FAT_ARROW) {
-		arrow_function(p)
+		arrow_function(p, anonymous = type == .LAMBDA)
 	} else if match(p, .LSQUIRLY) {
 		block(p)
 	} else {
@@ -958,10 +958,12 @@ Parse the return value of an arrow function.
 As simple as parsing the expression and inserting a return instruction.
 */
 @(private = "file")
-arrow_function :: proc(p: ^Parser) {
+arrow_function :: proc(p: ^Parser, anonymous: bool) {
 	expression(p)
-	consume(p, .SEMI, "Expect ';' after arrow function.")
-
+	if !anonymous {
+		consume(p, .SEMI, "Expect ';' after arrow function.")
+	}
+	
 	emit_opcode(p, .OP_RETURN)
 
 	p.current_compiler.function.has_returned = true

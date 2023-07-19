@@ -1,5 +1,5 @@
 // This is a comment!
-// Import other packages with the `import` keyword.
+// Import other packages with the `import keyword.
 import "io" // Import the io package from the standard library.
 import "./hello" // Import the hello package from a directory called hello.
 
