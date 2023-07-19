@@ -931,13 +931,13 @@ function :: proc(p: ^Parser, type: FunctionType) {
 	consume(p, .RPAREN, "Expect ')' after function parameters.")
 
 	if match(p, .FAT_ARROW) {
-		arrow_function(p);
+		arrow_function(p)
 	} else if match(p, .LSQUIRLY) {
 		block(p)
 	} else {
 		error(p, "Expect '=>' or '{' after function parameter list.")
 	}
-	
+
 
 	function := end_compiler(p)
 	emit_bytes(p, byte(OpCode.OP_CLOSURE), make_constant(p, obj_val(function)))

@@ -40,7 +40,12 @@ gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 /* Panic the VM with a custom message. */
 panic_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	vm_panic(vm, "%s", as_string(args[0]).chars)
+	if !is_string(args[0]) {
+		vm_panic(vm, "Panic message must be a string, not a %v.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	vm_panic(vm, "%s", as_cstring(args[0]))
 	return nil, false
 }
 
