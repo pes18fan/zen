@@ -173,7 +173,7 @@ new_upvalue :: proc(vm: ^VM, slot: ^Value) -> ^ObjUpvalue {
 	upvalue := cast(^ObjUpvalue)(allocate_obj(vm, ObjUpvalue, .UPVALUE))
 	upvalue.closed = nil_val()
 	upvalue.location = slot
-	upvalue.next = nil
+	upvalue.next_upvalue = nil
 	return upvalue
 }
 
@@ -249,21 +249,28 @@ free_object :: proc(obj: ^Obj) {
 	switch obj.type {
 	case .CLOSURE:
 		closure := (^ObjClosure)(obj)
+		when ODIN_DEBUG {fmt.eprintf("Freeing closure %s\n",
+			closure.function.name == nil ? "<script>" : closure.function.name.chars)}
 		delete(closure.upvalues)
 		free(closure)
 	case .FUNCTION:
 		fn := (^ObjFunction)(obj)
+		when ODIN_DEBUG {fmt.eprintf("Freeing function %s\n",
+			fn.name == nil ? "<script>" : fn.name.chars)}
 		free_chunk(&fn.chunk)
 		free(fn)
 	case .NATIVE:
 		fn := (^ObjNative)(obj)
+		when ODIN_DEBUG {fmt.eprintf("Freeing native fn\n")}
 		free(fn)
 	case .STRING:
 		zstr := as_string(obj)
+		when ODIN_DEBUG {fmt.eprintf("Freeing string %s\n", zstr == nil ? "<nil str>" : zstr.chars)}
 		delete(zstr.chars)
 		free(zstr)
 	case .UPVALUE:
 		upvalue := (^ObjUpvalue)(obj)
+		when ODIN_DEBUG {fmt.eprintf("Freeing upvalue %p\n", upvalue.location)}
 		free(upvalue)
 	}
 }

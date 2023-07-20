@@ -529,12 +529,12 @@ capture_upvalue :: proc(vm: ^VM, local: ^Value) -> ^ObjUpvalue {
 	}
 
 	created_upvalue := new_upvalue(vm, local)
-	created_upvalue.next = upvalue
+	created_upvalue.next_upvalue = upvalue
 
 	if prev_upvalue == nil {
 		vm.open_upvalues = created_upvalue
 	} else {
-		prev_upvalue.next = created_upvalue
+		prev_upvalue.next_upvalue = created_upvalue
 	}
 
 	return created_upvalue
@@ -567,9 +567,18 @@ concatenate :: proc(vm: ^VM, a: ^ObjString, b: ^ObjString) {
 free_objects :: proc(vm: ^VM) {
 	object := vm.objects
 
+	when ODIN_DEBUG {
+		fmt.eprintln("Beginning object freeing...")
+		i := 0
+	}
 	for object != nil {
 		next := object.next
 		free_object(object)
 		object = next
+		when ODIN_DEBUG {i += 1}
+	}
+
+	when ODIN_DEBUG {
+		fmt.eprintf("Freed %d objects.\n", i)
 	}
 }
