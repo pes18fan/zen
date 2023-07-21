@@ -6,18 +6,18 @@ Programming language.
 
 ## building
 
-Make sure `odin` and `just` are installed and working. Clone the repo,
-then run:
+Make sure the Odin compiler and Python are installed. Then, run the
+build script with the `dbg` arg to create a debug build:
 
 ```bash
-just
+./x.py dbg
 ```
 
 This will produce a debug build as `./bin/dbg/zen`. To produce a release
 build, run:
 
 ```bash
-just rel
+./x.py rel
 ```
 
 ## testing
@@ -27,5 +27,5 @@ as well as a custom end-to-end tester written in Ruby. To test everything
 at once, run:
 
 ```bash
-just test_all
+./x.py test
 ```
