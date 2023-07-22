@@ -365,7 +365,7 @@ end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
 		emit_return(p)
 	}
 
-	when ODIN_DEBUG {
+	when #config(DEBUG_TRACE_EXECUTION, false) {
 		if !p.had_error {
 			disassemble(current_chunk(p), fn.name != nil ? fn.name.chars : "<script>")
 		}

@@ -97,7 +97,7 @@ main :: proc() {
 	defer os.exit(status)
 
 	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
-	when ODIN_DEBUG {
+	when #config(DEBUG_CHECK_LEAKS, false) {
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
 		context.allocator = mem.tracking_allocator(&track)

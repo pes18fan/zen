@@ -1,4 +1,3 @@
-// All the native functions in zen
 package zen
 
 import "core:math"
@@ -6,6 +5,8 @@ import "core:time"
 import "core:os"
 import "core:strconv"
 import "core:strings"
+
+// All the native functions in zen are in this file.
 
 init_natives :: proc(vm: ^VM) {
 	// Define native functions

@@ -5,11 +5,14 @@ import sys
 
 OC = "odin"
 ProcError = subprocess.CalledProcessError
+DEBUG_FLAGS = """-debug -o:none\
+                 -define:DEBUG_TRACE_EXECUTION=true\
+                 -define:DEBUG_CHECK_LEAKS=true"""
 
 def create_debug_build():
     try:
         print("Compiling the debug build..")
-        subprocess.run(f"{OC} build src/ -out:bin/dbg/dzen -debug -o:none".split(),
+        subprocess.run(f"{OC} build src/ -out:bin/dbg/dzen {DEBUG_FLAGS}".split(), 
                        check=True)
     except ProcError as e:
         print(f"Error while creating debug build: {e}", file=sys.stderr)

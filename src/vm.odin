@@ -220,7 +220,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 	frame := &vm.frames[vm.frame_count - 1]
 
 	for {
-		when ODIN_DEBUG {
+		when #config(DEBUG_TRACE_EXECUTION, false) {
 			fmt.printf("          ")
 			for value in vm.stack {
 				fmt.printf("[ ")
@@ -567,18 +567,9 @@ concatenate :: proc(vm: ^VM, a: ^ObjString, b: ^ObjString) {
 free_objects :: proc(vm: ^VM) {
 	object := vm.objects
 
-	when ODIN_DEBUG {
-		fmt.eprintln("Beginning object freeing...")
-		i := 0
-	}
 	for object != nil {
 		next := object.next
 		free_object(object)
 		object = next
-		when ODIN_DEBUG {i += 1}
-	}
-
-	when ODIN_DEBUG {
-		fmt.eprintf("Freed %d objects.\n", i)
 	}
 }
