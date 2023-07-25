@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:strings"
 import "core:strconv"
 
 /* Maximum limit for a eight bit unsigned integer. */
@@ -499,10 +500,63 @@ or_ :: proc(p: ^Parser, can_assign: bool) {
 	patch_jump(p, end_jump)
 }
 
+/* 
+Add a single byte character to a string.
+This function allocates memory.
+*/
+@(private = "file")
+concatenate_byte :: proc(a: string, b: byte) -> string {
+	defer delete(a)
+	len := len(a) + 1
+	res := make([]byte, len)
+	i := 0
+ 	i = copy(res, a)
+	res[i] = b
+
+	return string(res)
+}
+
+/*
+Translate escape sequences in a string literal.
+This function allocates a string, but doesn't take ownership of the input.
+
+So far, only the newline and tab sequences are supported.
+*/
+@(private = "file")
+add_escape_sequences :: proc(str: string) -> string {
+	sequences := map[byte]byte{
+		'n'     = '\n',
+		't'     = '\t',
+	}
+	defer delete(sequences)
+	
+	escaped := false
+	res := ""
+	for i, idx in str {
+		if i == '\\' &&
+		   idx + 1 < len(str) &&
+		   str[idx + 1] in sequences {
+			res = concatenate_byte(res, sequences[str[idx + 1]])
+			escaped = true
+			continue
+		}
+		if escaped {
+			escaped = false
+			continue
+		}
+		res = concatenate_byte(res, byte(i))
+	}
+
+	return res
+}
+
 /* Parse a string and emit that constant to the chunk. */
 @(private = "file")
 zstring :: proc(p: ^Parser, can_assign: bool) {
-	emit_constant(p, obj_val(copy_string(p.vm, p.previous.lexeme[1:len(p.previous.lexeme) - 1])))
+	str := add_escape_sequences(p.previous.lexeme[1:len(p.previous.lexeme) - 1])
+	defer delete(str)
+
+	emit_constant(p, obj_val(copy_string(p.vm, str)))
 }
 
 /*
