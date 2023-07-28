@@ -21,6 +21,7 @@ TokenType :: enum {
 
 	// one or two character tokens
 	BANG_EQUAL,
+	BAR_GREATER, // |>
 	EQUAL,
 	EQUAL_EQUAL,
 	FAT_ARROW,
@@ -46,6 +47,7 @@ TokenType :: enum {
 	IF,
 	IMPORT,
 	IN,
+	IT,
 	LET,
 	NIL,
 	NOT,
@@ -265,6 +267,8 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 					return check_keyword(l, 2, 4, "port", .IMPORT)
 				case 'n':
 					return check_keyword(l, 2, 0, "", .IN)
+				case 't':
+					return check_keyword(l, 2, 0, "", .IT)
 				}
 			}
 		}
@@ -396,6 +400,10 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 		return make_token(l, .SLASH)
 	case '*':
 		return make_token(l, .STAR)
+	case '|':
+		if match(l, '>') {
+			return make_token(l, .BAR_GREATER)
+		}
 	case '!':
 		if match(l, '=') {
 			return make_token(l, .BANG_EQUAL)

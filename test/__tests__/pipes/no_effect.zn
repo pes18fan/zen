@@ -1,0 +1,6 @@
+// If neither a function call is done nor an `it` is used in a pipeline, the
+// pipeline has no final effect and will evaluate to the last expression.
+print 1
+    |> 2
+    |> 3
+    |> 4; // expect: 4

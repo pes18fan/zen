@@ -24,6 +24,7 @@ Parser :: struct {
 	compiling_chunk:  ^Chunk,
 	current_compiler: ^Compiler,
 	globals:          ^Table,
+	pipeline_state:   PipelineState,
 	vm:               ^VM,
 }
 
@@ -31,6 +32,7 @@ Parser :: struct {
 Precedence :: enum {
 	NONE,
 	ASSIGNMENT, // =
+	PIPE, // |>
 	OR, // or
 	AND, // and
 	EQUALITY, // == !=
@@ -60,6 +62,12 @@ ParseRule :: struct {
 Variability :: enum {
 	VAR,
 	FINAL,
+}
+
+/* Whether a value is currently being piped through functions. */
+PipelineState :: enum {
+	NONE,
+	ACTIVE,
 }
 
 /*
@@ -188,6 +196,11 @@ consume :: proc(p: ^Parser, type: TokenType, message: string) {
 			"nothing" if p.current.type == .EOF else p.current.lexeme,
 		),
 	)
+}
+
+@(private = "file")
+consume_semi :: proc(p: ^Parser, message: string) {
+	consume(p, .SEMI, fmt.tprintf("Expect ';' after %s.", message))
 }
 
 /* Check if the token to be consumed is of the provided type. */
@@ -448,7 +461,13 @@ binary :: proc(p: ^Parser, can_assign: bool) {
 /* Parse a function call. */
 @(private = "file")
 call :: proc(p: ^Parser, can_assign: bool) {
-	arg_count := argument_list(p)
+	arg_count: u8 = 0
+	if p.pipeline_state == .ACTIVE {
+		emit_opcode(p, .OP_GET_IT)
+		arg_count += 1
+	}
+	
+	arg_count += argument_list(p)
 	emit_bytes(p, byte(OpCode.OP_CALL), arg_count)
 }
 
@@ -465,13 +484,14 @@ literal :: proc(p: ^Parser, can_assign: bool) {
 	case:
 		unreachable()
 	}
+	
 }
 
 /* Parse a grouping (parenthesized) expression. */
 @(private = "file")
 grouping :: proc(p: ^Parser, can_assign: bool) {
 	expression(p)
-	consume(p, TokenType.RPAREN, "Expect ')' after expression.")
+	consume(p, .RPAREN, "Expect ')' after expression.")
 }
 
 /* 
@@ -486,6 +506,16 @@ number :: proc(p: ^Parser, can_assign: bool) {
 	}
 
 	emit_constant(p, number_val(value))
+}
+
+/* Parse an `and` expression. */
+and_ :: proc(p: ^Parser, can_assign: bool) {
+	end_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+
+	emit_pop(p)
+	parse_precedence(p, .AND)
+
+	patch_jump(p, end_jump)
 }
 
 /* Parse an `or` expression. */
@@ -557,6 +587,7 @@ zstring :: proc(p: ^Parser, can_assign: bool) {
 	defer delete(str)
 
 	emit_constant(p, obj_val(copy_string(p.vm, str)))
+	
 }
 
 /*
@@ -623,11 +654,21 @@ variable :: proc(p: ^Parser, can_assign: bool) {
 }
 
 @(private = "file")
+it_ :: proc(p: ^Parser, can_assign: bool) {
+	if p.pipeline_state == .NONE {
+		error(p, "Cannot use 'it' outside of a pipeline.")
+	}
+
+	emit_opcode(p, .OP_GET_IT)
+}
+
+/* Parses an anonymous function. */
+@(private = "file")
 lambda :: proc(p: ^Parser, can_assign: bool) {
 	function(p, .LAMBDA)
 }
 
-/* Parse a unary expression. */
+/* Parses a unary expression. */
 @(private = "file")
 unary :: proc(p: ^Parser, can_assign: bool) {
 	operator_type := p.previous.type
@@ -641,8 +682,6 @@ unary :: proc(p: ^Parser, can_assign: bool) {
 		emit_opcode(p, .OP_NOT)
 	case .MINUS:
 		emit_opcode(p, .OP_NEGATE)
-	case:
-		unreachable()
 	}
 }
 
@@ -660,6 +699,7 @@ rules: []ParseRule = {
 	TokenType.SLASH = ParseRule{nil, binary, .FACTOR},
 	TokenType.STAR = ParseRule{nil, binary, .FACTOR},
 	TokenType.BANG_EQUAL = ParseRule{nil, binary, .EQUALITY},
+	TokenType.BAR_GREATER = ParseRule{nil, nil, .NONE},
 	TokenType.EQUAL = ParseRule{nil, nil, .NONE},
 	TokenType.EQUAL_EQUAL = ParseRule{nil, binary, .EQUALITY},
 	TokenType.GREATER = ParseRule{nil, binary, .COMPARISON},
@@ -679,6 +719,7 @@ rules: []ParseRule = {
 	TokenType.IF = ParseRule{nil, nil, .NONE},
 	TokenType.IMPORT = ParseRule{nil, nil, .NONE},
 	TokenType.IN = ParseRule{nil, nil, .NONE},
+	TokenType.IT = ParseRule{it_, nil, .NONE},
 	TokenType.LET = ParseRule{nil, nil, .NONE},
 	TokenType.NIL = ParseRule{literal, nil, .NONE},
 	TokenType.NOT = ParseRule{unary, nil, .NONE},
@@ -926,20 +967,33 @@ argument_list :: proc(p: ^Parser) -> u8 {
 	return arg_count
 }
 
-/* Parse an `and` expression. */
-and_ :: proc(p: ^Parser, can_assign: bool) {
-	end_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
-
-	emit_pop(p)
-	parse_precedence(p, .AND)
-
-	patch_jump(p, end_jump)
-}
-
 /* Parse any expression. */
 @(private = "file")
 expression :: proc(p: ^Parser) {
+	_expression(p, 0)
+}
+
+/* Recursive helper for expression(). */
+@(private = "file")
+_expression :: proc(p: ^Parser, pipes: u8) -> u8 {
 	parse_precedence(p, .ASSIGNMENT)
+
+	if pipes >= U8_MAX {
+		error(p, "Cannot have more than 255 pipes.")
+		return pipes
+	}
+
+	if !match(p, .BAR_GREATER) {
+		p.pipeline_state = .NONE
+		return pipes
+	}
+
+	if p.pipeline_state == .NONE {
+		p.pipeline_state = .ACTIVE
+	}
+
+	emit_opcode(p, .OP_SET_IT)
+	return _expression(p, pipes + 1)
 }
 
 /* Parse a block. */
@@ -961,6 +1015,7 @@ function :: proc(p: ^Parser, type: FunctionType) {
     Compiler itself is ended when we reach the end of the function body. */
 	begin_scope(p)
 
+	// Check if the function is anonymous or not.
 	if type != .LAMBDA {
 		consume(p, .LPAREN, "Expect '(' after function name.")
 	} else {
@@ -1015,7 +1070,7 @@ As simple as parsing the expression and inserting a return instruction.
 arrow_function :: proc(p: ^Parser, anonymous: bool) {
 	expression(p)
 	if !anonymous {
-		consume(p, .SEMI, "Expect ';' after arrow function.")
+		consume_semi(p, "arrow function")
 	}
 	
 	emit_opcode(p, .OP_RETURN)
@@ -1067,14 +1122,14 @@ let_declaration :: proc(p: ^Parser) {
 		if !match(p, .COMMA) {break} 	// This allows for multiple declarations
 	}
 
-	consume(p, .SEMI, "Expect ';' after variable declaration.")
+	consume_semi(p, "variable declaration")
 }
 
 /* Parse an expression statement. */
 @(private = "file")
 expression_statement :: proc(p: ^Parser) {
 	expression(p)
-	consume(p, .SEMI, "Expect ';' after expression.")
+	consume_semi(p, "expression")
 	emit_pop(p)
 }
 
@@ -1107,8 +1162,8 @@ if_statement :: proc(p: ^Parser) {
 @(private = "file")
 print_statement :: proc(p: ^Parser) {
 	expression(p)
-	consume(p, .SEMI, "Expect ';' after value.")
-	emit_byte(p, byte(OpCode.OP_PRINT))
+	consume_semi(p, "value")
+	emit_opcode(p, .OP_PRINT)
 }
 
 /* Parse a `return` statement. */
@@ -1124,7 +1179,7 @@ return_statement :: proc(p: ^Parser) {
 		emit_return(p)
 	} else {
 		expression(p)
-		consume(p, .SEMI, "Expect ';' after return value.")
+		consume_semi(p, "return value")
 		emit_opcode(p, .OP_RETURN)
 	}
 
@@ -1183,7 +1238,7 @@ break_statement :: proc(p: ^Parser) {
 		return
 	}
 
-	consume(p, .SEMI, "Expect ';' after 'break'.")
+	consume_semi(p, "break")
 
 	loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
 	append(&loop.breaks, emit_jump(p, .OP_JUMP))
@@ -1208,7 +1263,7 @@ continue_statement :: proc(p: ^Parser) {
 		return
 	}
 
-	consume(p, .SEMI, "Expect ';' after 'continue'.")
+	consume_semi(p, "continue")
 
 	loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
 
@@ -1322,7 +1377,7 @@ for_statement :: proc(p: ^Parser) {
 	exit_jump := -1
 	if !match(p, .SEMI) {
 		expression(p)
-		consume(p, .SEMI, "Expect ';' after loop condition.")
+		consume_semi(p, "loop condition")
 
 		// Jump out of the loop if the condition is false.
 		exit_jump = emit_jump(p, .OP_JUMP_IF_FALSE)
@@ -1446,6 +1501,7 @@ compile :: proc(vm: ^VM, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction,
 		panic_mode       = false,
 		current_compiler = nil,
 		globals          = globals,
+		pipeline_state   = .NONE,
 		vm               = vm,
 	}
 	init_compiler(&c, &p, .SCRIPT)

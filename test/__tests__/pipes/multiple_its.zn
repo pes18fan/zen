@@ -1,0 +1,4 @@
+print "hello"
+    |> upcase()
+    |> it + ", " + it + "!"
+    |> it + "!!"; // expect: HELLO, HELLO!!!

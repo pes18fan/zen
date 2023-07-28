@@ -1,0 +1,4 @@
+let x = ""
+    |> chomp()
+    |> gsub("hello", "hi");
+print x; // expect:

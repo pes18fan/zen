@@ -219,6 +219,10 @@ one by one.
 run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 	frame := &vm.frames[vm.frame_count - 1]
 
+	/* This variable stores the value of the built-in `it` variable, which
+	refers to the value of the last expression in a pipeline. */
+	pipeline_it: Value = nil
+
 	for {
 		when #config(DEBUG_TRACE_EXECUTION, false) {
 			fmt.printf("          ")
@@ -285,6 +289,8 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			// Take the value on top of the stack and store it into the slot.
 			frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
 		}
+		case .OP_GET_IT: vm_push(vm, pipeline_it)
+		case .OP_SET_IT: pipeline_it = vm_pop(vm)
 		case .OP_EQUAL:
 			{
 				b := vm_pop(vm)
@@ -341,13 +347,14 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 		case .OP_LOOP:
 			offset := read_short(frame)
 			frame.ip = mem.ptr_offset(frame.ip, -offset)
-		case .OP_CALL:
+		case .OP_CALL: {
 			arg_count := read_byte(frame)
 			// Return with an error if the call fails.
 			if !call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count)) {
 				return .INTERPRET_RUNTIME_ERROR
 			}
 			frame = &vm.frames[vm.frame_count - 1]
+		}
 		case .OP_CLOSURE:
 			{
 				function := as_function(read_constant(frame))

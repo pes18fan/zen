@@ -10,16 +10,26 @@ import "core:strings"
 
 init_natives :: proc(vm: ^VM) {
 	// Define native functions
+	// time
 	define_native(vm, "clock", clock_native, arity = 0)
-	define_native(vm, "parse", parse_native, arity = 1)
-	define_native(vm, "gets", gets_native, arity = 0)
+
+	// numbers and math
 	define_native(vm, "sqrt", sqrt_native, arity = 1)
+	define_native(vm, "parse", parse_native, arity = 1)
+
+	// errors
+	define_native(vm, "panic", panic_native, arity = 1)
+
+	// io
+	define_native(vm, "gets", gets_native, arity = 0)
+
+	// strings
 	define_native(vm, "chomp", chomp_native, arity = 1)
 	define_native(vm, "len", len_native, arity = 1)
 	define_native(vm, "gsub", gsub_native, arity = 3)
-	define_native(vm, "panic", panic_native, arity = 1)
 	define_native(vm, "upcase", upcase_native, arity = 1)
 	define_native(vm, "downcase", downcase_native, arity = 1)
+	define_native(vm, "reverse", reverse_native, arity = 1)
 }
 
 /* Get the current UNIX time in seconds. */
@@ -160,6 +170,22 @@ downcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool)
 	str, err := strings.to_lower(as_string(args[0]).chars)
 	if err != nil {
 		vm_panic(vm, "Allocator error on downcase(): %s", err)
+		return nil, false
+	}
+
+	return obj_val(take_string(vm, str)), true
+}
+
+/* Reverse a string. */
+reverse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "Can only reverse strings, not %vs.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	str, err := strings.reverse(as_cstring(args[0]))
+	if err != nil {
+		vm_panic(vm, "Allocator error on reverse(): %s", err)
 		return nil, false
 	}
 

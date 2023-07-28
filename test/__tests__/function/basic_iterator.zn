@@ -1,0 +1,19 @@
+func range(start, end, f) {
+    if end < start {
+        print "End must be greater than start";
+        return;
+    }
+
+    for let i = start; i < end; i = i + 1 {
+        f(i);
+    }
+}
+
+range(0, 5, func(i) {
+    print i + 1;    
+});
+// expect: 1
+// expect: 2
+// expect: 3
+// expect: 4
+// expect: 5

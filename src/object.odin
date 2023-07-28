@@ -24,6 +24,8 @@ ObjFunction :: struct {
 	upvalue_count: int,
 	chunk:         Chunk,
 	name:          ^ObjString,
+
+	// Whether the function has returned in its highest scope.
 	has_returned:  bool,
 }
 

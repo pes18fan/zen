@@ -1,0 +1,4 @@
+print " hello, world "
+    |> chomp()
+    |> gsub("world", "universe")
+    |> upcase(); // expect: HELLO, UNIVERSE
