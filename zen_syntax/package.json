@@ -1,0 +1,33 @@
+{
+    "name": "zen",
+    "displayName": "zen",
+    "description": "language support for zen",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.77.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "zen",
+                "aliases": [
+                    "zen"
+                ],
+                "extensions": [
+                    ".zn"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "zen",
+                "scopeName": "source.zen",
+                "path": "./syntaxes/zen.tmLanguage.json"
+            }
+        ]
+    }
+}

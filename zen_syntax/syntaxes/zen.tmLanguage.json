@@ -1,0 +1,229 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "zen",
+    "patterns": [
+        { "include": "#comments" },
+        { "include": "#punctuation" },
+        { "include": "#keywords" },
+        { "include": "#statements" },
+        { "include": "#constants" },
+        { "include": "#variables" },
+        { "include": "#operators" },
+        { "include": "#callables" },
+        { "include": "#numerics" },
+        { "include": "#strings" }
+    ],
+    "repository": {
+        "keywords": {
+            "patterns": [
+                {
+                    "match": "\\b(if|else|while|for|return|break|continue|switch)\\b",
+                    "name": "keyword.control.zen"
+                },
+                {
+                    "name": "support.function.builtin.zen",
+                    "match": "\\b(print)\\b"
+                },
+                {
+                    "match": "\\b(import)\b",
+                    "name": "keyword.other.zen"
+                }
+            ]
+        },
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.zen",
+                    "match": "//.*"
+                }
+            ]
+        },
+        "variables": {
+            "patterns": [
+                {
+                    "name": "variable.language.this.zen",
+                    "match": "\\b(this)\\b"
+                },
+                {
+                    "name": "variable.language.it.zen",
+                    "match": "\\b(it)\\b"
+                },
+                {
+                    "name": "variable.language.super.zen",
+                    "match": "\\b(super)\\b"
+                }
+            ]
+        },
+        "statements": {
+            "patterns": [
+                {
+                    "begin": "\\b(let|final)\\b",
+                    "end": "(;|$)",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "keyword.declaration.zen"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "begin": "\\b([a-zA-Z_][A-Za-z0-9_?!]*)\\b",
+                            "end": "(,|$)",
+                            "beginCaptures": {
+                                "1": {
+                                    "name": "support.variable.zen"
+                                }
+                            },
+                            "patterns": [
+                                { "include": "#comments" },
+                                { "include": "#punctuation" },
+                                { "include": "#keywords" },
+                                { "include": "#statements" },
+                                {
+                                    "include": "#constants"
+                                },
+                                {
+                                    "include": "#variables"
+                                },
+                                {
+                                    "include": "#operators"
+                                },
+                                {
+                                    "include": "#callables"
+                                },
+                                {
+                                    "include": "#numerics"
+                                },
+                                {
+                                    "include": "#strings"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "match": "\\b(func)\\s*\\(([A-Za-z_][A-Za-z0-9_?!,\\s]*)\\)\\s*=>",
+                    "captures": {
+                        "1": {
+                            "name": "storage.type.function.zen"
+                        },
+                        "2": {
+                            "patterns": [
+                                {
+                                    "match": "\\b[A-Za-z_][A-Za-z0-9_?!]*\\b",
+                                    "name": "variable.parameter.zen"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_?!]*)\\s*\\(([A-Za-z0-9_?!,\\s]*)\\)",
+                    "captures": {
+                        "1": {
+                            "name": "storage.type.function.zen"
+                        },
+                        "2": {
+                            "name": "entity.name.function.zen"
+                        },
+                        "3": {
+                            "patterns": [
+                                {
+                                    "match": "\\b[A-Za-z_][A-Za-z0-9_?!]*\\b",
+                                    "name": "variable.parameter.zen"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        "callables": {
+            "patterns": [
+                {
+                    "match": "([A-Za-z_][A-Za-z0-9_?!]*)\\s*\\(",
+                    "name": "support.function.zen"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.arithmetic.zen",
+                    "match": "\\+|-|\\*|\\/|\\mod"
+                },
+                {
+                    "name": "keyword.operator.comparison.zen",
+                    "match": "==|\\!="
+                },
+                {
+                    "name": "keyword.operator.relational.zen",
+                    "match": "\\<\\=|\\>\\=|\\<|\\>"
+                },
+                {
+                    "name": "keyword.operator.logical.zen",
+                    "match": "\\b(and|or|not)\\b"
+                },
+                {
+                    "name": "keyword.operator.assignment.zen",
+                    "match": "\\="
+                },
+                {
+                    "name": "keyword.operator.pipe.zen",
+                    "match": "\\|>"
+                },
+                {
+                    "name": "keyword.operator.arrow.zen",
+                    "match": "\\=>"
+                }
+            ]
+        },
+        "numerics": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.zen",
+                    "match": "\\b[0-9]+(?:.[0-9]+)?\\b"
+                }
+            ]
+        },
+        "punctuation": {
+            "patterns": [
+                {
+                    "name": "punctuation.section.block.begin.zen",
+                    "match": "\\{"
+                },
+                {
+                    "name": "punctuation.section.block.end.zen",
+                    "match": "\\}"
+                },
+                {
+                    "name": "punctuation.terminator.zen",
+                    "match": ";"
+                }
+            ]
+        },
+        "constants": {
+            "patterns": [
+                {
+                    "name": "constant.language.boolean.zen",
+                    "match": "\\b(true|false)\\b"
+                },
+                {
+                    "name": "constant.language.null.zen",
+                    "match": "\\b(nil)\\b"
+                }
+            ]
+        },
+        "strings": {
+            "name": "string.quoted.double.zen",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.zen",
+                    "match": "\\\\."
+                }
+            ]
+        }
+    },
+    "scopeName": "source.zen"
+}
