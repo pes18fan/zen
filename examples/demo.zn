@@ -53,6 +53,7 @@ for let i = 0; i < 10; i = i + 1 {
 }
 
 // Break and continue.
+//! Break statements are buggy at the moment; continue statements work fine.
 for let i = 0; i < 10; i = i + 1 {
     if i == 5 {
         continue;
