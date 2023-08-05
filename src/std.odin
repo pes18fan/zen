@@ -72,7 +72,8 @@ parse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil, false
 	}
 
-	n, ok := strconv.parse_f64(as_string(args[0]).chars)
+	str := strings.trim_space(as_cstring(args[0]))
+	n, ok := strconv.parse_f64(str)
 	if !ok {
 		vm_panic(vm, "Cannot parse '%s' to a number.", as_string(args[0]).chars)
 		return nil, false
