@@ -93,7 +93,7 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 Options:
     -h, -?, --help      Print this help message and exit
     -v, --version       Print version information and exit
-	-C, --check-leaks   Report memory leaks on exit
+    -C, --check-leaks   Report memory leaks on exit
     -T, --trace         Trace script execution
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation`
