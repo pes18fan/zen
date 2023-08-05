@@ -90,6 +90,7 @@ print "69"
 // Things to expect in the future (topmost being the most likely):
 // - Classes and methods
 // - More standard library functions
+// - Automatic semicolon insertion (this is harder than expected)
 // - Modules
 // - Gradual typing
 // - Pattern matching
