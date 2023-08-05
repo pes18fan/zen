@@ -53,18 +53,21 @@ A wrapper around a dynamic array that works as a constant pool for values.
 */
 ValueArray :: struct {
     values: [dynamic]Value,
+    count: int,
 }
 
 /* Initialize the constant pool. */
 init_value_array :: proc () -> ValueArray {
     return ValueArray {
         values = make([dynamic]Value, 0, 0),
+        count = 0,
     }
 }
 
 /* Write to the constant pool. */
 write_value_array :: proc (a: ^ValueArray, value: Value) {
     append(&a.values, value)
+    a.count += 1
 }
 
 /* Free the constant pool's memory. */

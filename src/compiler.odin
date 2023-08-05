@@ -25,7 +25,8 @@ Parser :: struct {
 	current_compiler: ^Compiler,
 	globals:          ^Table,
 	pipeline_state:   PipelineState,
-	vm:               ^VM,
+	gc:               ^GC,
+	prev_mark_roots:  RootSource,
 }
 
 /* Expression precedence. */
@@ -289,7 +290,7 @@ TODO: Increase the limit of the constant pool from 255 to 65535.
 */
 @(private = "file")
 make_constant :: proc(p: ^Parser, value: Value) -> byte {
-	constant := add_constant(current_chunk(p), value)
+	constant := add_constant(current_chunk(p), p.gc, value)
 	if constant > U8_MAX {
 		error(p, "Too many constants in one chunk.")
 		return 0
@@ -351,16 +352,16 @@ init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
 		globals     = p.globals,
 	}
 
-	c.function = new_function(p.vm)
-
-	// DON'T FORGET to set current_compiler to the new compiler!
-	// Took me WAAAAAAAAAAY too long to figure out I was missing this.
+	/* DON'T FORGET to set current_compiler to the new compiler!
+	Took me WAAAAAAAAAAY too long to figure out I was missing this. */
 	p.current_compiler = c
 
+	c.function = new_function(p.gc)
+
 	if type != .SCRIPT && type != .LAMBDA {
-		c.function.name = copy_string(p.vm, p.previous.lexeme)
+		c.function.name = copy_string(p.gc, p.previous.lexeme)
 	} else if type == .LAMBDA {
-		c.function.name = copy_string(p.vm, "lambda")
+		c.function.name = copy_string(p.gc, "lambda")
 	}
 
 	// The first slot is always the function itself.
@@ -466,7 +467,7 @@ call :: proc(p: ^Parser, can_assign: bool) {
 		emit_opcode(p, .OP_GET_IT)
 		arg_count += 1
 	}
-	
+
 	arg_count += argument_list(p)
 	emit_bytes(p, byte(OpCode.OP_CALL), arg_count)
 }
@@ -484,7 +485,7 @@ literal :: proc(p: ^Parser, can_assign: bool) {
 	case:
 		unreachable()
 	}
-	
+
 }
 
 /* Parse a grouping (parenthesized) expression. */
@@ -540,7 +541,7 @@ concatenate_byte :: proc(a: string, b: byte) -> string {
 	len := len(a) + 1
 	res := make([]byte, len)
 	i := 0
- 	i = copy(res, a)
+	i = copy(res, a)
 	res[i] = b
 
 	return string(res)
@@ -554,18 +555,16 @@ So far, only the newline and tab sequences are supported.
 */
 @(private = "file")
 add_escape_sequences :: proc(str: string) -> string {
-	sequences := map[byte]byte{
-		'n'     = '\n',
-		't'     = '\t',
+	sequences := map[byte]byte {
+		'n' = '\n',
+		't' = '\t',
 	}
 	defer delete(sequences)
-	
+
 	escaped := false
 	res := ""
 	for i, idx in str {
-		if i == '\\' &&
-		   idx + 1 < len(str) &&
-		   str[idx + 1] in sequences {
+		if i == '\\' && idx + 1 < len(str) && str[idx + 1] in sequences {
 			res = concatenate_byte(res, sequences[str[idx + 1]])
 			escaped = true
 			continue
@@ -586,8 +585,7 @@ zstring :: proc(p: ^Parser, can_assign: bool) {
 	str := add_escape_sequences(p.previous.lexeme[1:len(p.previous.lexeme) - 1])
 	defer delete(str)
 
-	emit_constant(p, obj_val(copy_string(p.vm, str)))
-	
+	emit_constant(p, obj_val(copy_string(p.gc, str)))
 }
 
 /*
@@ -628,7 +626,7 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 		}
 
 		if set_op == byte(OpCode.OP_SET_GLOBAL) {
-			global_o_str := copy_string(p.vm, name.lexeme)
+			global_o_str := copy_string(p.gc, name.lexeme)
 			value: Value;ok: bool
 
 			if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
@@ -762,7 +760,7 @@ parse_precedence :: proc(p: ^Parser, precedence: Precedence) {
 /* Parse an identifier name. */
 @(private = "file")
 identifier_constant :: proc(p: ^Parser, name: ^Token) -> u8 {
-	return make_constant(p, obj_val(copy_string(p.vm, name.lexeme)))
+	return make_constant(p, obj_val(copy_string(p.gc, name.lexeme)))
 }
 
 /* Check if two idents are equal. */
@@ -904,7 +902,7 @@ parse_variable :: proc(p: ^Parser, error_message: string, final: Variability) ->
 	declare_variable(p, final)
 	if p.current_compiler.scope_depth > 0 {return 0}
 
-	global_o_str := copy_string(p.vm, p.previous.lexeme)
+	global_o_str := copy_string(p.gc, p.previous.lexeme)
 	value: Value;ok: bool
 
 	if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
@@ -1072,7 +1070,7 @@ arrow_function :: proc(p: ^Parser, anonymous: bool) {
 	if !anonymous {
 		consume_semi(p, "arrow function")
 	}
-	
+
 	emit_opcode(p, .OP_RETURN)
 
 	p.current_compiler.function.has_returned = true
@@ -1482,6 +1480,10 @@ statement :: proc(p: ^Parser) {
 	}
 }
 
+restore_gc :: proc(p: ^Parser) {
+	p.gc.mark_roots_arg = p.prev_mark_roots
+}
+
 /* 
 Compile the provided slice of tokens into a bytecode chunk. 
 The compile function also takes in a pointer to a globals table. The main 
@@ -1492,7 +1494,7 @@ recompiles every line but that's not necessary in a file.
 TODO: Find a better way to store global variables so that this whole
 table-passing thing isn't necessary.
 */
-compile :: proc(vm: ^VM, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
+compile :: proc(gc: ^GC, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
 	c: Compiler
 	p := Parser {
 		tokens           = tokens,
@@ -1502,8 +1504,10 @@ compile :: proc(vm: ^VM, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction,
 		current_compiler = nil,
 		globals          = globals,
 		pipeline_state   = .NONE,
-		vm               = vm,
+		gc               = gc,
+		prev_mark_roots  = gc.mark_roots_arg,
 	}
+	gc.mark_roots_arg = &p
 	init_compiler(&c, &p, .SCRIPT)
 
 	advance(&p)
@@ -1513,6 +1517,7 @@ compile :: proc(vm: ^VM, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction,
 	}
 
 	fn = end_compiler(&p)
+	restore_gc(&p)
 
 	return fn, !p.had_error
 }

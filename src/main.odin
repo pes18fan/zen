@@ -29,7 +29,7 @@ repl :: proc(vm: ^VM) -> int {
 		line := string(buf[:n])
 		line = strings.trim_right_space(line)
 
-		interpret(vm, line)
+		interpret(vm, vm.gc, line)
 	}
 
 	return 0
@@ -53,7 +53,7 @@ run_file :: proc(vm: ^VM, path: string) -> int {
 	source, ok := read_file(path)
 	defer delete(source)
 	if !ok {return 74}
-	result := interpret(vm, source)
+	result := interpret(vm, vm.gc, source)
 
 	if result == .INTERPRET_LEX_ERROR do return 65
 	if result == .INTERPRET_COMPILE_ERROR do return 65
@@ -118,9 +118,14 @@ main :: proc() {
 		}
 	}
 
+	gc := init_gc()
 	vm := init_VM()
+	gc.mark_roots_arg = &vm
+	vm.gc = &gc
+	init_natives(&gc)
 
 	status = parse_argv(&vm)
 
 	free_VM(&vm)
+	free_gc(&gc)
 }

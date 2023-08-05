@@ -22,10 +22,10 @@ CallFrame :: struct {
 	closure: ^ObjClosure,
 
 	/* Pointer to the current instruction in the frame. */
-	ip:       ^byte,
+	ip:      ^byte,
 
 	/* A slice of the VM's main stack. */
-	slots:    []Value,
+	slots:   []Value,
 }
 
 /* The virtual machine that interprets the bytecode. */
@@ -40,18 +40,12 @@ VM :: struct {
 	frames:           [FRAMES_MAX]CallFrame,
 	frame_count:      int,
 
-	/* Table of runtime global variables. */
-	globals:          Table,
-
 	/* Table of compile-time global variables; necessary for the REPL. */
 	compiler_globals: Table,
-	strings:          Table,
 
 	/* Linked list of all open upvalues. */
 	open_upvalues:    ^ObjUpvalue,
-
-	/* Linked list of all objects allocated by the VM. */
-	objects:          ^Obj,
+	gc:               ^GC,
 }
 
 /* The result of the interpreting. */
@@ -85,11 +79,17 @@ vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
 	reset_stack(vm)
 }
 
-/* Define a native function. */
-define_native :: proc(vm: ^VM, name: string, function: NativeFn, arity: int) {
-	vm_push(vm, obj_val(copy_string(vm, name)))
-	vm_push(vm, obj_val(new_native(vm, function, arity)))
-	table_set(&vm.globals, as_string(vm.stack[0]), vm.stack[1])
+/* 
+Define a native function.
+This assumes that gc.mark_roots_arg is a pointer to the VM. This assumption
+is not harmful, as this function is never called and never needs to be called
+during compilation of the source.
+*/
+define_native :: proc(gc: ^GC, name: string, function: NativeFn, arity: int) {
+	vm := as_vm(gc.mark_roots_arg)
+	vm_push(vm, obj_val(copy_string(gc, name)))
+	vm_push(vm, obj_val(new_native(gc, function, arity)))
+	table_set(&gc.globals, as_string(vm.stack[0]), vm.stack[1])
 	vm_pop(vm)
 	vm_pop(vm)
 }
@@ -100,7 +100,6 @@ reset_stack :: proc(vm: ^VM) {
 		delete(vm.stack)
 		vm.stack = make([dynamic]Value, 0, 0)
 	}
-	vm.chunk = nil
 	vm.frame_count = 0
 	vm.open_upvalues = nil
 }
@@ -110,15 +109,10 @@ init_VM :: proc() -> VM {
 	vm := VM {
 		chunk            = nil,
 		stack            = make([dynamic]Value, 0, 0),
-		open_upvalues	 = nil,
-		objects          = nil,
-		globals          = init_table(),
+		open_upvalues    = nil,
 		compiler_globals = init_table(),
-		strings          = init_table(),
 		frame_count      = 0,
 	}
-
-	init_natives(&vm)
 
 	return vm
 }
@@ -126,9 +120,6 @@ init_VM :: proc() -> VM {
 /* Free's the VM's memory. */
 free_VM :: proc(vm: ^VM) {
 	free_table(&vm.compiler_globals)
-	free_table(&vm.globals)
-	free_table(&vm.strings)
-	free_objects(vm)
 	delete(vm.stack)
 }
 
@@ -262,7 +253,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			{
 				name := read_string(frame)
 				value: Value;ok: bool
-				if value, ok = table_get(&vm.globals, name); !ok {
+				if value, ok = table_get(&vm.gc.globals, name); !ok {
 					vm_panic(vm, "Undefined variable '%s'.", name.chars)
 					return .INTERPRET_RUNTIME_ERROR
 				}
@@ -270,27 +261,31 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			}
 		case .OP_DEFINE_GLOBAL:
 			name := read_string(frame)
-			table_set(&vm.globals, name, vm_peek(vm, 0))
+			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			vm_pop(vm)
 		case .OP_SET_GLOBAL:
 			name := read_string(frame)
 
-			if table_set(&vm.globals, name, vm_peek(vm, 0)) {
-				table_delete(&vm.globals, name)
+			if table_set(&vm.gc.globals, name, vm_peek(vm, 0)) {
+				table_delete(&vm.gc.globals, name)
 				vm_panic(vm, "Undefined variable '%s'.", name.chars)
 				return .INTERPRET_RUNTIME_ERROR
 			}
-		case .OP_GET_UPVALUE: {
-			slot := read_byte(frame)
-			vm_push(vm, frame.closure.upvalues[slot].location^)
-		}
-		case .OP_SET_UPVALUE: {
-			slot := read_byte(frame)
-			// Take the value on top of the stack and store it into the slot.
-			frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
-		}
-		case .OP_GET_IT: vm_push(vm, pipeline_it)
-		case .OP_SET_IT: pipeline_it = vm_pop(vm)
+		case .OP_GET_UPVALUE:
+			{
+				slot := read_byte(frame)
+				vm_push(vm, frame.closure.upvalues[slot].location^)
+			}
+		case .OP_SET_UPVALUE:
+			{
+				slot := read_byte(frame)
+				// Take the value on top of the stack and store it into the slot.
+				frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
+			}
+		case .OP_GET_IT:
+			vm_push(vm, pipeline_it)
+		case .OP_SET_IT:
+			pipeline_it = vm_pop(vm)
 		case .OP_EQUAL:
 			{
 				b := vm_pop(vm)
@@ -302,20 +297,18 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 		case .OP_LESS:
 			binary_op(vm, bool, "<") or_return
 		case .OP_ADD:
-			b := vm_pop(vm)
-			a := vm_pop(vm)
-			if is_string(a) && is_string(b) {
-				concatenate(vm, as_string(a), as_string(b))
-			} else if is_number(a) && is_number(b) {
-				b := as_number(b)
-				a := as_number(a)
+			if is_string(vm_peek(vm, 0)) && is_string(vm_peek(vm, 0)) {
+				concatenate(vm)
+			} else if is_number(vm_peek(vm, 0)) && is_number(vm_peek(vm, 0)) {
+				b := as_number(vm_pop(vm)) 
+				a := as_number(vm_pop(vm))
 				vm_push(vm, number_val(a + b))
 			} else {
 				vm_panic(
 					vm,
 					"Expected two numbers or two strings as operands to '+', got %v and %v instead.",
-					type_of_value(a),
-					type_of_value(b),
+					type_of_value(vm_pop(vm)),
+					type_of_value(vm_pop(vm)),
 				)
 				return .INTERPRET_RUNTIME_ERROR
 			}
@@ -347,20 +340,21 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 		case .OP_LOOP:
 			offset := read_short(frame)
 			frame.ip = mem.ptr_offset(frame.ip, -offset)
-		case .OP_CALL: {
-			arg_count := read_byte(frame)
-			// Return with an error if the call fails.
-			if !call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count)) {
-				return .INTERPRET_RUNTIME_ERROR
+		case .OP_CALL:
+			{
+				arg_count := read_byte(frame)
+				// Return with an error if the call fails.
+				if !call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count)) {
+					return .INTERPRET_RUNTIME_ERROR
+				}
+				frame = &vm.frames[vm.frame_count - 1]
 			}
-			frame = &vm.frames[vm.frame_count - 1]
-		}
 		case .OP_CLOSURE:
 			{
 				function := as_function(read_constant(frame))
-				closure := new_closure(vm, function)
+				closure := new_closure(vm.gc, function)
 				vm_push(vm, obj_val(closure))
-				
+
 				for i in 0 ..< closure.upvalue_count {
 					is_local := bool(read_byte(frame))
 					index := read_byte(frame)
@@ -378,10 +372,11 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 					}
 				}
 			}
-		case .OP_CLOSE_UPVALUE: {
-			close_upvalues(vm, &vm.stack[len(vm.stack) - 1])
-			vm_pop(vm)
-		}
+		case .OP_CLOSE_UPVALUE:
+			{
+				close_upvalues(vm, &vm.stack[len(vm.stack) - 1])
+				vm_pop(vm)
+			}
 		case .OP_RETURN:
 			{
 				result := vm_pop(vm) // Retrieve the return value from the stack.
@@ -405,7 +400,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 }
 
 /* Interpret a chunk. */
-interpret :: proc(vm: ^VM, source: string) -> InterpretResult {
+interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
 	lexer := init_lexer(source)
 	tokens, lx_ok := lex(&lexer)
 	defer delete(tokens)
@@ -413,13 +408,13 @@ interpret :: proc(vm: ^VM, source: string) -> InterpretResult {
 		return .INTERPRET_LEX_ERROR
 	}
 
-	fn, cmp_ok := compile(vm, tokens, &vm.compiler_globals)
+	fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
 	if !cmp_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
 
 	vm_push(vm, obj_val(fn))
-	closure := new_closure(vm, fn)
+	closure := new_closure(gc, fn)
 	vm_pop(vm)
 	vm_push(vm, obj_val(closure))
 	call(vm, closure, 0) // The script itself is a function, so call it.
@@ -428,20 +423,17 @@ interpret :: proc(vm: ^VM, source: string) -> InterpretResult {
 }
 
 /* Push a value onto the stack. */
-@(private = "file")
 vm_push :: #force_inline proc(vm: ^VM, value: Value) #no_bounds_check {
 	append(&vm.stack, value)
 }
 
 /* Pop a value out of the stack. */
-@(private = "file")
 vm_pop :: #force_inline proc(vm: ^VM) -> Value #no_bounds_check {
 	assert(len(vm.stack) > 0)
 	return pop(&vm.stack)
 }
 
 /* Peek at a certain distance from the top of the stack. */
-@(private = "file")
 vm_peek :: #force_inline proc(vm: ^VM, distance: int) -> Value #no_bounds_check {
 	return vm.stack[len(vm.stack) - 1 - distance]
 }
@@ -535,7 +527,7 @@ capture_upvalue :: proc(vm: ^VM, local: ^Value) -> ^ObjUpvalue {
 		return upvalue
 	}
 
-	created_upvalue := new_upvalue(vm, local)
+	created_upvalue := new_upvalue(vm.gc, local)
 	created_upvalue.next_upvalue = upvalue
 
 	if prev_upvalue == nil {
@@ -560,23 +552,34 @@ close_upvalues :: proc(vm: ^VM, last: ^Value) {
 
 /* Concatenate two strings. */
 @(private = "file")
-concatenate :: proc(vm: ^VM, a: ^ObjString, b: ^ObjString) {
+concatenate :: proc(vm: ^VM) {
+	/* A collection may occur when concatenating. To prevent the GC from
+	collecting the strings being concatenated, we just peek the strings from the
+	heap, concatenate them and then only pop them off. */
+	b := as_string(vm_peek(vm, 0))
+	a := as_string(vm_peek(vm, 1))
+
 	length := a.len + b.len
 	chars := make([]byte, length)
 	i := 0
 	i = +copy(chars, a.chars)
 	copy(chars[i:], b.chars)
 
-	result := take_string(vm, string(chars))
+	result := take_string(vm.gc, string(chars))
+	/* Pop off the two original strings. */
+	vm_pop(vm)
+	vm_pop(vm)
+
+	/* And push the final result. */
 	vm_push(vm, (^Obj)(result))
 }
 
-free_objects :: proc(vm: ^VM) {
-	object := vm.objects
+free_objects :: proc(gc: ^GC) {
+	object := gc.objects
 
 	for object != nil {
 		next := object.next
-		free_object(object)
+		free_object(gc, object)
 		object = next
 	}
 }

@@ -115,8 +115,12 @@ write_chunk :: proc(c: ^Chunk, byte: byte, line: int) {
 }
 
 /* Adds a new constant value to the chunk. */
-add_constant :: proc(c: ^Chunk, value: Value) -> int {
+add_constant :: proc(c: ^Chunk, gc: ^GC, value: Value) -> int {
+	/* Temporarily push the value to the stack so that the GC can see it
+	and doesn't sweep it away. */
+	temp_push(gc, value)
 	write_value_array(&c.constants, value)
+	temp_pop(gc)
 	return len(c.constants.values) - 1
 }
 

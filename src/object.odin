@@ -13,8 +13,9 @@ ObjType :: enum {
 
 /* An object allocated on the heap. */
 Obj :: struct {
-	type: ObjType,
-	next: ^Obj,
+	type:      ObjType,
+	is_marked: bool,
+	next:      ^Obj,
 }
 
 /* A function object. */
@@ -136,26 +137,44 @@ type_of_obj :: proc(obj: ^Obj) -> string {
 	unreachable()
 }
 
-allocate_obj :: proc(v: ^VM, $T: typeid, type: ObjType) -> ^Obj {
+allocate_obj :: proc(gc: ^GC, $T: typeid, type: ObjType) -> ^Obj {
+	gc.bytes_allocated += size_of(T)
+	when #config(DEBUG_STRESS_GC, false) {
+		collect_garbage(gc)
+	}
+
+	/* When the total number of bytes allocated exceeds the next GC threshold,
+	 * invoke a collection. */
+	if gc.bytes_allocated > gc.next_gc {
+		collect_garbage(gc)
+	}
+
 	obj := new(T)
 	obj.type = type
-	obj.next = v.objects
-	v.objects = obj
+	obj.is_marked = false
+
+	obj.next = gc.objects
+	gc.objects = obj
+
+	when #config(DEBUG_LOG_GC, false) {
+		fmt.eprintf("%p allocate %d for type %v\n", obj, size_of(obj), type_of_obj(obj))
+	}
+
 	return obj
 }
 
-new_closure :: proc(vm: ^VM, function: ^ObjFunction) -> ^ObjClosure {
+new_closure :: proc(gc: ^GC, function: ^ObjFunction) -> ^ObjClosure {
 	upvalues := make([]^ObjUpvalue, function.upvalue_count) // allocate with the upvalue count of the function!!!!!!!!!
 
-	closure := cast(^ObjClosure)(allocate_obj(vm, ObjClosure, .CLOSURE))
+	closure := cast(^ObjClosure)(allocate_obj(gc, ObjClosure, .CLOSURE))
 	closure.function = function
 	closure.upvalues = upvalues
 	closure.upvalue_count = function.upvalue_count
 	return closure
 }
 
-new_function :: proc(vm: ^VM) -> ^ObjFunction {
-	fn := cast(^ObjFunction)(allocate_obj(vm, ObjFunction, .FUNCTION))
+new_function :: proc(gc: ^GC) -> ^ObjFunction {
+	fn := cast(^ObjFunction)(allocate_obj(gc, ObjFunction, .FUNCTION))
 	fn.arity = 0
 	fn.upvalue_count = 0
 	fn.name = nil
@@ -164,15 +183,15 @@ new_function :: proc(vm: ^VM) -> ^ObjFunction {
 	return fn
 }
 
-new_native :: proc(vm: ^VM, function: NativeFn, arity: int) -> ^ObjNative {
-	native := cast(^ObjNative)(allocate_obj(vm, ObjNative, .NATIVE))
+new_native :: proc(gc: ^GC, function: NativeFn, arity: int) -> ^ObjNative {
+	native := cast(^ObjNative)(allocate_obj(gc, ObjNative, .NATIVE))
 	native.function = function
 	native.arity = arity
 	return native
 }
 
-new_upvalue :: proc(vm: ^VM, slot: ^Value) -> ^ObjUpvalue {
-	upvalue := cast(^ObjUpvalue)(allocate_obj(vm, ObjUpvalue, .UPVALUE))
+new_upvalue :: proc(gc: ^GC, slot: ^Value) -> ^ObjUpvalue {
+	upvalue := cast(^ObjUpvalue)(allocate_obj(gc, ObjUpvalue, .UPVALUE))
 	upvalue.closed = nil_val()
 	upvalue.location = slot
 	upvalue.next_upvalue = nil
@@ -180,16 +199,58 @@ new_upvalue :: proc(vm: ^VM, slot: ^Value) -> ^ObjUpvalue {
 }
 
 /* Return a newly allocated copy of a string, or an interned one. */
-copy_string :: proc(vm: ^VM, str: string) -> ^ObjString {
+copy_string :: proc(gc: ^GC, str: string) -> ^ObjString {
 	s := strings.clone(str)
 	hash := hash_string(s)
 
-	interned := table_find_string(&vm.strings, s, hash)
+	interned := table_find_string(&gc.strings, s, hash)
 	if interned != nil {
 		delete(s)
 		return interned
 	}
-	return allocate_string(vm, s, hash)
+	return allocate_string(gc, s, hash)
+}
+
+
+allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
+	zstring := as_string(allocate_obj(gc, ObjString, .STRING))
+	zstring.chars = str
+	zstring.hash = hash
+	zstring.len = len(str)
+
+	vm: ^VM
+	/* Need to do this little dance to get the VM. */
+	switch s in gc.mark_roots_arg {
+		case ^VM: vm = s
+		case ^Parser: vm = as_vm(s.prev_mark_roots)
+	}
+
+	/* Stash the string on the stack so it doesn't get collected. */
+	vm_push(vm, obj_val(zstring))
+	table_set(&gc.strings, zstring, nil_val())
+	vm_pop(vm)
+
+	return zstring
+}
+
+hash_string :: proc(str: string) -> u32 {
+	hash: u32 = 2166136261
+	for c in str {
+		hash ~= u32(c)
+		hash *= 16777619
+	}
+	return hash
+}
+
+/* Take ownership of a string and return an interned one if it exists. */
+take_string :: proc(gc: ^GC, str: string) -> ^ObjString {
+	hash := hash_string(str)
+	interned := table_find_string(&gc.strings, str, hash)
+	if interned != nil {
+		delete(str)
+		return interned
+	}
+	return allocate_string(gc, str, hash)
 }
 
 /* Print the string representation of a function. */
@@ -218,36 +279,15 @@ print_object :: proc(obj: ^Obj) {
 	}
 }
 
-allocate_string :: proc(v: ^VM, str: string, hash: u32) -> ^ObjString {
-	zstring := as_string(allocate_obj(v, ObjString, .STRING))
-	zstring.chars = str
-	zstring.hash = hash
-	zstring.len = len(str)
-	table_set(&v.strings, zstring, nil_val())
-	return zstring
-}
+free_object :: proc(gc: ^GC, obj: ^Obj) {
+	gc.bytes_allocated -= size_of(obj)
 
-hash_string :: proc(str: string) -> u32 {
-	hash: u32 = 2166136261
-	for c in str {
-		hash ~= u32(c)
-		hash *= 16777619
+	when #config(DEBUG_LOG_GC, false) {
+		fmt.eprintf("%p free ", obj)
+		print_object(obj)
+		fmt.eprintf(" of type %v\n", type_of_obj(obj))
 	}
-	return hash
-}
 
-/* Take ownership of a string and return an interned one if it exists. */
-take_string :: proc(v: ^VM, str: string) -> ^ObjString {
-	hash := hash_string(str)
-	interned := table_find_string(&v.strings, str, hash)
-	if interned != nil {
-		delete(str)
-		return interned
-	}
-	return allocate_string(v, str, hash)
-}
-
-free_object :: proc(obj: ^Obj) {
 	switch obj.type {
 	case .CLOSURE:
 		closure := (^ObjClosure)(obj)

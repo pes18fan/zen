@@ -7,7 +7,9 @@ OC = "odin"
 ProcError = subprocess.CalledProcessError
 DEBUG_FLAGS = """-debug -o:none\
                  -define:DEBUG_TRACE_EXECUTION=true\
-                 -define:DEBUG_CHECK_LEAKS=true"""
+                 -define:DEBUG_CHECK_LEAKS=true\
+                 -define:DEBUG_STRESS_GC=true\
+                 -define:DEBUG_LOG_GC=true"""
 
 def create_debug_build():
     try:
