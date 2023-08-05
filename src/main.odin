@@ -5,7 +5,7 @@ import "core:mem"
 import "core:os"
 import "core:strings"
 
-VERSION :: "0.0.1"
+VERSION :: "zen 0.0.1"
 
 /* Debug configuration. */
 Config :: struct {
