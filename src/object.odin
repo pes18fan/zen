@@ -139,7 +139,7 @@ type_of_obj :: proc(obj: ^Obj) -> string {
 
 allocate_obj :: proc(gc: ^GC, $T: typeid, type: ObjType) -> ^Obj {
 	gc.bytes_allocated += size_of(T)
-	when #config(DEBUG_STRESS_GC, false) {
+	if debug_flags.stress_gc {
 		collect_garbage(gc)
 	}
 
@@ -156,7 +156,7 @@ allocate_obj :: proc(gc: ^GC, $T: typeid, type: ObjType) -> ^Obj {
 	obj.next = gc.objects
 	gc.objects = obj
 
-	when #config(DEBUG_LOG_GC, false) {
+	if debug_flags.log_gc {
 		fmt.eprintf("%p allocate %d for type %v\n", obj, size_of(obj), type_of_obj(obj))
 	}
 
@@ -221,8 +221,10 @@ allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
 	vm: ^VM
 	/* Need to do this little dance to get the VM. */
 	switch s in gc.mark_roots_arg {
-		case ^VM: vm = s
-		case ^Parser: vm = as_vm(s.prev_mark_roots)
+	case ^VM:
+		vm = s
+	case ^Parser:
+		vm = as_vm(s.prev_mark_roots)
 	}
 
 	/* Stash the string on the stack so it doesn't get collected. */
@@ -282,7 +284,7 @@ print_object :: proc(obj: ^Obj) {
 free_object :: proc(gc: ^GC, obj: ^Obj) {
 	gc.bytes_allocated -= size_of(obj)
 
-	when #config(DEBUG_LOG_GC, false) {
+	if debug_flags.log_gc {
 		fmt.eprintf("%p free ", obj)
 		print_object(obj)
 		fmt.eprintf(" of type %v\n", type_of_obj(obj))

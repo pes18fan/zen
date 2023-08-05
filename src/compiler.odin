@@ -380,7 +380,7 @@ end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
 		emit_return(p)
 	}
 
-	when #config(DEBUG_TRACE_EXECUTION, false) {
+	if debug_flags.trace_exec {
 		if !p.had_error {
 			disassemble(current_chunk(p), fn.name != nil ? fn.name.chars : "<script>")
 		}

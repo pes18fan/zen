@@ -215,7 +215,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 	pipeline_it: Value = nil
 
 	for {
-		when #config(DEBUG_TRACE_EXECUTION, false) {
+		if debug_flags.trace_exec {
 			fmt.printf("          ")
 			for value in vm.stack {
 				fmt.printf("[ ")
@@ -300,7 +300,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			if is_string(vm_peek(vm, 0)) && is_string(vm_peek(vm, 0)) {
 				concatenate(vm)
 			} else if is_number(vm_peek(vm, 0)) && is_number(vm_peek(vm, 0)) {
-				b := as_number(vm_pop(vm)) 
+				b := as_number(vm_pop(vm))
 				a := as_number(vm_pop(vm))
 				vm_push(vm, number_val(a + b))
 			} else {

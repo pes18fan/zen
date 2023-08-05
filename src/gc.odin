@@ -101,7 +101,7 @@ mark_object :: proc(gc: ^GC, object: ^Obj) {
 	/* Make sure that we're not marking an object twice. */
 	if object.is_marked {return}
 
-	when #config(DEBUG_LOG_GC, false) {
+	if debug_flags.log_gc {
 		fmt.eprintf("%p mark ", object)
 		print_value(object)
 		fmt.eprintf(" of type %s\n", type_of_obj(object))
@@ -197,7 +197,7 @@ fix_weak :: proc(gc: ^GC) {
 }
 
 blacken_object :: proc(gc: ^GC, object: ^Obj) {
-	when #config(DEBUG_LOG_GC, false) {
+	if debug_flags.log_gc {
 		fmt.eprintf("%p blacken ", object)
 		print_value(obj_val(object))
 		fmt.eprintf(" of type %s\n", type_of_obj(object))
@@ -277,11 +277,11 @@ sweep :: proc(gc: ^GC) {
 }
 
 collect_garbage :: proc(gc: ^GC) {
-	when #config(DEBUG_LOG_GC, false) {
+	if debug_flags.log_gc {
 		fmt.eprintln("-- gc begin")
-		before := gc.bytes_allocated
 	}
 
+	before := gc.bytes_allocated
 	mark_roots(gc, gc.mark_roots_arg)
 	trace_references(gc)
 	fix_weak(gc)
@@ -289,7 +289,7 @@ collect_garbage :: proc(gc: ^GC) {
 
 	gc.next_gc = gc.bytes_allocated * GC_HEAP_GROW_FACTOR
 
-	when #config(DEBUG_LOG_GC, false) {
+	if debug_flags.log_gc {
 		fmt.eprintln("-- gc end")
 		fmt.eprintf(
 			"-- collected %d bytes (from %d to %d), next collection at %d\n",

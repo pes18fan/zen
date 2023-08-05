@@ -5,6 +5,23 @@ import "core:mem"
 import "core:os"
 import "core:strings"
 
+VERSION :: "0.0.1"
+
+/* Debug configuration. */
+Config :: struct {
+	trace_exec:  bool,
+	check_leaks: bool,
+	stress_gc:   bool,
+	log_gc:      bool,
+}
+
+debug_flags := Config {
+	trace_exec  = false,
+	check_leaks = false,
+	stress_gc   = false,
+	log_gc      = false,
+}
+
 /* Fire up a REPL. */
 @(private = "file")
 repl :: proc(vm: ^VM) -> int {
@@ -65,31 +82,107 @@ run_file :: proc(vm: ^VM, path: string) -> int {
 /* Parse the arguments passed to the program. */
 @(private = "file")
 parse_argv :: proc(vm: ^VM) -> (status: int) {
-	help_message :: `Usage: zen <option or filename>
+	argc := len(os.args)
+	argv := os.args
+	argv_i := 0
+	argv_0 := argv[0]
+	script := ""
+
+	help_message :: `Usage: zen <options> <path>
 
 Options:
-    -h, --help      Print this help message and exit
-    -v, --version   Print version information and exit`
+    -h, -?, --help      Print this help message and exit
+    -v, --version       Print version information and exit
+	-C, --check-leaks   Report memory leaks on exit
+    -T, --trace         Trace script execution
+    -L, --log-gc        Log garbage collection
+    -S, --stress-gc     Collect garbage on every allocation`
 
-	if len(os.args) > 2 {
-		fmt.println(help_message)
-		status = 64
-	} else if len(os.args) == 1 {
-		status = repl(vm)
-	} else {
-		switch os.args[1] {
-		case "-h", "--help":
-			fmt.println(help_message)
-			status = 0
-		case "-v", "--version":
-			fmt.println("zen 0.0.1")
-			status = 0
+	outer: for len(argv) > 1 {
+		switch argv[1] {
+		case "--":
+			{
+				argv = argv[1:]
+				argc -= 1
+				break outer
+			}
+		case "--version":
+			{
+				fmt.println(VERSION)
+				return 0
+			}
+		case "--help":
+			{
+				fmt.println(help_message)
+				return 0
+			}
+		case "--trace":
+			{
+				debug_flags.trace_exec = true
+			}
+		case "--check-leaks":
+			{
+				debug_flags.check_leaks = true
+			}
+		case "--log-gc":
+			{
+				debug_flags.log_gc = true
+			}
+		case "--stress-gc":
+			{
+				debug_flags.stress_gc = true
+			}
 		case:
-			status = run_file(vm, os.args[1])
+			{
+				if argv[1][:2] == "--" {
+					fmt.eprintf("Unknown option: %s\n", argv[1])
+					fmt.eprintln(help_message)
+					return 1
+				} else if argv[1][0] == '-' {
+					if len(argv[1]) == 1 {
+						script = argv[1]
+						break outer
+					}
+					arg := argv[1][1:]
+					for c in arg {
+						switch c {
+						case 'v':
+							fmt.println(VERSION)
+							return 0
+						case '?', 'h':
+							fmt.println(help_message)
+							return 0
+						case 'C':
+							debug_flags.check_leaks = true
+						case 'T':
+							debug_flags.trace_exec = true
+						case 'L':
+							debug_flags.log_gc = true
+						case 'S':
+							debug_flags.stress_gc = true
+						case:
+							fmt.eprintf("Unknown option: %c", c)
+							fmt.eprintln(help_message)
+							return 1
+						}
+					}
+				} else {
+					script = argv[1]
+					break outer
+				}
+			}
 		}
+		argv = argv[1:]
+		argc -= 1
 	}
 
-	return status
+	argv_0 = argv[0]
+
+	if script == "" {
+		return repl(vm)
+	} else {
+		return run_file(vm, script)
+	}
 }
 
 main :: proc() {
@@ -97,7 +190,7 @@ main :: proc() {
 	defer os.exit(status)
 
 	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
-	when #config(DEBUG_CHECK_LEAKS, false) {
+	if debug_flags.check_leaks {
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
 		context.allocator = mem.tracking_allocator(&track)
