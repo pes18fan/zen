@@ -15,6 +15,8 @@ init_natives :: proc(gc: ^GC) {
 
 	// numbers and math
 	define_native(gc, "sqrt", sqrt_native, arity = 1)
+	define_native(gc, "ln", ln_native, arity = 1)
+	define_native(gc, "pow", pow_native, arity = 2)
 	define_native(gc, "parse", parse_native, arity = 1)
 
 	// errors
@@ -26,7 +28,7 @@ init_natives :: proc(gc: ^GC) {
 	// strings
 	define_native(gc, "chomp", chomp_native, arity = 1)
 	define_native(gc, "len", len_native, arity = 1)
-	define_native(gc, "gsub", gsub_native, arity = 3)
+	define_native(gc, "replace", replace_native, arity = 3)
 	define_native(gc, "upcase", upcase_native, arity = 1)
 	define_native(gc, "downcase", downcase_native, arity = 1)
 	define_native(gc, "reverse", reverse_native, arity = 1)
@@ -96,6 +98,32 @@ sqrt_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return number_val(math.sqrt(n)), true
 }
 
+/* Find the natural logarithm of a number. */
+ln_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot find the natural log of a %v.", type_of_value(args[0]))
+	}
+
+	n := as_number(args[0])
+
+	if n <= 0 {
+		vm_panic(vm, "Cannot find the natural log of a non-positive number.")
+		return nil, false
+	}
+
+	return number_val(math.ln(n)), true
+}
+
+/* Raise a number to a power. */
+pow_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) || !is_number(args[1]) {
+		vm_panic(vm, "Cannot raise a %v to a power.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	return number_val(math.pow(as_number(args[0]), as_number(args[1]))), true
+}
+
 /* Trim whitespace from both sides of a string. */
 chomp_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
@@ -121,7 +149,7 @@ Substitute all instances of a substring in a string with another substring.
 The first argument is the string to search in, the second is the substring to 
 replace, and the third is the substring to replace it with.
 */
-gsub_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+replace_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) || !is_string(args[1]) || !is_string(args[2]) {
 		vm_panic(
 			vm,
