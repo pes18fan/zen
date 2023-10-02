@@ -2,6 +2,7 @@ package zen
 
 import "core:fmt"
 import "core:mem"
+import "core:time"
 
 FRAMES_MAX :: 64
 
@@ -401,6 +402,12 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 /* Interpret a chunk. */
 interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
+	/* Start the stopwatch. */
+	sw: time.Stopwatch
+	if debug_flags.record_time {
+		time.stopwatch_start(&sw)
+	}
+
 	lexer := init_lexer(source)
 	tokens, lx_ok := lex(&lexer)
 	defer delete(tokens)
@@ -408,9 +415,36 @@ interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
 		return .INTERPRET_LEX_ERROR
 	}
 
+	/* Time the lexer. */
+	if debug_flags.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("Lexer: %v\n", time.stopwatch_duration(sw))
+		time.stopwatch_reset(&sw)
+		time.stopwatch_start(&sw)
+	}
+
 	fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
 	if !cmp_ok {
 		return .INTERPRET_COMPILE_ERROR
+	}
+
+	/* Time the compiler. */
+	if debug_flags.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("Compiler: %v\n", time.stopwatch_duration(sw))
+		time.stopwatch_reset(&sw)
+		time.stopwatch_start(&sw)
+	}
+
+	/* Time the VM. */
+	defer if debug_flags.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("\nVM: %v\n", time.stopwatch_duration(sw))
+	}
+
+	/* If the user only wants to compile the script, then we can stop here. */
+	if debug_flags.compile_only {
+		return .INTERPRET_OK
 	}
 
 	vm_push(vm, obj_val(fn))

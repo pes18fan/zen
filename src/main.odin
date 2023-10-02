@@ -9,17 +9,23 @@ VERSION :: "zen 0.0.1"
 
 /* Debug configuration. */
 Config :: struct {
-	trace_exec:  bool,
-	check_leaks: bool,
-	stress_gc:   bool,
-	log_gc:      bool,
+	compile_only:     bool,
+	dump_disassembly: bool,
+	trace_exec:       bool,
+	check_leaks:      bool,
+	stress_gc:        bool,
+	log_gc:           bool,
+	record_time:      bool,
 }
 
 debug_flags := Config {
+	compile_only = false,
+	dump_disassembly = false,
 	trace_exec  = false,
 	check_leaks = false,
 	stress_gc   = false,
 	log_gc      = false,
+	record_time = false,
 }
 
 /* Fire up a REPL. */
@@ -93,10 +99,14 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 Options:
     -h, -?, --help      Print this help message and exit
     -v, --version       Print version information and exit
-    -C, --check-leaks   Report memory leaks on exit
+
+	-t, --time          Record time taken to compile and run
+    -C, --compile       Compile only, useful with -D
+    -D, --dump          Dump disassembled bytecode
     -T, --trace         Trace script execution
     -L, --log-gc        Log garbage collection
-    -S, --stress-gc     Collect garbage on every allocation`
+    -S, --stress-gc     Collect garbage on every allocation
+    -c, --check-leaks   Report memory leaks on exit`
 
 	outer: for len(argv) > 1 {
 		switch argv[1] {
@@ -116,22 +126,20 @@ Options:
 				fmt.println(help_message)
 				return 0
 			}
+		case "--compile":
+			debug_flags.compile_only = true
+		case "--dump":
+			debug_flags.dump_disassembly = true
 		case "--trace":
-			{
-				debug_flags.trace_exec = true
-			}
+			debug_flags.trace_exec = true
+		case "--time":
+			debug_flags.record_time = true
 		case "--check-leaks":
-			{
-				debug_flags.check_leaks = true
-			}
+			debug_flags.check_leaks = true
 		case "--log-gc":
-			{
-				debug_flags.log_gc = true
-			}
+			debug_flags.log_gc = true
 		case "--stress-gc":
-			{
-				debug_flags.stress_gc = true
-			}
+			debug_flags.stress_gc = true
 		case:
 			{
 				if argv[1][:2] == "--" {
@@ -153,6 +161,12 @@ Options:
 							fmt.println(help_message)
 							return 0
 						case 'C':
+							debug_flags.compile_only = true
+						case 'D':
+							debug_flags.dump_disassembly = true
+						case 't':
+							debug_flags.record_time = true
+						case 'c':
 							debug_flags.check_leaks = true
 						case 'T':
 							debug_flags.trace_exec = true

@@ -380,7 +380,7 @@ end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
 		emit_return(p)
 	}
 
-	if debug_flags.trace_exec {
+	if debug_flags.dump_disassembly {
 		if !p.had_error {
 			disassemble(current_chunk(p), fn.name != nil ? fn.name.chars : "<script>")
 		}
@@ -1247,6 +1247,7 @@ break_statement :: proc(p: ^Parser) {
 		if local.depth < loop.scope_depth {
 			break
 		}
+		emit_opcode(p, .OP_POP)
 	}
 }
 
@@ -1271,6 +1272,7 @@ continue_statement :: proc(p: ^Parser) {
 		if local.depth < loop.scope_depth {
 			break
 		}
+		emit_opcode(p, .OP_POP)
 	}
 
 	emit_loop(p, loop.start)
@@ -1351,13 +1353,14 @@ while_statement :: proc(p: ^Parser) {
 
 	begin_scope(p)
 	block(p)
-	end_scope(p)
 
 	emit_loop(p, loop_start)
 
 	patch_jump(p, exit_jump)
 	emit_pop(p)
+
 	end_loop(p)
+	end_scope(p)
 }
 
 @(private = "file")
