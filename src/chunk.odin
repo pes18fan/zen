@@ -8,6 +8,7 @@ control the instruction we're dealing with.
 Note that the operation code is a byte, but the operation itself may be more.
 */
 OpCode :: enum {
+	OP_NOOP,
 	OP_CONSTANT,
 	OP_NIL,
 	OP_TRUE,

@@ -231,6 +231,8 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 		instruction := OpCode(read_byte(frame))
 
 		switch instruction {
+		case .OP_NOOP:
+			// Do nothing.
 		case .OP_CONSTANT:
 			constant := read_constant(frame)
 			vm_push(vm, constant)
