@@ -44,6 +44,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 
 	instruction := c.code[offset]
 	switch OpCode(instruction) {
+	case .OP_NOOP:
+		return simple_instruction("OP_NOOP", offset)
 	case .OP_CONSTANT:
 		return constant_instruction("OP_CONSTANT", c, offset)
 	case .OP_NIL:

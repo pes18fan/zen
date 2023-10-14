@@ -100,13 +100,15 @@ Options:
     -h, -?, --help      Print this help message and exit
     -v, --version       Print version information and exit
 
-	-t, --time          Record time taken to compile and run
+    -t, --time          Record time taken to compile and run
     -C, --compile       Compile only, useful with -D
     -D, --dump          Dump disassembled bytecode
     -T, --trace         Trace script execution
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation
     -c, --check-leaks   Report memory leaks on exit`
+	
+	version_message :: VERSION + "\n" + "written with <3 by pes18fan"
 
 	outer: for len(argv) > 1 {
 		switch argv[1] {
@@ -118,7 +120,7 @@ Options:
 			}
 		case "--version":
 			{
-				fmt.println(VERSION)
+				fmt.println(version_message)
 				return 0
 			}
 		case "--help":
@@ -155,7 +157,7 @@ Options:
 					for c in arg {
 						switch c {
 						case 'v':
-							fmt.println(VERSION)
+							fmt.println(version_message)
 							return 0
 						case '?', 'h':
 							fmt.println(help_message)

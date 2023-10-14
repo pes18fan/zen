@@ -249,6 +249,11 @@ emit_pop :: proc(p: ^Parser) {
 	emit_opcode(p, .OP_POP)
 }
 
+/* Write a noop (no operation) instruction to the current chunk. */
+emit_noop :: proc(p: ^Parser) {
+	emit_opcode(p, .OP_NOOP)
+}
+
 /* Write a loop instruction to the current chunk. */
 emit_loop :: proc(p: ^Parser, loop_start: int) {
 	emit_opcode(p, .OP_LOOP)
@@ -1206,9 +1211,14 @@ begin_loop :: proc(p: ^Parser, loop_start: int) {
 statements, if any exist. */
 @(private = "file")
 end_loop :: proc(p: ^Parser) {
+	loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
+
 	assert(p.current_compiler.loop_count > 0)
 	patch_breaks(p)
 	p.current_compiler.loop_count -= 1
+
+	/* Remove all the break statements that were in the loop we just ended. */
+	clear(&loop.breaks)
 }
 
 
@@ -1231,6 +1241,7 @@ is a compile-time error.
 */
 @(private = "file")
 break_statement :: proc(p: ^Parser) {
+	emit_noop(p)
 	if p.current_compiler.loop_count == 0 {
 		error(p, "Cannot 'break' outside a loop.")
 		return
@@ -1239,7 +1250,6 @@ break_statement :: proc(p: ^Parser) {
 	consume_semi(p, "break")
 
 	loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
-	append(&loop.breaks, emit_jump(p, .OP_JUMP))
 
 	// Discard correct number of values from the stack.
 	for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
@@ -1249,6 +1259,8 @@ break_statement :: proc(p: ^Parser) {
 		}
 		emit_opcode(p, .OP_POP)
 	}
+
+	append(&loop.breaks, emit_jump(p, .OP_JUMP))
 }
 
 /*
@@ -1342,8 +1354,11 @@ switch_statement :: proc(p: ^Parser) {
 /* Parse a while statment. */
 @(private = "file")
 while_statement :: proc(p: ^Parser) {
+	emit_noop(p)
+
 	loop_start := len(current_chunk(p).code)
 
+	begin_scope(p)
 	begin_loop(p, loop_start)
 	expression(p)
 	consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
@@ -1351,7 +1366,6 @@ while_statement :: proc(p: ^Parser) {
 	exit_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
 	emit_pop(p)
 
-	begin_scope(p)
 	block(p)
 
 	emit_loop(p, loop_start)
@@ -1365,6 +1379,8 @@ while_statement :: proc(p: ^Parser) {
 
 @(private = "file")
 for_statement :: proc(p: ^Parser) {
+	emit_noop(p)
+
 	begin_scope(p)
 	if match(p, .SEMI) {
 		// No initializer.
@@ -1376,6 +1392,7 @@ for_statement :: proc(p: ^Parser) {
 
 	loop_start := len(current_chunk(p).code)
 	exit_jump := -1
+
 	if !match(p, .SEMI) {
 		expression(p)
 		consume_semi(p, "loop condition")
@@ -1428,7 +1445,7 @@ synchronize :: proc(p: ^Parser) {
 		}
 
 		#partial switch p.current.type {
-		case .FUNC, .FOR, .IF, .LET, .PRINT, .PUB, .SWITCH, .RETURN, .WHILE:
+		case .BREAK, .CONTINUE, .FUNC, .FOR, .IF, .LET, .PRINT, .SWITCH, .RETURN, .WHILE:
 			return
 		case: // Do nothing.
 		}
