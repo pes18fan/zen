@@ -137,7 +137,7 @@ floor_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return number_val(math.floor(as_number(args[0]))), true
 }
 
-/* Find the largest integer greater than a number. */
+/* Find the smallest integer greater than a number. */
 ceil_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_number(args[0]) {
 		vm_panic(vm, "Cannot ceil a %v.", type_of_value(args[0]))

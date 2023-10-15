@@ -180,6 +180,9 @@ These include the following:
 - `sqrt(x)`: Find the square root of a positive real number `x`.
 - `ln(x)`: Find the natural log of a positive real number `x`.
 - `pow(x, n)`: Find the result of raising `x` to the `n`th power.
+- `floor(x)`: Find the largest integer less than `x`.
+- `ceil(x)`: Find the smallest integer greater than `x`.
+- `round(x)`: Round `x` to the nearest integer.
 - `parse(s)`: Attempt to parse a string `s` into a floating point number.
 
 ### errors
