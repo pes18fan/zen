@@ -115,7 +115,7 @@ Closures are also supported.
 
 ```
 func outer() {
-    let x = "outside";
+    var x = "outside";
     func inner() {
         print x;
         x = "inside";
@@ -125,7 +125,7 @@ func outer() {
     return inner;
 }
 
-final in = outer();
+val in = outer();
 in(); // prints "outside" then "inside"
 ```
 
