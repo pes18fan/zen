@@ -1,5 +1,5 @@
-final x = 2, y = 3;
-let a = 1, b = true, c = "hello", d;
+val x = 2, y = 3;
+var a = 1, b = true, c = "hello", d;
 
 print x; // expect: 2
 print y; // expect: 3

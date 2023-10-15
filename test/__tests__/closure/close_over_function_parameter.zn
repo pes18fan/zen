@@ -1,4 +1,4 @@
-let f;
+var f;
 
 func foo(param) {
     func f_() {

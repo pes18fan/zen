@@ -717,14 +717,14 @@ rules: []ParseRule = {
 	TokenType.BREAK = ParseRule{nil, nil, .NONE},
 	TokenType.ELSE = ParseRule{nil, nil, .NONE},
 	TokenType.FALSE = ParseRule{literal, nil, .NONE},
-	TokenType.FINAL = ParseRule{nil, nil, .NONE},
+	TokenType.VAL = ParseRule{nil, nil, .NONE},
 	TokenType.FOR = ParseRule{nil, nil, .NONE},
 	TokenType.FUNC = ParseRule{lambda, nil, .NONE},
 	TokenType.IF = ParseRule{nil, nil, .NONE},
 	TokenType.IMPORT = ParseRule{nil, nil, .NONE},
 	TokenType.IN = ParseRule{nil, nil, .NONE},
 	TokenType.IT = ParseRule{it_, nil, .NONE},
-	TokenType.LET = ParseRule{nil, nil, .NONE},
+	TokenType.VAR = ParseRule{nil, nil, .NONE},
 	TokenType.NIL = ParseRule{literal, nil, .NONE},
 	TokenType.NOT = ParseRule{unary, nil, .NONE},
 	TokenType.OR = ParseRule{nil, or_, .OR},
@@ -1097,8 +1097,8 @@ func_declaration :: proc(p: ^Parser) {
 
 /* Parse a name binding. */
 @(private = "file")
-let_declaration :: proc(p: ^Parser, is_loop_variable: bool = false) {
-	final: Variability = .FINAL if p.previous.type == .FINAL else .VAR
+var_declaration :: proc(p: ^Parser, is_loop_variable: bool = false) {
+	final: Variability = .FINAL if p.previous.type == .VAL else .VAR
 
 	for {
 		global := parse_variable(
@@ -1385,8 +1385,8 @@ for_statement :: proc(p: ^Parser) {
 	begin_scope(p)
 	if match(p, .SEMI) {
 		// No initializer.
-	} else if match(p, .LET) {
-		let_declaration(p, is_loop_variable = true)
+	} else if match(p, .VAR) {
+		var_declaration(p, is_loop_variable = true)
 	} else {
 		expression_statement(p)
 	}
@@ -1446,7 +1446,7 @@ synchronize :: proc(p: ^Parser) {
 		}
 
 		#partial switch p.current.type {
-		case .BREAK, .CONTINUE, .FUNC, .FOR, .IF, .LET, .PRINT, .SWITCH, .RETURN, .WHILE:
+		case .BREAK, .CONTINUE, .FUNC, .FOR, .IF, .VAR, .VAL, .PRINT, .SWITCH, .RETURN, .WHILE:
 			return
 		case: // Do nothing.
 		}
@@ -1459,8 +1459,8 @@ synchronize :: proc(p: ^Parser) {
 @(private = "file")
 declaration :: proc(p: ^Parser) {
 	switch {
-	case match(p, .LET) || match(p, .FINAL):
-		let_declaration(p)
+	case match(p, .VAR) || match(p, .VAL):
+		var_declaration(p)
 	case match(p, .FUNC):
 		func_declaration(p)
 	case:

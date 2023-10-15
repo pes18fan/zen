@@ -1,5 +1,5 @@
 // DRAFT
-let Foo = class {
+var Foo = class {
     pub func init() {
         this = "value";
     }

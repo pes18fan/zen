@@ -1,2 +1,2 @@
-let a = "a";
+var a = "a";
 (a) = "value"; // ERR: Invalid assignment target.

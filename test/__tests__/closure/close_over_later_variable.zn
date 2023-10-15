@@ -1,6 +1,6 @@
 func f() {
-    let a = "a";
-    let b = "b";
+    var a = "a";
+    var b = "b";
 
     func g() {
         print b; // expect: b

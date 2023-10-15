@@ -1,5 +1,5 @@
 func repeat(fn, times) {
-    for let i = 0; i < times; i = i + 1 {
+    for var i = 0; i < times; i = i + 1 {
         fn();
     }
 }

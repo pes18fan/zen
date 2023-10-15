@@ -1,4 +1,4 @@
-let square = func(x) {
+var square = func(x) {
    return x * x;
 };
 

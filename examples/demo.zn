@@ -1,17 +1,17 @@
 // Hello world! (This is a comment btw)
 print "Hello, world!";
 
-let name = "Sam"; // Create a variable!
-final nice = 69; // Can't reassign to this!
+var name = "Sam"; // Create a variable!
+val nice = 69; // Can't reassign to this!
 
 // You can group variable declarations together.
-let
+var
     age = 21,
     is_cool = true,
     unknown;
 
 // Also works with final variables.
-final 
+val 
     is_nice = true,
     is_not_nice = false;
 
@@ -29,7 +29,7 @@ if false {
 
 // There's no random number generator yet, so let's imagine that a is randomly
 // generated.
-let a = 4;
+val a = 4;
 
 switch a {
     0 => print "a is 0";
@@ -48,14 +48,14 @@ while true {
 }
 
 // For loops.
-for let i = 0; i < 10; i = i + 1 {
+for var i = 0; i < 10; i = i + 1 {
     print i;
 } //=> 0 1 2 3 4 5 6 7 8 9
 
 print "";
 
 // Break and continue.
-for let i = 0; i < 6; i = i + 1 {
+for var i = 0; i < 6; i = i + 1 {
     if i == 5 {
         break;
     }
@@ -78,7 +78,7 @@ func sum(a, b) => a + b;
 
 // Anonymous functions have no name. Here, we assign it to a variable, so it
 // isn't really anonymous anymore.
-let anon = func() { print "This is an anonymous function!"; };
+val anon = func() { print "This is an anonymous function!"; };
 // Functions are first-class, so you can pass them around to other functions.
 
 // Pipes!

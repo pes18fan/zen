@@ -4,7 +4,7 @@ func range(start, end, f) {
         return;
     }
 
-    for let i = start; i < end; i = i + 1 {
+    for var i = start; i < end; i = i + 1 {
         f(i);
     }
 }

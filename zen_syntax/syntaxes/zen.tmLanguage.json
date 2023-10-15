@@ -57,7 +57,7 @@
         "statements": {
             "patterns": [
                 {
-                    "begin": "\\b(let|final)\\b",
+                    "begin": "\\b(var|val)\\b",
                     "end": "(;|$)",
                     "beginCaptures": {
                         "1": {

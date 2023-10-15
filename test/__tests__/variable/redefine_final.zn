@@ -2,5 +2,5 @@
 // ERR: Can only set a final variable once
 // end expect
 
-final a = "some";
+val a = "some";
 a = "other";

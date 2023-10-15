@@ -1,4 +1,4 @@
 {
-    let a = "value";
-    let a = "other"; // ERR: name in this scope already exists
+    var a = "value";
+    var a = "other"; // ERR: name in this scope already exists
 }

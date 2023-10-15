@@ -1,4 +1,4 @@
-let x = ""
+var x = ""
     |> chomp()
     |> replace("hello", "hi");
 print x; // expect:

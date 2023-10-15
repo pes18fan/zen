@@ -1,4 +1,4 @@
-for let i = 0; i < 5; i = i + 1 {
+for var i = 0; i < 5; i = i + 1 {
     if i == 2 {
         continue;
     }
@@ -10,7 +10,7 @@ for let i = 0; i < 5; i = i + 1 {
 // expect: 3
 // expect: 4
 
-for let i = 0; i < 5; i = i + 1 {
+for var i = 0; i < 5; i = i + 1 {
     if i == 2 {
         break;
     }

@@ -1,5 +1,5 @@
 // IIFE = Immediately Invoked Function Expression
-let x = (func() {
+var x = (func() {
     return 69;
 })();
 print x; // expect: 69

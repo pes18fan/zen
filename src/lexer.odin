@@ -41,14 +41,12 @@ TokenType :: enum {
 	CONTINUE,
 	ELSE,
 	FALSE,
-	FINAL,
 	FOR,
 	FUNC,
 	IF,
 	IMPORT,
 	IN,
 	IT,
-	LET,
 	NIL,
 	NOT,
 	OR,
@@ -58,6 +56,8 @@ TokenType :: enum {
 	SWITCH,
 	TRUE,
 	WHILE,
+	VAR,
+	VAL,
 	EOF,
 }
 
@@ -248,8 +248,6 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 				switch utf8.rune_at(l.source, l.start + 1) {
 				case 'a':
 					return check_keyword(l, 2, 3, "lse", .FALSE)
-				case 'i':
-					return check_keyword(l, 2, 3, "nal", .FINAL)
 				case 'o':
 					return check_keyword(l, 2, 1, "r", .FOR)
 				case 'u':
@@ -272,8 +270,6 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 				}
 			}
 		}
-	case 'l':
-		return check_keyword(l, 1, 2, "et", .LET)
 	case 'n':
 		{
 			if l.current - l.start > 1 {
@@ -306,6 +302,22 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 		return check_keyword(l, 1, 3, "rue", .TRUE)
 	case 'w':
 		return check_keyword(l, 1, 4, "hile", .WHILE)
+	case 'v':
+		{
+			if l.current - l.start > 1 {
+				switch utf8.rune_at(l.source, l.start + 1) {
+				case 'a':
+					if l.current - l.start > 2 {
+						switch utf8.rune_at(l.source, l.start + 2) {
+							case 'r':
+								return check_keyword(l, 3, 0, "", .VAR)
+							case 'l':
+								return check_keyword(l, 3, 0, "", .VAL)
+						} 
+					}
+				}
+			}
+		}
 	}
 
 	return .IDENT
