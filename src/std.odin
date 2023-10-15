@@ -17,6 +17,9 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "sqrt", sqrt_native, arity = 1)
 	define_native(gc, "ln", ln_native, arity = 1)
 	define_native(gc, "pow", pow_native, arity = 2)
+	define_native(gc, "floor", floor_native, arity = 1)
+	define_native(gc, "ceil", ceil_native, arity = 1)
+	define_native(gc, "round", round_native, arity = 1)
 	define_native(gc, "parse", parse_native, arity = 1)
 
 	// errors
@@ -122,6 +125,36 @@ pow_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	return number_val(math.pow(as_number(args[0]), as_number(args[1]))), true
+}
+
+/* Find the largest integer smaller than a number. */
+floor_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot floor a %v.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	return number_val(math.floor(as_number(args[0]))), true
+}
+
+/* Find the largest integer greater than a number. */
+ceil_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot ceil a %v.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	return number_val(math.ceil(as_number(args[0]))), true
+}
+
+/* Round a number to the nearest integer. */
+round_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot round a %v.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	return number_val(math.round(as_number(args[0]))), true
 }
 
 /* Trim whitespace from both sides of a string. */

@@ -17,7 +17,6 @@ TokenType :: enum {
 	SEMI,
 	SLASH,
 	STAR,
-	NEWLINE,
 
 	// one or two character tokens
 	BANG_EQUAL,
