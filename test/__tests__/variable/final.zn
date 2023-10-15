@@ -1,2 +1,2 @@
-val a = "ok";
-print a; // expect: ok
+val a = "ok"
+print a // expect: ok

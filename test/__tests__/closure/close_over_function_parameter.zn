@@ -1,11 +1,11 @@
-var f;
+var f
 
 func foo(param) {
     func f_() {
-        print param;
+        print param
     }
-    f = f_;
+    f = f_
 }
-foo("param");
+foo("param")
 
-f(); // expect: param
+f() // expect: param

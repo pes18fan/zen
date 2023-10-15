@@ -1,17 +1,17 @@
 func range(start, end, f) {
     if end < start {
-        print "End must be greater than start";
-        return;
+        print "End must be greater than start"
+        return
     }
 
     for var i = start; i < end; i = i + 1 {
-        f(i);
+        f(i)
     }
 }
 
 range(0, 5, func(i) {
-    print i + 1;    
-});
+    print i + 1    
+})
 // expect: 1
 // expect: 2
 // expect: 3

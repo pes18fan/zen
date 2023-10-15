@@ -1,3 +1,3 @@
 print "hello"
     |> upcase()
-    |> it + ", world"; // expect: HELLO, world
+    |> it + ", world" // expect: HELLO, world

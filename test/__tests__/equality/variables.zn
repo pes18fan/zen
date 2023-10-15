@@ -1,4 +1,4 @@
-var i = 0;
+var i = 0
 
-print i == 2; // expect: false
-print i == 0; // expect: true
+print i == 2 // expect: false
+print i == 0 // expect: true

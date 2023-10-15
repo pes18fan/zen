@@ -1,2 +1,2 @@
-val a = "some";
-val a = "other"; // ERR: Cannot redefine a final variable
+val a = "some"
+val a = "other" // ERR: Cannot redefine a final variable

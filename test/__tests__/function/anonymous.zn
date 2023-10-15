@@ -1,5 +1,5 @@
 var square = func(x) {
-   return x * x;
-};
+   return x * x
+}
 
-print square(6); // expect: 36
+print square(6) // expect: 36

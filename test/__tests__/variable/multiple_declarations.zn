@@ -1,9 +1,9 @@
-val x = 2, y = 3;
-var a = 1, b = true, c = "hello", d;
+val x = 2, y = 3
+var a = 1, b = true, c = "hello", d
 
-print x; // expect: 2
-print y; // expect: 3
-print a; // expect: 1
-print b; // expect: true
-print c; // expect: hello
-print d; // expect: nil
+print x // expect: 2
+print y // expect: 3
+print a // expect: 1
+print b // expect: true
+print c // expect: hello
+print d // expect: nil

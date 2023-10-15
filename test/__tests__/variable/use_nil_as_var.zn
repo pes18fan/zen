@@ -1,1 +1,1 @@
-var nil = "value"; // ERR: Expect variable name
+var nil = "value" // ERR: Expect variable name

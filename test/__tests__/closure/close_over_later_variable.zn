@@ -1,11 +1,11 @@
 func f() {
-    var a = "a";
-    var b = "b";
+    var a = "a"
+    var b = "b"
 
     func g() {
-        print b; // expect: b
-        print a; // expect: a
+        print b // expect: b
+        print a // expect: a
     }
-    g();
+    g()
 }
-f();
+f()

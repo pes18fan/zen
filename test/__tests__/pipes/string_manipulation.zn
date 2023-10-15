@@ -1,4 +1,4 @@
 print " hello, world "
     |> chomp()
     |> replace("world", "universe")
-    |> upcase(); // expect: HELLO, UNIVERSE
+    |> upcase() // expect: HELLO, UNIVERSE

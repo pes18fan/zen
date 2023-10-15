@@ -1,11 +1,11 @@
 func repeat(fn, times) {
     for var i = 0; i < times; i = i + 1 {
-        fn();
+        fn()
     }
 }
 
 repeat(func() {
     print "epic!";
-}, 2);
+}, 2)
 // expect: epic!
 // expect: epic!

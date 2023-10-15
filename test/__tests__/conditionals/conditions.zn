@@ -1,6 +1,6 @@
 if false {
-    print "How did this happen";
+    print "How did this happen"
 } else {
-    print "of course"; // expect: of course
+    print "of course" // expect: of course
 }
 

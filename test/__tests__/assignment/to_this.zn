@@ -1,8 +1,8 @@
 // DRAFT
 var Foo = class {
     pub func init() {
-        this = "value";
+        this = "value"
     }
 }
 
-Foo(); // ERR: Invalid assignment target.
+Foo() // ERR: Invalid assignment target.

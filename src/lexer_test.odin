@@ -35,15 +35,15 @@ test_lexer_default :: proc(t: ^tt.T) {
 	source := `// this is a comment
 func foo() {
     if not false {
-        print str;
+        print str
     }
 }
 
-pub func add(a, b) => a + b;
+func add(a, b) => a + b
 
 func test() {
-    foo("just a little lexer exercise");
-    println(add(1, 2));
+    foo("just a little lexer exercise")
+    println(add(1, 2))
 }`
 
 	lx := init_lexer(source)
@@ -67,8 +67,9 @@ func test() {
 		Token{type = .IDENT, lexeme = "str", line = 4},
 		Token{type = .SEMI, lexeme = ";", line = 4},
 		Token{type = .RSQUIRLY, lexeme = "}", line = 5},
+		Token{type = .SEMI, lexeme = ";", line = 5},
 		Token{type = .RSQUIRLY, lexeme = "}", line = 6},
-		Token{type = .PUB, lexeme = "pub", line = 8},
+		Token{type = .SEMI, lexeme = ";", line = 6},
 		Token{type = .FUNC, lexeme = "func", line = 8},
 		Token{type = .IDENT, lexeme = "add", line = 8},
 		Token{type = .LPAREN, lexeme = "(", line = 8},

@@ -1321,6 +1321,11 @@ switch_statement :: proc(p: ^Parser) {
 
 			consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
 			statement(p)
+
+			/* Consume a possible residual semi due to automatic semicolon
+			 * insertion */
+			match(p, .SEMI)
+
 			append(&case_jumps_to_end, emit_jump(p, .OP_JUMP))
 			consume(p, .RSQUIRLY, "'else' must be the last case.")
 			break
@@ -1338,6 +1343,11 @@ switch_statement :: proc(p: ^Parser) {
 		emit_pop(p)
 		consume(p, .FAT_ARROW, "Expect '=>' after case.")
 		statement(p)
+
+		/* Consume a possible residual semi due to automatic semicolon
+		* insertion */
+		match(p, .SEMI)
+
 		append(&case_jumps_to_end, emit_jump(p, .OP_JUMP))
 
 		// Patch the case-to-case jump.
@@ -1496,6 +1506,8 @@ statement :: proc(p: ^Parser) {
 		switch_statement(p)
 	case match(p, .WHILE):
 		while_statement(p)
+	case match(p, .SEMI):
+		// Do nothing. This is equivalent to `pass`.
 	case:
 		expression_statement(p)
 	}

@@ -1,5 +1,5 @@
-var x = 0;
+var x = 0
 switch x {
-    else => nil; // ERR: 'else' must be the last case
-    0 => 1;
+    else => nil // ERR: 'else' must be the last case
+    0 => 1
 }

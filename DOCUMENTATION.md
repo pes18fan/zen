@@ -5,24 +5,25 @@ Reference for the zen programming language.
 Get started now with the `print` statement to print to standard out:
 
 ```zen
-print "Hello, world!"; //=> Hello, world!
+print "Hello, world!" //=> Hello, world!
 ```
 
-Semicolons seperate statements. In the future, they'll likely become optional.
+Statements are seperated by semicolons. They are automatically inserted
+only at newlines, following certain rules.
 
 ## Variables
 
 Bind a value to a name with `var`.
 
 ```
-var name = "Sam";
+var name = "Sam"
 ```
 
 Use `val` to make the name single-assign.
 
 ```
-val nice = 69;
-nice = 68; // ERROR!
+val nice = 69
+nice = 68 // ERROR!
 ```
 
 ## Conditionals
@@ -33,7 +34,7 @@ Use an `if` statement to execute some code if a condition is true.
 
 ```
 if false {
-    print "how did this happen!";
+    print "how did this happen!"
 }
 ```
 
@@ -45,9 +46,9 @@ condition evaluates to false:
 
 ```
 if false {
-    print "how did this happen!";
+    print "how did this happen!"
 } else {
-    print "just another normal day";
+    print "just another normal day"
 }
 ```
 
@@ -60,16 +61,16 @@ the code associated with it is executed and the statement exits. A `switch true`
 can be used to easily emulate an `else if` statement.
 
 ```
-var a = rand_int(0, 2);
+var a = rand_int(0, 2)
 
 switch a {
-    0 => print "zero!";
-    1 => print "one.";
+    0 => print "zero!"
+    1 => print "one."
     2 => {
-        var y = 2;
-        print y;
+        var y = 2
+        print y
     }
-    else => print "not between 0 and 2";
+    else => print "not between 0 and 2"
 }
 ```
 
@@ -80,13 +81,13 @@ Note that the `else` clause is mandatory.
 zen has the traditional `while` and `for` loops.
 
 ```
-var awesome = true;
+var awesome = true
 while awesome {
-    print "you're awesome!";
+    print "you're awesome!"
 }
 
 for var i = 0; i < 10; i = i + 1 {
-    print "you're awesome " + i + "!";
+    print "you're awesome " + i + "!"
 }
 ```
 
@@ -99,34 +100,34 @@ Define a function with the `func` keyword, and call it with the `()` syntax:
 
 ```
 func a_function() {
-    print "this is a function!";
+    print "this is a function!"
 }
-a_function(); //=> this is a function!
+a_function() //=> this is a function!
 ```
 
 If a function is pure i.e. only returns a value, it can be shortened using JS-like
 arrow notation:
 
 ```
-func double(n) => n * 2;
+func double(n) => n * 2
 ```
 
 Closures are also supported.
 
 ```
 func outer() {
-    var x = "outside";
+    var x = "outside"
     func inner() {
-        print x;
-        x = "inside";
-        print x;
+        print x
+        x = "inside"
+        print x
     }
 
-    return inner;
+    return inner
 }
 
-val in = outer();
-in(); // prints "outside" then "inside"
+val in = outer()
+in() // prints "outside" then "inside"
 ```
 
 zen allows for anonymous function syntax as well, making it much easier to pass
@@ -134,16 +135,16 @@ functions around.
 
 ```
 func apply(value, fn) {
-    return fn(value);
+    return fn(value)
 }
 
-print apply(2, func(n) { return n * 2; }); //=> 4
+print apply(2, func(n) { return n * 2; }) //=> 4
 ```
 
 The above example can be made simpler using the convenient arrow notation:
 
 ```
-print apply(2, func(n) => n * 2); //=> 4
+print apply(2, func(n) => n * 2) //=> 4
 ```
 
 ## Pipes
@@ -154,8 +155,8 @@ to functions.
 
 ```zen
 // These two are equivalent:
-print upcase("hello");
-print "hello" |> upcase();
+print upcase("hello")
+print "hello" |> upcase()
 ```
 
 The last expression in a pipe sequence can be accessed using the `it` keyword.
@@ -163,7 +164,7 @@ The last expression in a pipe sequence can be accessed using the `it` keyword.
 ```zen
 print "68"
     |> parse()
-    |> it + 1; // 69
+    |> it + 1 // 69
 ```
 
 ## Standard library functions

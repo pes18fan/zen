@@ -17,6 +17,7 @@ TokenType :: enum {
 	SEMI,
 	SLASH,
 	STAR,
+	NEWLINE,
 
 	// one or two character tokens
 	BANG_EQUAL,
@@ -181,12 +182,54 @@ This is the way it works:
 */
 @(private = "file")
 insert_semis :: proc(tokens: []Token) -> []Token {
-	unimplemented("Automatic semicolon insertion: To be implemented later")
+	defer delete(tokens)
+	length := len(tokens)
+	result := make([dynamic]Token)
+
+	for token, idx in tokens {
+		/* Insert a semi after a line's final token. */
+		if token.type == .NEWLINE {
+			semi := Token {
+				type = .SEMI,
+				lexeme = ";",
+				line = token.line,
+			}
+
+			/* If the very first token is a newline, ignore it and continue. */
+			if idx == 0 {
+				continue
+			}
+
+			/* No need to check if idx is too big for us to do a tokens[idx + 1],
+			 * since the last token will always be EOF and a newline will be at
+			 * most the second to last token. */
+
+			 /* Check the first and last points; append only if the previous
+			  * token IS one of some particular types and if the next token IS 
+			  * NOT one of some particular types. */
+			 #partial switch tokens[idx - 1].type {
+			 case .IDENT, .STRING, .NUMBER, .TRUE, .FALSE, .NIL, .BREAK, 
+			 .CONTINUE, .RETURN, .RPAREN, .RSQUIRLY:
+			     #partial switch tokens[idx + 1].type {
+				 case .IN, .OR, .AND, .DOT, .PLUS, .MINUS, .STAR, .SLASH, .EQUAL, .EQUAL_EQUAL,
+				 .BANG_EQUAL, .LESS, .LESS_EQUAL, .GREATER, .GREATER_EQUAL, .BAR_GREATER,
+				 .COMMA, .FAT_ARROW:
+				     continue
+				 case:
+					append(&result, semi)
+				 }
+			 }
+		} else {
+			append(&result, token)
+		}
+	}
+
+	return result[:]
 }
 
 /*
 Ignore any whitespace character (and comment) encountered. Newlines do not
-fall in this category, th ey are handled separately, as they are used for
+fall in this category, they are handled separately, as they are used for
 automatic semicolon insertion.
 */
 @(private = "file")
@@ -195,9 +238,6 @@ skip_whitespace :: proc(l: ^Lexer) {
 		c := peek(l)
 
 		switch c {
-		case '\n':
-			l.line += 1
-			fallthrough
 		case '\t', '\v', '\f', '\r', ' ':
 			advance(l)
 		case '/':
@@ -430,6 +470,11 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 		return make_token(l, match(l, '=') ? .GREATER_EQUAL : .GREATER)
 	case '"':
 		return tok_string(l)
+	case '\n':
+		/* Line increment deferred, because otherwise the newline will be 
+		 * counted as being on the next line. */
+		defer l.line += 1
+		return make_token(l, .NEWLINE)
 	}
 
 	syntax_error(l, fmt.tprintf("Unexpected character '%c'.", previous(l)))
@@ -455,5 +500,7 @@ lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
 		if token.type == TokenType.EOF {break}
 	}
 
-	return toks[:], true
+	tokens = insert_semis(toks[:])
+
+	return tokens, true
 }

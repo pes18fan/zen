@@ -50,7 +50,6 @@ repl :: proc(vm: ^VM) -> int {
 		}
 
 		line := string(buf[:n])
-		line = strings.trim_right_space(line)
 
 		interpret(vm, vm.gc, line)
 	}

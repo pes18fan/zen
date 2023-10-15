@@ -1,1 +1,1 @@
-print it; // ERR: Cannot use 'it' outside of a pipeline
+print it // ERR: Cannot use 'it' outside of a pipeline

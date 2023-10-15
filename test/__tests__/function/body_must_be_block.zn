@@ -1,1 +1,1 @@
-func f() 123; // ERR: Expect '=>' or '{' after function parameter list.
+func f() 123 // ERR: Expect '=>' or '{' after function parameter list.

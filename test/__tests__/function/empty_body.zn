@@ -1,2 +1,2 @@
 func f() {}
-print f(); // expect: nil
+print f() // expect: nil

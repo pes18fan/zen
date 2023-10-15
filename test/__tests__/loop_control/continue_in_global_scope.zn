@@ -1,1 +1,1 @@
-continue; // ERR: Cannot use 'continue' outside a loop.
+continue // ERR: Cannot use 'continue' outside a loop.

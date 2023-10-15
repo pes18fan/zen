@@ -1,12 +1,12 @@
 var i = 0;
 while i < 5 {
     if i == 2 {
-        i = i + 1;
-        continue;
+        i = i + 1
+        continue
     }
 
-    print i;
-    i = i + 1;
+    print i
+    i = i + 1
 }
 // expect: 0
 // expect: 1
@@ -16,11 +16,11 @@ while i < 5 {
 i = 0;
 while i < 5 {
     if i == 2 {
-        break;
+        break
     }
 
-    print i;
-    i = i + 1;
+    print i
+    i = i + 1
 }
 // expect: 0
 // expect: 1
