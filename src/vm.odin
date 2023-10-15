@@ -285,6 +285,49 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				// Take the value on top of the stack and store it into the slot.
 				frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
 			}
+		case .OP_GET_PROPERTY:
+		    {
+				if !is_instance(vm_peek(vm, 0)) {
+					vm_panic(vm, "Only instances have properties.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				instance := as_instance(vm_peek(vm, 0))
+				name := read_string(frame)
+
+				value: Value; ok: bool
+				if value, ok = table_get(&instance.fields, name); !ok {
+					vm_panic(vm, "Undefined property '%s'.", name.chars)
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				vm_pop(vm) /* Instance. */
+				vm_push(vm, value)
+			}
+		case .OP_SET_PROPERTY:
+			{
+				if !is_instance(vm_peek(vm, 1)) {
+					vm_panic(vm, "Only instances have fields.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				/* Get the instance, which is at this moment the 2nd to the top
+				 * value on the stack. */
+				instance := as_instance(vm_peek(vm, 1))
+
+				/* Store the value on top of the stack into the instance's fields. */
+				table_set(&instance.fields, read_string(frame), vm_peek(vm, 0))
+
+				/* Pop the value that we just stored as a field. */
+				value := vm_pop(vm)
+
+				/* Pop the instance off the stack. */
+				vm_pop(vm)
+
+				/* Push the value we stored back on the stack, that's what a 
+				 * setter expression does. */
+				vm_push(vm, value)
+			}
 		case .OP_GET_IT:
 			vm_push(vm, pipeline_it)
 		case .OP_SET_IT:
@@ -397,6 +440,10 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				}
 				vm_push(vm, result) // Push the return value back to the stack.
 				frame = &vm.frames[vm.frame_count - 1]
+			}
+		case .OP_CLASS:
+			{
+				vm_push(vm, obj_val(new_class(vm.gc, read_string(frame))))
 			}
 		}
 	}
@@ -512,6 +559,11 @@ call :: proc(vm: ^VM, closure: ^ObjClosure, arg_count: int) -> bool {
 call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 	if is_obj(callee) {
 		#partial switch obj_type(callee) {
+		case .CLASS: {
+			klass := as_class(callee)
+			vm.stack[len(vm.stack) - arg_count - 1] = obj_val(new_instance(vm.gc, klass))
+			return true
+		}
 		/* We only handle ObjClosures here, since all ObjFunctions are wrapped
 		into closures as soon as they're pulled out of the constant table. */
 		case .CLOSURE:

@@ -4,8 +4,10 @@ import "core:fmt"
 import "core:strings"
 
 ObjType :: enum {
+	CLASS,
 	CLOSURE,
 	FUNCTION,
+	INSTANCE,
 	NATIVE,
 	STRING,
 	UPVALUE,
@@ -76,8 +78,26 @@ ObjClosure :: struct {
 	upvalue_count: int,
 }
 
+/* A class. */
+ObjClass :: struct {
+	using obj: Obj,
+	name:      ^ObjString,
+}
+
+/* An instance of some class. */
+ObjInstance :: struct {
+	using obj:   Obj,
+	klass:       ^ObjClass,
+	fields:      Table,
+	field_count: int,
+}
+
 obj_type :: #force_inline proc(value: Value) -> ObjType {
 	return as_obj(value).type
+}
+
+is_class :: #force_inline proc(value: Value) -> bool {
+	return is_obj_type(value, .CLASS)
 }
 
 is_closure :: #force_inline proc(value: Value) -> bool {
@@ -88,6 +108,10 @@ is_function :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .FUNCTION)
 }
 
+is_instance :: #force_inline proc(value: Value) -> bool {
+	return is_obj_type(value, .INSTANCE)
+}
+
 is_native :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .NATIVE)
 }
@@ -96,12 +120,20 @@ is_string :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .STRING)
 }
 
+as_class :: #force_inline proc(value: Value) -> ^ObjClass {
+	return (^ObjClass)(as_obj(value))
+}
+
 as_closure :: #force_inline proc(value: Value) -> ^ObjClosure {
 	return (^ObjClosure)(as_obj(value))
 }
 
 as_function :: #force_inline proc(value: Value) -> ^ObjFunction {
 	return (^ObjFunction)(as_obj(value))
+}
+
+as_instance :: #force_inline proc(value: Value) -> ^ObjInstance {
+	return (^ObjInstance)(as_obj(value))
 }
 
 as_native_obj :: #force_inline proc(value: Value) -> ^ObjNative {
@@ -126,8 +158,12 @@ is_obj_type :: #force_inline proc(value: Value, type: ObjType) -> bool {
 
 type_of_obj :: proc(obj: ^Obj) -> string {
 	switch obj.type {
+	case .CLASS:
+		return "class"
 	case .FUNCTION, .NATIVE, .CLOSURE:
 		return "function"
+	case .INSTANCE:
+		return "instance"
 	case .STRING:
 		return "string"
 	case .UPVALUE:
@@ -163,6 +199,12 @@ allocate_obj :: proc(gc: ^GC, $T: typeid, type: ObjType) -> ^Obj {
 	return obj
 }
 
+new_class :: proc(gc: ^GC, name: ^ObjString) -> ^ObjClass {
+	klass := cast(^ObjClass)(allocate_obj(gc, ObjClass, .CLASS))
+	klass.name = name
+	return klass
+}
+
 new_closure :: proc(gc: ^GC, function: ^ObjFunction) -> ^ObjClosure {
 	upvalues := make([]^ObjUpvalue, function.upvalue_count) // allocate with the upvalue count of the function!!!!!!!!!
 
@@ -181,6 +223,13 @@ new_function :: proc(gc: ^GC) -> ^ObjFunction {
 	fn.chunk = init_chunk()
 	fn.has_returned = false
 	return fn
+}
+
+new_instance :: proc(gc: ^GC, klass: ^ObjClass) -> ^ObjInstance {
+	instance := cast(^ObjInstance)(allocate_obj(gc, ObjInstance, .INSTANCE))
+	instance.klass = klass
+	instance.fields = init_table()
+	return instance
 }
 
 new_native :: proc(gc: ^GC, function: NativeFn, arity: int) -> ^ObjNative {
@@ -268,10 +317,15 @@ print_function :: proc(fn: ^ObjFunction) {
 /* Print the string representation of an object. */
 print_object :: proc(obj: ^Obj) {
 	switch obj.type {
+	case .CLASS:
+		fmt.printf("%s", as_class(obj).name.chars)
 	case .CLOSURE:
 		print_function(as_closure(obj).function)
 	case .FUNCTION:
 		print_function(as_function(obj))
+	case .INSTANCE:
+		fmt.printf("%s instance",
+					as_instance(obj).klass.name.chars)
 	case .NATIVE:
 		fmt.printf("<native func>")
 	case .STRING:
@@ -291,6 +345,9 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 	}
 
 	switch obj.type {
+	case .CLASS:
+		klass := (^ObjClass)(obj)
+		free(klass)
 	case .CLOSURE:
 		closure := (^ObjClosure)(obj)
 		delete(closure.upvalues)
@@ -299,6 +356,10 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 		fn := (^ObjFunction)(obj)
 		free_chunk(&fn.chunk)
 		free(fn)
+	case .INSTANCE:
+		instance := (^ObjInstance)(obj)
+		free_table(&instance.fields)
+		free(instance)
 	case .NATIVE:
 		fn := (^ObjNative)(obj)
 		free(fn)

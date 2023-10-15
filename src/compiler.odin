@@ -13,6 +13,9 @@ U16_MAX :: 65535
 /* Number of eight bit unsigned integers in existence. */
 U8_COUNT :: 256
 
+/* Number of sixteen bit unsigned integers in existence. */
+U16_COUNT :: 65536
+
 /* The language parser. */
 Parser :: struct {
 	tokens:           []Token,
@@ -478,6 +481,21 @@ call :: proc(p: ^Parser, can_assign: bool) {
 	emit_bytes(p, byte(OpCode.OP_CALL), arg_count)
 }
 
+@(private = "file")
+dot :: proc(p: ^Parser, can_assign: bool) {
+	consume(p, .IDENT, "Expect property name after '.'.")
+	name := identifier_constant(p, &p.previous)
+
+	if can_assign && match(p, .EQUAL) {
+		expression(p)
+		emit_opcode(p, .OP_SET_PROPERTY)
+		emit_byte(p, name)
+	} else {
+		emit_opcode(p, .OP_GET_PROPERTY)
+		emit_byte(p, name)
+	}
+}
+
 /* Parse a literal value and emit it to the chunk. */
 @(private = "file")
 literal :: proc(p: ^Parser, can_assign: bool) {
@@ -696,7 +714,7 @@ rules: []ParseRule = {
 	TokenType.LSQUIRLY = ParseRule{nil, nil, .NONE},
 	TokenType.RSQUIRLY = ParseRule{nil, nil, .NONE},
 	TokenType.COMMA = ParseRule{nil, nil, .NONE},
-	TokenType.DOT = ParseRule{nil, nil, .NONE},
+	TokenType.DOT = ParseRule{nil, dot, .CALL},
 	TokenType.MINUS = ParseRule{unary, binary, .TERM},
 	TokenType.PLUS = ParseRule{nil, binary, .TERM},
 	TokenType.SEMI = ParseRule{nil, nil, .NONE},
@@ -1081,6 +1099,23 @@ arrow_function :: proc(p: ^Parser, anonymous: bool) {
 	emit_opcode(p, .OP_RETURN)
 
 	p.current_compiler.function.has_returned = true
+}
+
+/*
+Parse a class declaration.
+*/
+@(private = "file")
+class_declaration :: proc(p: ^Parser) {
+	consume(p, .IDENT, "Expect class name.")
+	name_constant := identifier_constant(p, &p.previous)
+	declare_variable(p, .VAR) /* Classes are reassignable, subject to change. */
+
+	emit_opcode(p, .OP_CLASS)
+	emit_byte(p, name_constant)
+	define_variable(p, name_constant)
+
+	consume(p, .LSQUIRLY, "Expect '{' before class body.")
+	consume(p, .RSQUIRLY, "Expect '}' after class body.")
 }
 
 /* 
@@ -1471,6 +1506,8 @@ declaration :: proc(p: ^Parser) {
 	switch {
 	case match(p, .VAR) || match(p, .VAL):
 		var_declaration(p)
+	case match(p, .CLASS):
+		class_declaration(p)
 	case match(p, .FUNC):
 		func_declaration(p)
 	case:

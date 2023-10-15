@@ -204,6 +204,12 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 	}
 
 	switch object.type {
+	/* A class contains a reference to an ObjString with its name. */
+	case .CLASS:
+		{
+			klass := (^ObjClass)(object)
+			mark_object(gc, (^Obj)(klass.name))
+		}
 	/* A closure contains a reference to the function it wraps, and
         to all the upvalues it captures. */
 	case .CLOSURE:
@@ -223,6 +229,14 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 			function := (^ObjFunction)(object)
 			mark_object(gc, (^Obj)(function.name))
 			mark_array(gc, &function.chunk.constants)
+		}
+	/* An instance contains a reference to its class and references to
+	 * its fields. */
+	case .INSTANCE:
+	    {
+			instance := (^ObjInstance)(object)
+			mark_object(gc, (^Obj)(instance.klass))
+			mark_table(gc, &instance.fields)
 		}
 	/* An upvalue contains a reference to a closed-over value if
         it is closed. */
