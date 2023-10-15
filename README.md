@@ -28,11 +28,14 @@ build, run:
 
 ## testing
 
-**Requires:** Ruby
+### requirements
 
-This project includes unit tests written using Odin's own testing library
-as well as a custom end-to-end tester written in Ruby. To test everything
-at once, run:
+- Odin
+- Ruby
+
+### steps
+
+To test everything at once, run:
 
 ```bash
 ./x.py test
