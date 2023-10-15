@@ -79,6 +79,7 @@ Local :: struct {
 	depth:       int,
 	final:       Variability,
 	is_captured: bool,
+	is_loop_variable: bool,
 }
 
 /*
@@ -861,7 +862,7 @@ Add a local name binding.
 Errors if there are too many local variables in the scope already.
 */
 @(private = "file")
-add_local :: proc(p: ^Parser, name: Token, final: Variability) {
+add_local :: proc(p: ^Parser, name: Token, final: Variability, is_loop_variable: bool = false) {
 	if p.current_compiler.local_count == U8_COUNT {
 		error(p, "Too many local variables in function.")
 		return
@@ -873,6 +874,7 @@ add_local :: proc(p: ^Parser, name: Token, final: Variability) {
 	local.depth = -1
 	local.final = final
 	local.is_captured = false
+	local.is_loop_variable = is_loop_variable
 }
 
 /* 
@@ -880,7 +882,7 @@ Declare a name binding.
 Errors if the variable of that name already exists in the scope.
 */
 @(private = "file")
-declare_variable :: proc(p: ^Parser, final: Variability) {
+declare_variable :: proc(p: ^Parser, final: Variability, is_loop_variable: bool = false) {
 	if p.current_compiler.scope_depth == 0 {return}
 
 	name := &p.previous
@@ -896,15 +898,15 @@ declare_variable :: proc(p: ^Parser, final: Variability) {
 		}
 	}
 
-	add_local(p, name^, final)
+	add_local(p, name^, final, is_loop_variable)
 }
 
 /* Parse a variable or `final` declaration. */
 @(private = "file")
-parse_variable :: proc(p: ^Parser, error_message: string, final: Variability) -> u8 {
+parse_variable :: proc(p: ^Parser, error_message: string, final: Variability, is_loop_variable: bool = false) -> u8 {
 	consume(p, .IDENT, error_message)
 
-	declare_variable(p, final)
+	declare_variable(p, final, is_loop_variable)
 	if p.current_compiler.scope_depth > 0 {return 0}
 
 	global_o_str := copy_string(p.gc, p.previous.lexeme)
@@ -1095,7 +1097,7 @@ func_declaration :: proc(p: ^Parser) {
 
 /* Parse a name binding. */
 @(private = "file")
-let_declaration :: proc(p: ^Parser) {
+let_declaration :: proc(p: ^Parser, is_loop_variable: bool = false) {
 	final: Variability = .FINAL if p.previous.type == .FINAL else .VAR
 
 	for {
@@ -1103,6 +1105,7 @@ let_declaration :: proc(p: ^Parser) {
 			p,
 			final == .FINAL ? "Expect final variable name." : "Expect variable name.",
 			final,
+			is_loop_variable,
 		)
 
 		if match(p, .EQUAL) {
@@ -1241,7 +1244,6 @@ is a compile-time error.
 */
 @(private = "file")
 break_statement :: proc(p: ^Parser) {
-	emit_noop(p)
 	if p.current_compiler.loop_count == 0 {
 		error(p, "Cannot 'break' outside a loop.")
 		return
@@ -1283,6 +1285,9 @@ continue_statement :: proc(p: ^Parser) {
 		local := &p.current_compiler.locals[i]
 		if local.depth < loop.scope_depth {
 			break
+		}
+		if local.is_loop_variable {
+			continue
 		}
 		emit_opcode(p, .OP_POP)
 	}
@@ -1354,8 +1359,6 @@ switch_statement :: proc(p: ^Parser) {
 /* Parse a while statment. */
 @(private = "file")
 while_statement :: proc(p: ^Parser) {
-	emit_noop(p)
-
 	loop_start := len(current_chunk(p).code)
 
 	begin_scope(p)
@@ -1373,19 +1376,17 @@ while_statement :: proc(p: ^Parser) {
 	patch_jump(p, exit_jump)
 	emit_pop(p)
 
-	end_loop(p)
 	end_scope(p)
+	end_loop(p)
 }
 
 @(private = "file")
 for_statement :: proc(p: ^Parser) {
-	emit_noop(p)
-
 	begin_scope(p)
 	if match(p, .SEMI) {
 		// No initializer.
 	} else if match(p, .LET) {
-		let_declaration(p)
+		let_declaration(p, is_loop_variable = true)
 	} else {
 		expression_statement(p)
 	}
@@ -1427,8 +1428,8 @@ for_statement :: proc(p: ^Parser) {
 		emit_pop(p) // Condition.
 	}
 
-	end_loop(p)
 	end_scope(p)
+	end_loop(p)
 }
 
 /* 
