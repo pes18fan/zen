@@ -175,7 +175,7 @@ type_of_obj :: proc(obj: ^Obj) -> string {
 
 allocate_obj :: proc(gc: ^GC, $T: typeid, type: ObjType) -> ^Obj {
 	gc.bytes_allocated += size_of(T)
-	if debug_flags.stress_gc {
+	if config.stress_gc {
 		collect_garbage(gc)
 	}
 
@@ -192,7 +192,7 @@ allocate_obj :: proc(gc: ^GC, $T: typeid, type: ObjType) -> ^Obj {
 	obj.next = gc.objects
 	gc.objects = obj
 
-	if debug_flags.log_gc {
+	if config.log_gc {
 		fmt.eprintf("%p allocate %d for type %v\n", obj, size_of(obj), type_of_obj(obj))
 	}
 
@@ -338,7 +338,7 @@ print_object :: proc(obj: ^Obj) {
 free_object :: proc(gc: ^GC, obj: ^Obj) {
 	gc.bytes_allocated -= size_of(obj)
 
-	if debug_flags.log_gc {
+	if config.log_gc {
 		fmt.eprintf("%p free ", obj)
 		print_object(obj)
 		fmt.eprintf(" of type %v\n", type_of_obj(obj))

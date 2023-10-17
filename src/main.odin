@@ -7,7 +7,7 @@ import "core:strings"
 
 VERSION :: "zen 0.0.1"
 
-/* Debug configuration. */
+/* Config values set on start, mostly for debugging. */
 Config :: struct {
 	compile_only:     bool,
 	dump_disassembly: bool,
@@ -16,9 +16,10 @@ Config :: struct {
 	stress_gc:        bool,
 	log_gc:           bool,
 	record_time:      bool,
+	repl:             bool,
 }
 
-debug_flags := Config {
+config := Config {
 	compile_only = false,
 	dump_disassembly = false,
 	trace_exec  = false,
@@ -26,6 +27,7 @@ debug_flags := Config {
 	stress_gc   = false,
 	log_gc      = false,
 	record_time = false,
+	repl        = false,
 }
 
 /* Fire up a REPL. */
@@ -128,19 +130,19 @@ Options:
 				return 0
 			}
 		case "--compile":
-			debug_flags.compile_only = true
+			config.compile_only = true
 		case "--dump":
-			debug_flags.dump_disassembly = true
+			config.dump_disassembly = true
 		case "--trace":
-			debug_flags.trace_exec = true
+			config.trace_exec = true
 		case "--time":
-			debug_flags.record_time = true
+			config.record_time = true
 		case "--check-leaks":
-			debug_flags.check_leaks = true
+			config.check_leaks = true
 		case "--log-gc":
-			debug_flags.log_gc = true
+			config.log_gc = true
 		case "--stress-gc":
-			debug_flags.stress_gc = true
+			config.stress_gc = true
 		case:
 			{
 				if argv[1][:2] == "--" {
@@ -162,19 +164,19 @@ Options:
 							fmt.println(help_message)
 							return 0
 						case 'C':
-							debug_flags.compile_only = true
+							config.compile_only = true
 						case 'D':
-							debug_flags.dump_disassembly = true
+							config.dump_disassembly = true
 						case 't':
-							debug_flags.record_time = true
+							config.record_time = true
 						case 'c':
-							debug_flags.check_leaks = true
+							config.check_leaks = true
 						case 'T':
-							debug_flags.trace_exec = true
+							config.trace_exec = true
 						case 'L':
-							debug_flags.log_gc = true
+							config.log_gc = true
 						case 'S':
-							debug_flags.stress_gc = true
+							config.stress_gc = true
 						case:
 							fmt.eprintf("Unknown option: %c", c)
 							fmt.eprintln(help_message)
@@ -194,6 +196,7 @@ Options:
 	argv_0 = argv[0]
 
 	if script == "" {
+		config.repl = true
 		return repl(vm)
 	} else {
 		return run_file(vm, script)
@@ -205,7 +208,7 @@ main :: proc() {
 	defer os.exit(status)
 
 	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
-	if debug_flags.check_leaks {
+	if config.check_leaks {
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
 		context.allocator = mem.tracking_allocator(&track)

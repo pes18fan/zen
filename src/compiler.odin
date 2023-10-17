@@ -389,7 +389,7 @@ end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
 		emit_return(p)
 	}
 
-	if debug_flags.dump_disassembly {
+	if config.dump_disassembly {
 		if !p.had_error {
 			disassemble(current_chunk(p), fn.name != nil ? fn.name.chars : "<script>")
 		}
@@ -1208,7 +1208,15 @@ var_declaration :: proc(p: ^Parser, is_loop_variable: bool = false) {
 expression_statement :: proc(p: ^Parser) {
 	expression(p)
 	consume_semi(p, "expression")
-	emit_pop(p)
+
+	if config.repl {
+		/* If in a repl session, print out the expression's value.
+		 * The print instruction also pops off the value at the top of the
+		 * stack, so no need to add another pop instruction in this case. */
+		emit_opcode(p, .OP_PRINT)
+	} else {
+		emit_pop(p)
+	}
 }
 
 /* Parse an if statement. */

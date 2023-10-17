@@ -216,7 +216,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 	pipeline_it: Value = nil
 
 	for {
-		if debug_flags.trace_exec {
+		if config.trace_exec {
 			fmt.printf("          ")
 			for value in vm.stack {
 				fmt.printf("[ ")
@@ -267,12 +267,14 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			vm_pop(vm)
 		case .OP_SET_GLOBAL:
-			name := read_string(frame)
+			{
+				name := read_string(frame)
 
-			if table_set(&vm.gc.globals, name, vm_peek(vm, 0)) {
-				table_delete(&vm.gc.globals, name)
-				vm_panic(vm, "Undefined variable '%s'.", name.chars)
-				return .INTERPRET_RUNTIME_ERROR
+				if table_set(&vm.gc.globals, name, vm_peek(vm, 0)) {
+					table_delete(&vm.gc.globals, name)
+					vm_panic(vm, "Undefined variable '%s'.", name.chars)
+					return .INTERPRET_RUNTIME_ERROR
+				}
 			}
 		case .OP_GET_UPVALUE:
 			{
@@ -453,7 +455,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
 	/* Start the stopwatch. */
 	sw: time.Stopwatch
-	if debug_flags.record_time {
+	if config.record_time {
 		time.stopwatch_start(&sw)
 	}
 
@@ -465,7 +467,7 @@ interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
 	}
 
 	/* Time the lexer. */
-	if debug_flags.record_time {
+	if config.record_time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Lexer: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
@@ -478,7 +480,7 @@ interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
 	}
 
 	/* Time the compiler. */
-	if debug_flags.record_time {
+	if config.record_time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Compiler: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
@@ -486,13 +488,13 @@ interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
 	}
 
 	/* Time the VM. */
-	defer if debug_flags.record_time {
+	defer if config.record_time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("\nVM: %v\n", time.stopwatch_duration(sw))
 	}
 
 	/* If the user only wants to compile the script, then we can stop here. */
-	if debug_flags.compile_only {
+	if config.compile_only {
 		return .INTERPRET_OK
 	}
 
@@ -519,6 +521,14 @@ vm_pop :: #force_inline proc(vm: ^VM) -> Value #no_bounds_check {
 /* Peek at a certain distance from the top of the stack. */
 vm_peek :: #force_inline proc(vm: ^VM, distance: int) -> Value #no_bounds_check {
 	return vm.stack[len(vm.stack) - 1 - distance]
+}
+
+/* Print the provided value if in the repl. */
+@(private = "file")
+print_if_repl :: #force_inline proc(value: Value) {
+	if config.repl {
+		print_value(value)
+	}
 }
 
 /* Returns true if provided value is falsey. */
