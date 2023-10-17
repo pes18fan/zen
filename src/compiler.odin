@@ -483,10 +483,46 @@ call :: proc(p: ^Parser, can_assign: bool) {
 
 @(private = "file")
 dot :: proc(p: ^Parser, can_assign: bool) {
+	instance := p.tokens[p.curr_idx - 3]
+	possible_local := resolve_local(p, p.current_compiler, &instance)
+	possible_upvalue := resolve_upvalue(p, p.current_compiler, &instance)
+	set_op: OpCode
+
+	if possible_local != -1 {
+		set_op = .OP_SET_LOCAL
+	} else if possible_upvalue != -1 {
+		set_op = .OP_SET_UPVALUE
+	} else {
+		set_op = .OP_SET_GLOBAL
+	}
+
 	consume(p, .IDENT, "Expect property name after '.'.")
 	name := identifier_constant(p, &p.previous)
 
 	if can_assign && match(p, .EQUAL) {
+		// TODO: Make this work for upvalues as well
+		if set_op == .OP_SET_LOCAL {
+			for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
+				local := &p.current_compiler.locals[i]
+				if identifiers_equal(&instance, &local.name) && local.final == .FINAL {
+					error(p, "Can only set a final variable once.")
+				}
+			}
+		}
+
+		if set_op == .OP_SET_GLOBAL {
+			global_o_str := copy_string(p.gc, instance.lexeme)
+			value: Value;ok: bool
+
+			if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
+				if values_equal(value, bool_val(true)) {
+					error(p, "Can only set a final variable once.")
+				}
+			} else {
+				table_set(p.current_compiler.globals, global_o_str, bool_val(false))
+			}
+		}
+
 		expression(p)
 		emit_opcode(p, .OP_SET_PROPERTY)
 		emit_byte(p, name)
@@ -640,6 +676,7 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 	}
 
 	if can_assign && match(p, .EQUAL) {
+		// TODO: Make this work for upvalues as well
 		if set_op == byte(OpCode.OP_SET_LOCAL) {
 			for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
 				local := &p.current_compiler.locals[i]
