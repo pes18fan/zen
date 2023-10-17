@@ -11,6 +11,17 @@ print "Hello, world!" //=> Hello, world!
 Statements are seperated by semicolons. They are automatically inserted
 only at newlines, following certain rules.
 
+## Datatypes
+
+zen has the following datatypes:
+
+- `number`: A real number represented as a 64-bit floating point.
+- `complex`: A complex number represented with two 64-bit floating points.
+- `bool`: A boolean value i.e. true or false.
+- `string`: A sequence of text.
+
+You can create your own datatypes via classes.
+
 ## Variables
 
 Bind a value to a name with `var`.
@@ -184,7 +195,15 @@ These include the following:
 - `floor(x)`: Find the largest integer less than `x`.
 - `ceil(x)`: Find the smallest integer greater than `x`.
 - `round(x)`: Round `x` to the nearest integer.
+- `abs(x)`: Find the absolute value of a real number or the magnitude of a complex number.
 - `parse(s)`: Attempt to parse a string `s` into a floating point number.
+
+#### complex
+
+- `complex(r, i)`: Create a complex number with real part `r` and imaginary part `i`.
+- `conjg(z)`: Find the complex conjugate of a number `z`.
+- `real(z)`: Get the real part of a complex number `z`.
+- `imag(z)`: Get the imaginary part of a complex number `z`.
 
 ### errors
 
@@ -202,3 +221,7 @@ These include the following:
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
+
+### misc
+
+- `typeof(x)`: Get the type of any expression.

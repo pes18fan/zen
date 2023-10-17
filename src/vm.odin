@@ -345,12 +345,36 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 		case .OP_LESS:
 			binary_op(vm, bool, "<") or_return
 		case .OP_ADD:
-			if is_string(vm_peek(vm, 0)) && is_string(vm_peek(vm, 0)) {
+			if is_string(vm_peek(vm, 0)) && is_string(vm_peek(vm, 1)) {
 				concatenate(vm)
-			} else if is_number(vm_peek(vm, 0)) && is_number(vm_peek(vm, 0)) {
+			} else if is_number(vm_peek(vm, 0)) && is_number(vm_peek(vm, 1)) {
 				b := as_number(vm_pop(vm))
 				a := as_number(vm_pop(vm))
 				vm_push(vm, number_val(a + b))
+			} else if is_complex(vm_peek(vm, 0)) || is_complex(vm_peek(vm, 1)) {
+				b: complex128; a: complex128
+
+				if is_number(vm_peek(vm, 0)) {
+					b = complex128(as_number(vm_pop(vm)))
+					a = as_complex(vm_pop(vm))
+					vm_push(vm, complex_val(a + b))
+				} else if is_number(vm_peek(vm, 1)) {
+					b = as_complex(vm_pop(vm))
+					a = complex128(as_number(vm_pop(vm)))
+					vm_push(vm, complex_val(a + b))
+				} else if is_complex(vm_peek(vm, 0)) && is_complex(vm_peek(vm, 1)) {
+					b = as_complex(vm_pop(vm))
+					a = as_complex(vm_pop(vm))
+					vm_push(vm, complex_val(a + b))
+				} else {
+					vm_panic(
+						vm,
+						"Expected two numbers or two strings as operands to '+', got %v and %v instead.",
+						type_of_value(vm_pop(vm)),
+						type_of_value(vm_pop(vm)),
+					)
+					return .INTERPRET_RUNTIME_ERROR
+				}
 			} else {
 				vm_panic(
 					vm,
@@ -361,19 +385,102 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				return .INTERPRET_RUNTIME_ERROR
 			}
 		case .OP_SUBTRACT:
-			binary_op(vm, f64, "-") or_return
-		case .OP_MULTIPLY:
-			binary_op(vm, f64, "*") or_return
-		case .OP_DIVIDE:
-			binary_op(vm, f64, "/") or_return
-		case .OP_NOT:
+			if is_complex(vm_peek(vm, 0)) || is_complex(vm_peek(vm, 1)) {
+				b: complex128; a: complex128
+
+				if is_number(vm_peek(vm, 0)) {
+					b = complex128(as_number(vm_pop(vm)))
+					a = as_complex(vm_pop(vm))
+					vm_push(vm, complex_val(a - b))
+				} else if is_number(vm_peek(vm, 1)) {
+					b = as_complex(vm_pop(vm))
+					a = complex128(as_number(vm_pop(vm)))
+					vm_push(vm, complex_val(a - b))
+				} else if is_complex(vm_peek(vm, 0)) && is_complex(vm_peek(vm, 1)) {
+					b = as_complex(vm_pop(vm))
+					a = as_complex(vm_pop(vm))
+					vm_push(vm, complex_val(a - b))
+				} else {
+					vm_panic(
+						vm,
+						"Expected two numbers as operands to '-', got %v and %v instead.",
+						type_of_value(vm_pop(vm)),
+						type_of_value(vm_pop(vm)),
+					)
+					return .INTERPRET_RUNTIME_ERROR
+				}
+			} else {
+				binary_op(vm, f64, "-") or_return
+			}
+			case .OP_MULTIPLY:
+			if is_complex(vm_peek(vm, 0)) || is_complex(vm_peek(vm, 1)) {
+				b: complex128; a: complex128
+
+				if is_number(vm_peek(vm, 0)) {
+					b = complex128(as_number(vm_pop(vm)))
+					a = as_complex(vm_pop(vm))
+					vm_push(vm, complex_val(a * b))
+				} else if is_number(vm_peek(vm, 1)) {
+					b = as_complex(vm_pop(vm))
+					a = complex128(as_number(vm_pop(vm)))
+					vm_push(vm, complex_val(a * b))
+				} else if is_complex(vm_peek(vm, 0)) && is_complex(vm_peek(vm, 1)) {
+					b = as_complex(vm_pop(vm))
+					a = as_complex(vm_pop(vm))
+					vm_push(vm, complex_val(a * b))
+				} else {
+					vm_panic(
+						vm,
+						"Expected two numbers as operands to '*', got %v and %v instead.",
+						type_of_value(vm_pop(vm)),
+						type_of_value(vm_pop(vm)),
+					)
+					return .INTERPRET_RUNTIME_ERROR
+				}
+			} else {
+				binary_op(vm, f64, "*") or_return
+			}
+			case .OP_DIVIDE:
+			if is_complex(vm_peek(vm, 0)) || is_complex(vm_peek(vm, 1)) {
+				b: complex128; a: complex128
+
+				if is_number(vm_peek(vm, 0)) {
+					b = complex128(as_number(vm_pop(vm)))
+					a = as_complex(vm_pop(vm))
+					vm_push(vm, complex_val(a / b))
+				} else if is_number(vm_peek(vm, 1)) {
+					b = as_complex(vm_pop(vm))
+					a = complex128(as_number(vm_pop(vm)))
+					vm_push(vm, complex_val(a / b))
+				} else if is_complex(vm_peek(vm, 0)) && is_complex(vm_peek(vm, 1)) {
+					b = as_complex(vm_pop(vm))
+					a = as_complex(vm_pop(vm))
+					vm_push(vm, complex_val(a / b))
+				} else {
+					vm_panic(
+						vm,
+						"Expected two numbers as operands to '/', got %v and %v instead.",
+						type_of_value(vm_pop(vm)),
+						type_of_value(vm_pop(vm)),
+					)
+					return .INTERPRET_RUNTIME_ERROR
+				}
+			} else {
+				binary_op(vm, f64, "/") or_return
+			}
+			case .OP_NOT:
 			vm_push(vm, bool_val(is_falsey(vm_pop(vm))))
-		case .OP_NEGATE:
-			if !is_number(vm_peek(vm, 0)) {
+			case .OP_NEGATE:
+			if !is_number(vm_peek(vm, 0)) && !is_complex(vm_peek(vm, 0)) {
 				vm_panic(vm, "Can only negate numbers.")
 				return .INTERPRET_RUNTIME_ERROR
 			}
-			vm_push(vm, number_val(-as_number(vm_pop(vm))))
+
+			if is_number(vm_peek(vm, 0)) {
+				vm_push(vm, number_val(-as_number(vm_pop(vm))))
+			} else {
+				vm_push(vm, complex_val(-as_complex(vm_pop(vm))))
+			}
 		case .OP_PRINT:
 			print_value(vm_pop(vm))
 			fmt.printf("\n")
@@ -521,14 +628,6 @@ vm_pop :: #force_inline proc(vm: ^VM) -> Value #no_bounds_check {
 /* Peek at a certain distance from the top of the stack. */
 vm_peek :: #force_inline proc(vm: ^VM, distance: int) -> Value #no_bounds_check {
 	return vm.stack[len(vm.stack) - 1 - distance]
-}
-
-/* Print the provided value if in the repl. */
-@(private = "file")
-print_if_repl :: #force_inline proc(value: Value) {
-	if config.repl {
-		print_value(value)
-	}
 }
 
 /* Returns true if provided value is falsey. */
