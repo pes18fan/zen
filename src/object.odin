@@ -8,6 +8,7 @@ ObjType :: enum {
 	CLOSURE,
 	FUNCTION,
 	INSTANCE,
+	LIST,
 	NATIVE,
 	STRING,
 	UPVALUE,
@@ -92,6 +93,12 @@ ObjInstance :: struct {
 	field_count: int,
 }
 
+/* A list. */
+ObjList :: struct {
+	using obj: Obj,
+	items:     ValueArray,
+}
+
 obj_type :: #force_inline proc(value: Value) -> ObjType {
 	return as_obj(value).type
 }
@@ -110,6 +117,10 @@ is_function :: #force_inline proc(value: Value) -> bool {
 
 is_instance :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .INSTANCE)
+}
+
+is_list :: #force_inline proc(value: Value) -> bool {
+	return is_obj_type(value, .LIST)
 }
 
 is_native :: #force_inline proc(value: Value) -> bool {
@@ -134,6 +145,10 @@ as_function :: #force_inline proc(value: Value) -> ^ObjFunction {
 
 as_instance :: #force_inline proc(value: Value) -> ^ObjInstance {
 	return (^ObjInstance)(as_obj(value))
+}
+
+as_list :: #force_inline proc(value: Value) -> ^ObjList {
+	return (^ObjList)(as_obj(value))
 }
 
 as_native_obj :: #force_inline proc(value: Value) -> ^ObjNative {
@@ -164,6 +179,8 @@ type_of_obj :: proc(obj: ^Obj) -> string {
 		return "function"
 	case .INSTANCE:
 		return "instance"
+	case .LIST:
+		return "list"
 	case .STRING:
 		return "string"
 	case .UPVALUE:
@@ -230,6 +247,12 @@ new_instance :: proc(gc: ^GC, klass: ^ObjClass) -> ^ObjInstance {
 	instance.klass = klass
 	instance.fields = init_table()
 	return instance
+}
+
+new_list :: proc(gc: ^GC) -> ^ObjList {
+	list := cast(^ObjList)(allocate_obj(gc, ObjList, .LIST))
+	list.items = init_value_array()
+	return list
 }
 
 new_native :: proc(gc: ^GC, function: NativeFn, arity: int) -> ^ObjNative {
@@ -323,6 +346,24 @@ stringify_object :: proc(obj: ^Obj) -> string {
 			return stringify_function(as_function(obj))
 		case .INSTANCE:
 			return fmt.tprintf("%s instance", as_instance(obj).klass.name.chars)
+		case .LIST: {
+			list := as_list(obj)
+			sb := strings.builder_make()	
+			
+			strings.write_string(&sb, "[")
+
+			for i := 0; i < list.items.count; i += 1 {
+				strings.write_string(&sb, stringify_value(list.items.values[i]))
+
+				if i != list.items.count - 1 {
+					strings.write_string(&sb, ", ")
+				}
+			}
+
+			strings.write_string(&sb, "]")
+			str := strings.to_string(sb)
+			return str
+		}
 		case .NATIVE:
 			return "<native func>"
 		case .STRING:
@@ -359,6 +400,10 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 		instance := (^ObjInstance)(obj)
 		free_table(&instance.fields)
 		free(instance)
+	case .LIST:
+		list := (^ObjList)(obj)
+		free_value_array(&list.items)
+		free(list)
 	case .NATIVE:
 		fn := (^ObjNative)(obj)
 		free(fn)

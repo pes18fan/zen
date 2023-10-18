@@ -78,6 +78,13 @@ write_value_array :: proc (a: ^ValueArray, value: Value) {
     a.count += 1
 }
 
+/* Pop a value off the constant pool. */
+pop_value_array :: proc(a: ^ValueArray) -> Value {
+    assert(a.count > 0)
+    defer a.count -= 1
+    return pop(&a.values)
+}
+
 /* Free the constant pool's memory. */
 free_value_array :: proc (a: ^ValueArray) {
     delete(a.values)

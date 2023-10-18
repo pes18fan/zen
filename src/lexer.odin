@@ -10,6 +10,8 @@ TokenType :: enum {
 	RPAREN,
 	LSQUIRLY,
 	RSQUIRLY,
+	LSQUARE,
+	RSQUARE,
 	COMMA,
 	DOT,
 	MINUS,
@@ -209,7 +211,7 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 			  * NOT one of some particular types. */
 			 #partial switch tokens[idx - 1].type {
 			 case .IDENT, .STRING, .NUMBER, .TRUE, .FALSE, .NIL, .BREAK, 
-			 .CONTINUE, .RETURN, .RPAREN, .RSQUIRLY:
+			 .CONTINUE, .RETURN, .RPAREN, .RSQUIRLY, .RSQUARE:
 			     #partial switch tokens[idx + 1].type {
 				 case .IN, .OR, .AND, .DOT, .PLUS, .MINUS, .STAR, .SLASH, .EQUAL, .EQUAL_EQUAL,
 				 .BANG_EQUAL, .LESS, .LESS_EQUAL, .GREATER, .GREATER_EQUAL, .BAR_GREATER,
@@ -437,6 +439,10 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 		return make_token(l, .LSQUIRLY)
 	case '}':
 		return make_token(l, .RSQUIRLY)
+	case '[':
+		return make_token(l, .LSQUARE)
+	case ']':
+		return make_token(l, .RSQUARE)
 	case ';':
 		return make_token(l, .SEMI)
 	case ',':

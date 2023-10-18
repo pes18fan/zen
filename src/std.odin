@@ -34,6 +34,10 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "puts", puts_native, arity = 1)
 	define_native(gc, "gets", gets_native, arity = 0)
 
+	// lists
+	define_native(gc, "push", push_native, arity = 2)
+	define_native(gc, "pop", pop_native, arity = 1)
+
 	// strings
 	define_native(gc, "chomp", chomp_native, arity = 1)
 	define_native(gc, "len", len_native, arity = 1)
@@ -245,14 +249,18 @@ chomp_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return obj_val(copy_string(vm.gc, strings.trim_space(as_string(args[0]).chars))), true
 }
 
-/* Get the length of a string. */
+/* Get the length of a string or a list. */
 len_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_string(args[0]) {
+	if !is_string(args[0]) && !is_list(args[0]) {
 		vm_panic(vm, "Cannot get length of a %v.", type_of_value(args[0]))
 		return nil, false
 	}
-
-	return number_val(f64(as_string(args[0]).len)), true
+	
+	if is_string(args[0]) {
+		return number_val(f64(as_string(args[0]).len)), true
+	} else {
+		return number_val(f64(as_list(args[0]).items.count)), true
+	}
 }
 
 /* 
@@ -339,4 +347,29 @@ str_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 /* Return the type of any value, represented as a string. */
 typeof_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return obj_val(copy_string(vm.gc, type_of_value(args[0]))), true
+}
+
+/* Push a value to a list. */
+push_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_list(args[0]) {
+		vm_panic(vm, "Cannot push a value to a %v.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	list := as_list(args[0])
+	item := args[1]
+
+	write_value_array(&list.items, item)
+	return nil, true
+}
+
+/* Pop a value off a list and return it. */
+pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_list(args[0]) {
+		vm_panic(vm, "Cannot pop a %v.", type_of_value(args[0]))
+		return nil, false
+	}
+
+	list := as_list(args[0])
+	return pop_value_array(&list.items), true
 }

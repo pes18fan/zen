@@ -238,6 +238,12 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 			mark_object(gc, (^Obj)(instance.klass))
 			mark_table(gc, &instance.fields)
 		}
+	/* A list contains references to its elements. */
+	case .LIST:
+	    {
+			list := (^ObjList)(object)
+			mark_array(gc, &list.items)
+		}
 	/* An upvalue contains a reference to a closed-over value if
         it is closed. */
 	case .UPVALUE:

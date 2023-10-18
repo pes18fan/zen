@@ -482,6 +482,14 @@ call :: proc(p: ^Parser, can_assign: bool) {
 }
 
 @(private = "file")
+subscript :: proc(p: ^Parser, can_assign: bool) {
+	expression(p)
+	consume(p, .RSQUARE, "Expect ']' after index.")
+
+	emit_opcode(p, .OP_SUBSCRIPT)
+}
+
+@(private = "file")
 dot :: proc(p: ^Parser, can_assign: bool) {
 	instance := p.tokens[p.curr_idx - 3]
 	possible_local := resolve_local(p, p.current_compiler, &instance)
@@ -553,6 +561,31 @@ literal :: proc(p: ^Parser, can_assign: bool) {
 grouping :: proc(p: ^Parser, can_assign: bool) {
 	expression(p)
 	consume(p, .RPAREN, "Expect ')' after expression.")
+}
+
+/* Parse a list expression. */
+@(private = "file")
+list :: proc(p: ^Parser, can_assign: bool) {
+	item_count: u8 = 0
+
+	if !check(p, .RSQUARE) {
+		// Read args as long as we see a comma next.
+		for {
+			expression(p)
+			// Arg count can't be more than 255 since it's stuffed in one byte.
+			if item_count == 255 {
+				error(p, "Cannot have more than 255 list items in a literal.")
+			}
+			item_count += 1
+
+			if !match(p, .COMMA) {break}
+		}
+	}
+
+	consume(p, .RSQUARE, "Expect ')' after arguments.")
+
+	emit_opcode(p, .OP_LIST)
+	emit_byte(p, item_count)
 }
 
 /* 
@@ -750,6 +783,8 @@ rules: []ParseRule = {
 	TokenType.RPAREN = ParseRule{nil, nil, .NONE},
 	TokenType.LSQUIRLY = ParseRule{nil, nil, .NONE},
 	TokenType.RSQUIRLY = ParseRule{nil, nil, .NONE},
+	TokenType.LSQUARE = ParseRule{list, subscript, .CALL},
+	TokenType.RSQUARE = ParseRule{nil, nil, .NONE},
 	TokenType.COMMA = ParseRule{nil, nil, .NONE},
 	TokenType.DOT = ParseRule{nil, dot, .CALL},
 	TokenType.MINUS = ParseRule{unary, binary, .TERM},

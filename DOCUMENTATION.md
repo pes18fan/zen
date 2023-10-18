@@ -181,6 +181,26 @@ print "68"
     |> it + 1 // 69
 ```
 
+## Lists
+
+zen has lists; called dynamic arrays in other languages, to store values.
+
+Lists can be created using a list literal:
+
+```zen
+var list = [1, 2, 3]
+```
+
+The list can be subscripted with a positive integer index to get an element out
+of it.
+
+```zen
+list[0] //=> 1
+```
+
+The `push()` and `pop()` native functions can be used to add and remove items
+from a list, and the `len()` function can be used to get the length of the list.
+
 ## Classes
 
 Classes can be used to create your own datatypes.
@@ -243,11 +263,17 @@ These include the following:
 ### strings
 
 - `chomp(s)`: Trim whitespace from both sides of a string `s`.
-- `len(s)`: Get the length of a string `s`.
+- `len(s)`: Get the length of a string or list `s`.
 - `replace(s, o, n)`: Replace all instances of a substring `o` in a string `s` with the substring `n`.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
+
+### lists
+
+- `len(l)`: Get the length of a list or string `l`.
+- `push(l, i)`: Add an item `i` to the end of the list `l`.
+- `pop(l)`: Get the last item of the list `l` after removing it from the list.
 
 ### types and conversion
 

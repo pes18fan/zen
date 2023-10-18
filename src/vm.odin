@@ -1,6 +1,8 @@
 package zen
 
 import "core:fmt"
+import "core:math"
+import "core:slice"
 import "core:mem"
 import "core:time"
 
@@ -502,6 +504,50 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 					return .INTERPRET_RUNTIME_ERROR
 				}
 				frame = &vm.frames[vm.frame_count - 1]
+			}
+		case .OP_LIST:
+			{
+				item_count := read_byte(frame)
+
+				list := new_list(vm.gc)
+
+				for i := 0; i < int(item_count); i += 1 {
+					write_value_array(&list.items, vm_pop(vm))
+				}
+
+				slice.reverse(list.items.values[:])
+
+				vm_push(vm, obj_val(list))
+			}
+		case .OP_SUBSCRIPT:
+			{
+				b := vm_pop(vm)
+				a := vm_pop(vm)
+
+				if !is_list(a) {
+					vm_panic(vm, "Can only subscript lists.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				if !is_number(b) {
+					vm_panic(vm, "List index must be a positive integer.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				index := as_number(b)
+				list := as_list(a)
+
+				if math.floor(index) != index || index < 0 {
+					vm_panic(vm, "List index must be a positive integer.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				if int(index) >= list.items.count {
+					vm_panic(vm, "Index out of bounds.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				vm_push(vm, list.items.values[int(index)])
 			}
 		case .OP_CLOSURE:
 			{
