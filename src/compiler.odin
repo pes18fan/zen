@@ -1030,30 +1030,25 @@ argument_list :: proc(p: ^Parser) -> u8 {
 /* Parse any expression. */
 @(private = "file")
 expression :: proc(p: ^Parser) {
-	_expression(p, 0)
-}
+	for i := 0;; i += 1 {
+		if i >= U8_MAX {
+			error(p, "Too many pipes.")
+			return
+		}
 
-/* Recursive helper for expression(). */
-@(private = "file")
-_expression :: proc(p: ^Parser, pipes: u8) -> u8 {
-	parse_precedence(p, .ASSIGNMENT)
+		parse_precedence(p, .ASSIGNMENT)
 
-	if pipes >= U8_MAX {
-		error(p, "Cannot have more than 255 pipes.")
-		return pipes
+		if !match(p, .BAR_GREATER) {
+			p.pipeline_state = .NONE
+			break
+		}
+
+		if p.pipeline_state == .NONE {
+			p.pipeline_state = .ACTIVE
+		}
+
+		emit_opcode(p, .OP_SET_IT)
 	}
-
-	if !match(p, .BAR_GREATER) {
-		p.pipeline_state = .NONE
-		return pipes
-	}
-
-	if p.pipeline_state == .NONE {
-		p.pipeline_state = .ACTIVE
-	}
-
-	emit_opcode(p, .OP_SET_IT)
-	return _expression(p, pipes + 1)
 }
 
 /* Parse a block. */
@@ -1213,6 +1208,10 @@ expression_statement :: proc(p: ^Parser) {
 		/* If in a repl session, print out the expression's value.
 		 * The print instruction also pops off the value at the top of the
 		 * stack, so no need to add another pop instruction in this case. */
+		emit_opcode(p, .OP_PRINT)
+
+		/* Add a newline, since OP_PRINT does not append a newline. */
+		emit_constant(p, obj_val(copy_string(p.gc, "\n")))
 		emit_opcode(p, .OP_PRINT)
 	} else {
 		emit_pop(p)

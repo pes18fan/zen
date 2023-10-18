@@ -1,0 +1,6 @@
+val z1 = complex(7, 9)
+val z2 = complex(2, 4)
+val res = z1 - z2
+
+print real(res) // expect: 5
+print imag(res) // expect: 5

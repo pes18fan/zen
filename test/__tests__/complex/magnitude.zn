@@ -1,0 +1,2 @@
+val z = complex(3, 4)
+print abs(z) // expect: 5

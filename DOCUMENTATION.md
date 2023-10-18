@@ -195,7 +195,6 @@ These include the following:
 - `floor(x)`: Find the largest integer less than `x`.
 - `ceil(x)`: Find the smallest integer greater than `x`.
 - `round(x)`: Round `x` to the nearest integer.
-- `abs(x)`: Find the absolute value of a real number or the magnitude of a complex number.
 - `parse(s)`: Attempt to parse a string `s` into a floating point number.
 
 #### complex
@@ -204,6 +203,7 @@ These include the following:
 - `conjg(z)`: Find the complex conjugate of a number `z`.
 - `real(z)`: Get the real part of a complex number `z`.
 - `imag(z)`: Get the imaginary part of a complex number `z`.
+- `abs(z)`: Find the absolute value of a real number or the magnitude of a complex number.
 
 ### errors
 

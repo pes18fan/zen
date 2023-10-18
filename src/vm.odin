@@ -26,7 +26,7 @@ CallFrame :: struct {
 	ip:      ^byte,
 
 	/* A slice of the VM's main stack. */
-	slots:   []Value,
+	slots:   ^Value,
 }
 
 /* The virtual machine that interprets the bytecode. */
@@ -248,10 +248,10 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			vm_push(vm, vm_peek(vm, 0))
 		case .OP_GET_LOCAL:
 			slot := read_byte(frame)
-			vm_push(vm, frame.slots[slot])
+			vm_push(vm, mem.ptr_offset(frame.slots, slot)^)
 		case .OP_SET_LOCAL:
 			slot := read_byte(frame)
-			frame.slots[slot] = vm_peek(vm, 0)
+			mem.ptr_offset(frame.slots, slot)^ = vm_peek(vm, 0)
 		case .OP_GET_GLOBAL:
 			{
 				name := read_string(frame)
@@ -483,7 +483,6 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			}
 		case .OP_PRINT:
 			print_value(vm_pop(vm))
-			fmt.printf("\n")
 		case .OP_JUMP:
 			offset := read_short(frame)
 			frame.ip = mem.ptr_offset(frame.ip, offset)
@@ -516,7 +515,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 					if is_local {
 						// Close over a local var of the surrounding function.
-						closure.upvalues[i] = capture_upvalue(vm, &frame.slots[index])
+						closure.upvalues[i] = capture_upvalue(vm, mem.ptr_offset(frame.slots, index))
 					} else {
 						// Capture an upvalue from the surrounding function.
 						/* When the OP_CLOSURE instruction is being executed,
@@ -535,18 +534,26 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 		case .OP_RETURN:
 			{
 				result := vm_pop(vm) // Retrieve the return value from the stack.
+
 				// Close any upvalues that were captured inside the returning function.
-				close_upvalues(vm, &frame.slots[0])
+				close_upvalues(vm, frame.slots)
 				vm.frame_count -= 1
+
 				if vm.frame_count == 0 {
 					vm_pop(vm)
 					return .INTERPRET_OK
 				}
 
-				// Pop all the args and the function itself off the stack.
-				for _ in 0 ..= int(frame.closure.function.arity) {
+				/* Pop off all of the local variables and arguments of the
+				 * function. */
+				#reverse for value in vm.stack {
+					if values_equal(value, frame.slots^) {
+						break
+					}
 					vm_pop(vm)
 				}
+				vm_pop(vm) // Pop the function itself.
+
 				vm_push(vm, result) // Push the return value back to the stack.
 				frame = &vm.frames[vm.frame_count - 1]
 			}
@@ -659,7 +666,7 @@ call :: proc(vm: ^VM, closure: ^ObjClosure, arg_count: int) -> bool {
 
 	// Subtract the length of the stack by the number of args, and by 1 for the
 	// function itself, to get the beginning of the frame.
-	frame.slots = vm.stack[len(vm.stack) - arg_count - 1:]
+	frame.slots = &vm.stack[len(vm.stack) - arg_count - 1]
 	return true
 }
 
