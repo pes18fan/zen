@@ -5,8 +5,11 @@ Reference for the zen programming language.
 Get started now with the `print` statement to print to standard out:
 
 ```zen
-print "Hello, world!" //=> Hello, world!
+print "Hello, world!\n" //=> Hello, world!
 ```
+
+Note that the `print` statement does not append a newline. You can use the
+puts() function if you want that.
 
 Statements are seperated by semicolons. They are automatically inserted
 only at newlines, following certain rules.
@@ -178,6 +181,30 @@ print "68"
     |> it + 1 // 69
 ```
 
+## Classes
+
+Classes can be used to create your own datatypes.
+
+Declare a class as follows:
+
+```zen
+class Pair {}
+```
+
+You can create instances out of such a class by calling it:
+
+```zen
+var pair = Pair()
+```
+
+Fields can be freely added to an instance.
+
+```zen
+pair.first = 1
+pair.second = 2
+puts(pair.first + pair.second) //=> 3
+```
+
 ## Standard library functions
 
 zen has several functions that are present for you to use in the standard library.
@@ -210,6 +237,7 @@ These include the following:
 
 ### io
 
+- `puts(x)`: Print an expression to stdin and append a newline.
 - `gets()`: Read a line from stdin.
 
 ### strings
