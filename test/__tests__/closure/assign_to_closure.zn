@@ -4,16 +4,16 @@ var g
 {
     var local = "local"
     func f_() {
-        print local
+        print local + "\n"
         local = "after f"
-        print local
+        print local + "\n"
     }
     f = f_
 
     func g_() {
-        print local
+        print local + "\n"
         local = "after g"
-        print local
+        print local + "\n"
     }
     g = g_
 }

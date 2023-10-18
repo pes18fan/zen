@@ -1,11 +1,16 @@
 {
     var a = "before"
     print a // expect: before
+    print "\n"
     print a // expect: before
+    print "\n"
 
     a = "after"
     print a // expect: after
+    print "\n"
 
     print a = "arg" // expect: arg
+    print "\n"
     print a // expect: arg
+    print "\n"
 }

@@ -1,5 +1,5 @@
 var z = complex(2, -5)
 var conj_z = conjg(z)
 
-print real(conj_z) // expect: 2
-print imag(conj_z) // expect: 5
+puts(real(conj_z)) // expect: 2
+puts(imag(conj_z)) // expect: 5

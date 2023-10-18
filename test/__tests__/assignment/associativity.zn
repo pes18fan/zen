@@ -4,6 +4,6 @@ var c = "c"
 
 // assignment is right-associative.
 a = b = c
-print a // expect: c
-print b // expect: c
-print c // expect: c
+print a + "\n" // expect: c
+print b + "\n" // expect: c
+print c + "\n" // expect: c

@@ -2,8 +2,13 @@ val x = 2, y = 3
 var a = 1, b = true, c = "hello", d
 
 print x // expect: 2
+print "\n"
 print y // expect: 3
+print "\n"
 print a // expect: 1
+print "\n"
 print b // expect: true
+print "\n"
 print c // expect: hello
+print "\n"
 print d // expect: nil

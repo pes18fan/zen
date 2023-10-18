@@ -1,10 +1,14 @@
 {
     var a = "a"
     print a // expect: a
+    print "\n"
     var b = a + " b"
     print b // expect: a b
+    print "\n"
     var c = a + " c"
     print c // expect: a c
+    print "\n"
     var d = b + " d"
     print d // expect: a b d
+    print "\n"
 }

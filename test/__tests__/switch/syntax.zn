@@ -1,18 +1,18 @@
 var z = 1
 switch z {
-    0 => print "zero!"
-    1 => print "one!"
-    1 => print "dupe one!"
-    else => print "neither!"
+    0 => puts("zero!") 
+    1 => puts("one!")
+    1 => puts("dupe one!")
+    else => puts("neither!")
 }
 // expect: one!
 
 var b = "apple"
 switch b {
-    "banana" => print "fruit: banana"
-    "apple" => print "fruit: apple"
-    "orange" => print "fruit: orange"
-    else => print "unknown fruit"
+    "banana" => print "fruit: banana\n"
+    "apple" => print "fruit: apple\n"
+    "orange" => print "fruit: orange\n"
+    else => print "unknown fruit\n"
 }
 // expect: fruit: apple
 
@@ -21,12 +21,12 @@ var c = 0;
 switch c {
     0 => {
         var zero = "zero!"
-        print zero // expect: zero!
+        print zero + "\n" // expect: zero!
     }
     1 => {
-        print "one!"
+        print "one!\n"
     }
     else => {
-        print "neither!"
+        print "neither!\n"
     }
 }

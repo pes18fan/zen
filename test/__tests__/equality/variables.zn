@@ -1,4 +1,5 @@
 var i = 0
 
 print i == 2 // expect: false
+print "\n"
 print i == 0 // expect: true

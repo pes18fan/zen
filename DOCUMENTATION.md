@@ -195,7 +195,6 @@ These include the following:
 - `floor(x)`: Find the largest integer less than `x`.
 - `ceil(x)`: Find the smallest integer greater than `x`.
 - `round(x)`: Round `x` to the nearest integer.
-- `parse(s)`: Attempt to parse a string `s` into a floating point number.
 
 #### complex
 
@@ -222,6 +221,8 @@ These include the following:
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
 
-### misc
+### types and conversion
 
 - `typeof(x)`: Get the type of any expression.
+- `str(x)`: Convert any value into a string.
+- `parse(s)`: Attempt to parse a string `s` into a floating point number.

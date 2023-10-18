@@ -5,7 +5,7 @@ func repeat(fn, times) {
 }
 
 repeat(func() {
-    print "epic!";
+    print "epic!\n"
 }, 2)
 // expect: epic!
 // expect: epic!

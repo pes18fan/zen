@@ -1,5 +1,6 @@
 package zen
 
+import "core:fmt"
 import "core:math"
 import "core:time"
 import "core:os"
@@ -20,7 +21,6 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "floor", floor_native, arity = 1)
 	define_native(gc, "ceil", ceil_native, arity = 1)
 	define_native(gc, "round", round_native, arity = 1)
-	define_native(gc, "parse", parse_native, arity = 1)
 	define_native(gc, "abs", abs_native, arity = 1)
 	define_native(gc, "complex", complex_native, arity = 2)
 	define_native(gc, "conjg", conjg_native, arity = 1)
@@ -31,6 +31,7 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "panic", panic_native, arity = 1)
 
 	// io
+	define_native(gc, "puts", puts_native, arity = 1)
 	define_native(gc, "gets", gets_native, arity = 0)
 
 	// strings
@@ -41,13 +42,22 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "downcase", downcase_native, arity = 1)
 	define_native(gc, "reverse", reverse_native, arity = 1)
 
-	// misc
+	// types and conversion
+	define_native(gc, "str", str_native, arity = 1)
+	define_native(gc, "parse", parse_native, arity = 1)
 	define_native(gc, "typeof", typeof_native, arity = 1)
 }
 
 /* Get the current UNIX time in seconds. */
 clock_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return number_val(f64(time.to_unix_nanoseconds(time.now())) / 1e9), true
+}
+
+/* Print a line of text to stdout followed by a newline. */
+puts_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	print_value(args[0])
+	fmt.print("\n")
+	return nil, true
 }
 
 /* Read a line from stdin. */
@@ -319,6 +329,11 @@ reverse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 	}
 
 	return obj_val(take_string(vm.gc, str)), true
+}
+
+/* Convert any value to a string. */
+str_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return obj_val(copy_string(vm.gc, stringify_value(args[0]))), true
 }
 
 /* Return the type of any value, represented as a string. */

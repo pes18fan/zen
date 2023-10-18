@@ -305,34 +305,33 @@ take_string :: proc(gc: ^GC, str: string) -> ^ObjString {
 }
 
 /* Print the string representation of a function. */
-print_function :: proc(fn: ^ObjFunction) {
+stringify_function :: proc(fn: ^ObjFunction) -> string {
 	if fn.name == nil {
-		fmt.printf("<script>")
-		return
+		return fmt.tprintf("<script>")
 	}
 
-	fmt.printf("<func %s>", fn.name.chars)
+	return fmt.tprintf("<func %s>", fn.name.chars)
 }
 
-/* Print the string representation of an object. */
-print_object :: proc(obj: ^Obj) {
+stringify_object :: proc(obj: ^Obj) -> string {
 	switch obj.type {
-	case .CLASS:
-		fmt.printf("%s", as_class(obj).name.chars)
-	case .CLOSURE:
-		print_function(as_closure(obj).function)
-	case .FUNCTION:
-		print_function(as_function(obj))
-	case .INSTANCE:
-		fmt.printf("%s instance",
-					as_instance(obj).klass.name.chars)
-	case .NATIVE:
-		fmt.printf("<native func>")
-	case .STRING:
-		fmt.printf("%s", as_cstring(obj))
-	case .UPVALUE:
-		fmt.printf("upvalue")
+		case .CLASS:
+			return fmt.tprintf("%s", as_class(obj).name.chars)
+		case .CLOSURE:
+			return stringify_function(as_closure(obj).function)	
+		case .FUNCTION:
+			return stringify_function(as_function(obj))
+		case .INSTANCE:
+			return fmt.tprintf("%s instance", as_instance(obj).klass.name.chars)
+		case .NATIVE:
+			return "<native func>"
+		case .STRING:
+			return as_cstring(obj)
+		case .UPVALUE:
+			return "upvalue"
 	}
+
+	unreachable()
 }
 
 free_object :: proc(gc: ^GC, obj: ^Obj) {
@@ -340,7 +339,7 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 
 	if config.log_gc {
 		fmt.eprintf("%p free ", obj)
-		print_object(obj)
+		fmt.eprintf(stringify_object(obj))
 		fmt.eprintf(" of type %v\n", type_of_obj(obj))
 	}
 

@@ -88,31 +88,35 @@ is_integer :: proc (value: f64) -> bool {
     return value == math.floor(value)
 }
 
-/* Print out `value` in a human-readable format. */
-print_value :: proc (value: Value) {
+stringify_value :: proc (value: Value) -> string {
     switch v in value {
         case bool:
-            fmt.print(v ? "true" : "false")
+            return v ? "true" : "false"
         case f64:
             if is_integer(v) {
-                assert(v == math.floor(v))
-                fmt.printf("%d", int(v))
+                return fmt.tprintf("%d", int(v))
             } else {
-                fmt.printf("%g", v)
+                return fmt.tprintf("%g", v)
             }
         case complex128:
             if imag(v) >= 0 {
-                fmt.printf("%g + %gi", real(v), imag(v))
+                return fmt.tprintf("%g + %gi", real(v), imag(v))
             } else {
                 /* For some reason the compiler didn't allow me to do -imag(v)
                  * in the printf statement lol */
                 img := -imag(v)
-                fmt.printf("%g - %gi", real(v), img)
+                return fmt.tprintf("%g - %gi" , real(v), img)
             }
         case ^Obj:
-            print_object(v)
-        case: fmt.print("nil")
+            return stringify_object(v)
+        case:
+            return "nil"
     }
+}
+
+/* Print out `value` in a human-readable format. */
+print_value :: proc (value: Value) {
+    fmt.print(stringify_value(value))
 }
 
 /* Determine if two `Value`s are equal. */

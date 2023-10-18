@@ -1208,6 +1208,9 @@ expression_statement :: proc(p: ^Parser) {
 		/* If in a repl session, print out the expression's value.
 		 * The print instruction also pops off the value at the top of the
 		 * stack, so no need to add another pop instruction in this case. */
+		emit_constant(p, obj_val(copy_string(p.gc, "=> ")))
+		emit_opcode(p, .OP_PRINT)
+
 		emit_opcode(p, .OP_PRINT)
 
 		/* Add a newline, since OP_PRINT does not append a newline. */

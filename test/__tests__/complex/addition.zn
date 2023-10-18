@@ -2,5 +2,5 @@ val z1 = complex(2, 3)
 val z2 = complex(4, 5)
 val res = z1 + z2
 
-print real(res) // expect: 6
-print imag(res) // expect: 8
+puts(real(res)) // expect: 6
+puts(imag(res)) // expect: 8
