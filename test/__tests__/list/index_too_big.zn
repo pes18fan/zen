@@ -1,0 +1,2 @@
+var l = [1, 2, 3]
+puts(l[69]) // ERR: Index out of bounds.

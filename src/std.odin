@@ -371,5 +371,11 @@ pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	list := as_list(args[0])
+	
+	if list.items.count == 0 {
+		vm_panic(vm, "Cannot pop an empty list.")
+		return nil, false
+	}
+
 	return pop_value_array(&list.items), true
 }

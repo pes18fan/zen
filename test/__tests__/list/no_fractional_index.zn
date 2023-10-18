@@ -1,0 +1,2 @@
+var l = [1, 2, 3]
+puts(l[1.5]) // ERR: List index must be a positive integer.

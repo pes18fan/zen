@@ -1,0 +1,5 @@
+var l = [1, 2]
+var i = pop(l)
+
+puts(i) // expect: 2
+puts(len(l)) // expect: 1
