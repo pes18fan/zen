@@ -1,5 +1,6 @@
 // Hello world! (This is a comment btw)
 print "Hello, world!"
+print "\n" // The print statement does not append a newline by default.
 
 var name = "Sam" // Create a variable!
 val nice = 69 // Can't reassign to this!
@@ -16,15 +17,18 @@ val
     is_not_nice = false
 
 // Some convenience functions are available in the global scope.
-print upcase("hello") //=> "HELLO"
-print ln(2) //=> 0.693
+puts(upcase("hello")) //=> "HELLO"
+puts(ln(2)) //=> 0.693
+
+// Note that the puts() native function appends a newline unlike the print
+// statement.
 
 // Conditionals!
 // Note that there are no else-if statements. Use a switch statement instead.
 if false {
-    print "How did this happen!"
+    puts("How did this happen!")
 } else {
-    print "This is supposed to happen"
+    puts("This is supposed to happen")
 }
 
 // There's no random number generator yet, so let's imagine that a is randomly
@@ -32,27 +36,35 @@ if false {
 val a = 4
 
 switch a {
-    0 => print "a is 0"
-    1 => print "a is 1"
-    2 => print "a is 2"
-    3 => print "a is 3"
-    4 => print "a is 4"
-    5 => print "a is 5"
-    else => print "a is not between 0 and 5"
+    0 => puts("a is 0")
+    1 => puts("a is 1")
+    2 => puts("a is 2")
+    3 => puts("a is 3")
+    4 => puts("a is 4")
+    5 => puts("a is 5")
+    else => puts("a is not between 0 and 5")
 }
 
 // Loops.
 while true {
-    print "This will never end!"
+    puts("This will never end!")
     break // sike
 }
 
 // For loops.
 for var i = 0; i < 10; i = i + 1 {
-    print i
+    puts(i)
 } //=> 0 1 2 3 4 5 6 7 8 9
 
-print ""
+// Lists.
+val l = [7, 69, 420]
+
+push(l, 27)
+puts(pop(l)) //=> 27
+
+for var i = 0; i < len(l); i = i + 1 {
+    puts(i)
+}
 
 // Break and continue.
 for var i = 0; i < 6; i = i + 1 {
@@ -64,12 +76,12 @@ for var i = 0; i < 6; i = i + 1 {
         continue
     }
 
-    print i
+    puts(i)
 } //=> 0 1 3 4
 
 // Functions!
 func a_function() {
-    print "This is a function!"
+    puts("This is a function!")
 }
 a_function() //=> "This is a function!"
 
@@ -79,22 +91,22 @@ func sum(a, b) => a + b
 // Anonymous functions have no name. Here, we assign it to a variable, so it
 // isn't really anonymous anymore.
 val anon = func() { 
-    print "This is an anonymous function!" 
+    puts("This is an anonymous function!") 
 }
 // Functions are first-class, so you can pass them around to other functions.
 
 // Pipes!
 // Pipes are used to pass expressions to other expressions.
 // For example, the following two lines are equivalent:
-print upcase("hello")
-print "hello" |> upcase()
+puts(upcase("hello"))
+puts("hello" |> upcase())
 
 // In a pipeline, any function call implicitly takes the last expression as its
 // first argument.
 // Another way to access the last expression is with the `it` keyword.
-print "69"
+puts("69"
     |> parse()
-    |> it + 1 //=> 70
+    |> it + 1) //=> 70
 
 // Things to expect in the future (topmost being the most likely):
 // - Classes and methods
