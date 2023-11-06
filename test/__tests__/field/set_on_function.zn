@@ -1,0 +1,3 @@
+func foo() {}
+
+foo.bar = "value" // ERR: Only instances have fields.

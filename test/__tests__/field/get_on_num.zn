@@ -1,0 +1,1 @@
+123.foo // ERR: Only instances have properties.

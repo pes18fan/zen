@@ -1,0 +1,6 @@
+class Foo {}
+
+var foo = Foo()
+foo.bar = "not a function"
+
+foo.bar() // ERR: Can only call functions and classes.

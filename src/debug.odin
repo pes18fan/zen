@@ -27,9 +27,19 @@ jump_instruction :: proc(name: string, sign: int, c: ^Chunk, offset: int) -> int
 constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
 	fmt.eprintf("%-16s %4d '", name, constant)
-	print_value(c.constants.values[constant])
+	fmt.eprintf(stringify_value(c.constants.values[constant]))
 	fmt.eprintf("'\n")
 	return offset + 2
+}
+
+@(private = "file")
+invoke_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
+	constant := c.code[offset + 1]
+	arg_count := c.code[offset + 2]
+	fmt.eprintf("%-16s (%d args) %4d '", name, arg_count, constant)
+	fmt.eprintf(stringify_value(c.constants.values[constant]))
+	fmt.eprintf("'\n")
+	return offset + 3
 }
 
 /* Disassembles the instruction at the provided offset. */
@@ -108,6 +118,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return jump_instruction("OP_LOOP", -1, c, offset)
 	case .OP_CALL:
 		return byte_instruction("OP_CALL", c, offset)
+	case .OP_INVOKE:
+		return invoke_instruction("OP_INVOKE", c, offset)
 	case .OP_LIST:
 		return byte_instruction("OP_LIST", c, offset)
 	case .OP_SUBSCRIPT:
@@ -118,7 +130,7 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 			offset += 1
 			constant := c.code[offset]
 			fmt.eprintf("%-16s %4d ", "OP_CLOSURE", constant)
-			print_value(c.constants.values[constant])
+			fmt.eprintf(stringify_value(c.constants.values[constant]))
 			fmt.eprintln()
 
 			function := as_function(c.constants.values[constant])
@@ -144,6 +156,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_RETURN", offset)
 	case .OP_CLASS:
 		return constant_instruction("OP_CLASS", c, offset)
+	case .OP_METHOD:
+		return constant_instruction("OP_METHOD", c, offset)
 	case:
 		fmt.eprintf("Unknown opcode %d\n", instruction)
 		return offset + 1

@@ -1,0 +1,5 @@
+class Klass {}
+var instance = Klass()
+instance.field = "hello"
+
+print instance.field // expect: hello

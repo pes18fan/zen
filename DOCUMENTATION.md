@@ -12,7 +12,9 @@ Note that the `print` statement does not append a newline. You can use the
 puts() function if you want that.
 
 Statements are seperated by semicolons. They are automatically inserted
-only at newlines, following certain rules.
+only at newlines, following [certain rules](https://github.com/pes18fan/zen/blob/0b72dd5fa5d59a5fc42685c19ca82d48fb72cb93/src/lexer.odin#L170C1-L170C1).
+
+You can prevent automatic semicolon insertion by using a backslash.
 
 ## Datatypes
 
@@ -223,6 +225,29 @@ Fields can be freely added to an instance.
 pair.first = 1
 pair.second = 2
 puts(pair.first + pair.second) //=> 3
+```
+
+Methods can be added inside the body of a class. A constructor can also be
+created for the class, which must have the name `init`. When you call a class,
+the arguments you pass to it are sent to the constructor. To access the instance
+within methods, use `this`.
+
+```zen
+class CoffeeMaker {
+    init(coffee) {
+        this.coffee = coffee
+    }
+
+    brew() {
+        print "Enjoy your cup of " + this.coffee
+
+        // No reusing the grounds!
+        this.coffee = nil
+    }
+}
+
+var maker = CoffeeMaker("coffee and chicory")
+maker.brew()
 ```
 
 ## Standard library functions

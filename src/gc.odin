@@ -21,6 +21,9 @@ GC :: struct {
 
 	/* All the strings that have been allocated. */
 	strings:         Table,
+
+	/* The "init" string. */
+	init_string:     ^ObjString,
 }
 
 RootSource :: union {
@@ -54,6 +57,7 @@ init_gc :: proc() -> GC {
 			gray_count = 0,
 			mark_roots_arg = nil,
 			strings = init_table(),
+			init_string = nil,
 			globals = init_table(),
 		} \
 	)
@@ -63,6 +67,7 @@ init_gc :: proc() -> GC {
 free_gc :: proc(gc: ^GC) {
 	free_table(&gc.strings)
 	free_table(&gc.globals)
+	gc.init_string = nil
 	free_objects(gc)
 	delete(gc.gray_stack)
 }
@@ -204,11 +209,21 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 	}
 
 	switch object.type {
-	/* A class contains a reference to an ObjString with its name. */
+	/* A bound method contains a reference to the receiver and the
+		method. */
+	case .BOUND_METHOD:
+		{
+			bound := (^ObjBoundMethod)(object)
+			mark_value(gc, bound.receiver)
+			mark_object(gc, (^Obj)(bound.method))
+		}
+	/* A class contains a reference to an ObjString with its name and a table
+	    containing its methods. */
 	case .CLASS:
 		{
 			klass := (^ObjClass)(object)
 			mark_object(gc, (^Obj)(klass.name))
+			mark_table(gc, &klass.methods)
 		}
 	/* A closure contains a reference to the function it wraps, and
         to all the upvalues it captures. */

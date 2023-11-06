@@ -233,8 +233,12 @@ main :: proc() {
 
 	gc := init_gc()
 	vm := init_VM()
+
 	gc.mark_roots_arg = &vm
 	vm.gc = &gc
+
+	vm.gc.init_string = copy_string(vm.gc, "init")
+
 	init_natives(&gc)
 
 	status = parse_argv(&vm)

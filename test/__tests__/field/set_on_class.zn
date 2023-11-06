@@ -1,0 +1,2 @@
+class Foo {}
+Foo.bar = "value" // ERR: Only instances have fields.

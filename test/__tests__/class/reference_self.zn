@@ -1,0 +1,7 @@
+class Foo {
+    return_self() {
+        return Foo
+    }
+}
+
+print Foo().return_self() // expect: Foo

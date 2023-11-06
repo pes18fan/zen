@@ -26,6 +26,7 @@ Parser :: struct {
 	panic_mode:       bool,
 	compiling_chunk:  ^Chunk,
 	current_compiler: ^Compiler,
+	current_class:    ^ClassCompiler,
 	globals:          ^Table,
 	pipeline_state:   PipelineState,
 	gc:               ^GC,
@@ -113,6 +114,8 @@ is also considered an implicit function.
 FunctionType :: enum {
 	LAMBDA,
 	FUNCTION,
+	INITIALIZER,
+	METHOD,
 	SCRIPT,
 }
 
@@ -133,6 +136,13 @@ Compiler :: struct {
 	loops:       [U8_COUNT]Loop, // Array of loops.
 	loop_count:  int, // Number of loops.
 	scope_depth: int, // The number of blocks currently in scope.
+}
+
+/*
+A struct representing the current innermost class being compiled.
+*/
+ClassCompiler :: struct {
+	enclosing:   ^ClassCompiler,
 }
 
 current_chunk :: proc(p: ^Parser) -> ^Chunk {
@@ -193,14 +203,7 @@ consume :: proc(p: ^Parser, type: TokenType, message: string) {
 		return
 	}
 
-	error_at_current(
-		p,
-		fmt.tprintf(
-			"%s Got %s instead.",
-			message,
-			"nothing" if p.current.type == .EOF else p.current.lexeme,
-		),
-	)
+	error_at_current(p, message)
 }
 
 @(private = "file")
@@ -283,13 +286,19 @@ emit_jump :: proc(p: ^Parser, instruction: OpCode) -> int {
 }
 
 /* 
-Write an OP_NIL and OP_RETURN to the current chunk.
-OP_NIL is written since a function without a return value implicitly returns
-nil.
+Emit instructions to make the current function return nil; or if the current
+function is an initializer make it return its receiver.
 */
 @(private = "file")
 emit_return :: proc(p: ^Parser) {
-	emit_opcodes(p, .OP_NIL, .OP_RETURN)
+	if p.current_compiler.type == .INITIALIZER {
+		emit_opcode(p, .OP_GET_LOCAL)
+		emit_byte(p, 0) /* Since the receiver is always stored in slot zero. */
+	} else {
+		emit_opcode(p, .OP_NIL)
+	}
+
+	emit_opcode(p, .OP_RETURN)
 }
 
 /* 
@@ -373,12 +382,19 @@ init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
 		c.function.name = copy_string(p.gc, "lambda")
 	}
 
-	// The first slot is always the function itself.
+	/* The first slot is the function itself. */
 	local := &p.current_compiler.locals[p.current_compiler.local_count]
 	c.local_count += 1
 	local.depth = 0
-	local.is_captured = false // You can't capture the slot zero function.
-	local.name.lexeme = ""
+	local.is_captured = false /* You cannot capture the slot zero value. */
+
+	/* If the function is a method, the first slot is repurposed to store that
+	 * method's receiver instead. */
+	if type != .FUNCTION {
+		local.name.lexeme = "this"
+	} else {
+		local.name.lexeme = ""
+	}
 }
 
 /* Emit a return instruction and decode the RLE-encoded lines. */
@@ -534,6 +550,12 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		expression(p)
 		emit_opcode(p, .OP_SET_PROPERTY)
 		emit_byte(p, name)
+	} else if match(p, .LPAREN) {
+		/* We have a method call here, so we compile it like a function call. */
+		arg_count := argument_list(p)
+		emit_opcode(p, .OP_INVOKE)
+		emit_byte(p, name)
+		emit_byte(p, arg_count)
 	} else {
 		emit_opcode(p, .OP_GET_PROPERTY)
 		emit_byte(p, name)
@@ -553,7 +575,6 @@ literal :: proc(p: ^Parser, can_assign: bool) {
 	case:
 		unreachable()
 	}
-
 }
 
 /* Parse a grouping (parenthesized) expression. */
@@ -572,9 +593,11 @@ list :: proc(p: ^Parser, can_assign: bool) {
 		// Read args as long as we see a comma next.
 		for {
 			expression(p)
-			// Arg count can't be more than 255 since it's stuffed in one byte.
-			if item_count == 255 {
-				error(p, "Cannot have more than 255 list items in a literal.")
+			/* Maximum arg count that can be stuffed in one byte is 255, and 
+			 * the list itself is also a constant so we'll then have 256
+			 * constants in one chunk, which is one over the limit. */
+			if item_count == 254 {
+				error(p, "Can't have more than 254 list items in a literal.")
 			}
 			item_count += 1
 
@@ -746,6 +769,19 @@ variable :: proc(p: ^Parser, can_assign: bool) {
 }
 
 @(private = "file")
+this_ :: proc(p: ^Parser, can_assign: bool) {
+	if p.current_class == nil {
+		error(p, "Cannot use 'this' outside a class.")
+		return
+	}
+
+	/* `this` is treated as a lexically scoped local variable whose value is
+	 * somehow magically initialized. Also, can_assign is set to false because
+	 * you obviously can't assign to `this`. */
+	variable(p, can_assign = false)
+}
+
+@(private = "file")
 it_ :: proc(p: ^Parser, can_assign: bool) {
 	if p.pipeline_state == .NONE {
 		error(p, "Cannot use 'it' outside of a pipeline.")
@@ -820,6 +856,8 @@ rules: []ParseRule = {
 	TokenType.OR = ParseRule{nil, or_, .OR},
 	TokenType.PRINT = ParseRule{nil, nil, .NONE},
 	TokenType.RETURN = ParseRule{nil, nil, .NONE},
+	TokenType.SUPER = ParseRule{nil, nil, .NONE},
+	TokenType.THIS = ParseRule{this_, nil, .NONE},
 	TokenType.TRUE = ParseRule{literal, nil, .NONE},
 	TokenType.EOF = ParseRule{nil, nil, .NONE},
 }
@@ -1050,7 +1088,7 @@ argument_list :: proc(p: ^Parser) -> u8 {
 			expression(p)
 			// Arg count can't be more than 255 since it's stuffed in one byte.
 			if arg_count == 255 {
-				error(p, "Cannot have more than 255 arguments.")
+				error(p, "Can't have more than 255 arguments.")
 			}
 			arg_count += 1
 
@@ -1116,7 +1154,7 @@ function :: proc(p: ^Parser, type: FunctionType) {
 		for {
 			p.current_compiler.function.arity += 1
 			if p.current_compiler.function.arity > 255 {
-				error_at_current(p, "Cannot have more than 255 parameters.")
+				error_at_current(p, "Can't have more than 255 parameters.")
 			}
 
 			// Function parameters are mutable. This may change in the future.
@@ -1152,6 +1190,30 @@ function :: proc(p: ^Parser, type: FunctionType) {
 	}
 }
 
+/*
+Compile a method in a class.
+After an empty class is created by the OP_CLASS instruction, for each method
+in the class an OP_METHOD instruction is emitted that adds the method to that
+class, which at that moment is on top of the stack. The OP_METHOD instruction 
+has the index to the name of the method as its operand.
+*/
+@(private = "file")
+method :: proc(p: ^Parser) {
+	consume(p, .IDENT, "Expect method name.")
+	constant := identifier_constant(p, &p.previous)
+
+	type: FunctionType = .METHOD
+	/* Check if the method is an initializer. */
+	if len(p.previous.lexeme) == 4 &&
+		strings.compare(p.previous.lexeme, "init") == 0 {
+		type = .INITIALIZER
+	}
+	function(p, type)
+
+	emit_opcode(p, .OP_METHOD)
+	emit_byte(p, constant)
+}
+
 /* 
 Parse the return value of an arrow function.
 As simple as parsing the expression and inserting a return instruction.
@@ -1174,15 +1236,50 @@ Parse a class declaration.
 @(private = "file")
 class_declaration :: proc(p: ^Parser) {
 	consume(p, .IDENT, "Expect class name.")
+
+	/* The class name is captured to push it back on the stack later on while
+	   compiling methods. */
+	class_name := p.previous
+
 	name_constant := identifier_constant(p, &p.previous)
+
 	declare_variable(p, .VAR) /* Classes are reassignable, subject to change. */
 
 	emit_opcode(p, .OP_CLASS)
 	emit_byte(p, name_constant)
 	define_variable(p, name_constant)
 
+	/* Push the current class to the linked list of classes. */
+	class_compiler: ClassCompiler
+	class_compiler.enclosing = p.current_class
+	p.current_class = &class_compiler
+
+	/* This call to named_variable() pushes the class back on the stack. */
+	named_variable(p, class_name, can_assign = false)
+
 	consume(p, .LSQUIRLY, "Expect '{' before class body.")
+
+	/* Compile methods until the final curly brace. The EOF check ensures that
+	   the compiler doesn't get stuck in an infinite loop if the closing loop
+	   is forgotten.
+
+	   Note that currently, classes can only have method declarations; fields
+	   aren't explicitly declared but rather freely added. This may be changed
+	   in the future.
+	*/
+	for !check(p, .RSQUIRLY) && !check(p, .EOF) {
+		method(p)
+
+		/* Consume the semi after the method that gets added by automatic
+		   semicolon insertion. */
+		match(p, .SEMI)
+	}
+
 	consume(p, .RSQUIRLY, "Expect '}' after class body.")
+	emit_pop(p) /* Pop the class object off. */
+
+	/* Set the current class to its enclosing one. */
+	p.current_class = p.current_class.enclosing
 }
 
 /* 
@@ -1301,6 +1398,10 @@ return_statement :: proc(p: ^Parser) {
 	if match(p, .SEMI) {
 		emit_return(p)
 	} else {
+		if p.current_compiler.type == .INITIALIZER {
+			error(p, "Cannot return a value from an initializer.")
+		}
+
 		expression(p)
 		consume_semi(p, "return value")
 		emit_opcode(p, .OP_RETURN)
@@ -1654,6 +1755,7 @@ compile :: proc(gc: ^GC, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction,
 		had_error        = false,
 		panic_mode       = false,
 		current_compiler = nil,
+		current_class    = nil,
 		globals          = globals,
 		pipeline_state   = .NONE,
 		gc               = gc,

@@ -1,0 +1,1 @@
+123.foo = "value" // ERR: Only instances have fields.

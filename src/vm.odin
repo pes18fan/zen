@@ -299,14 +299,19 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				instance := as_instance(vm_peek(vm, 0))
 				name := read_string(frame)
 
+				/* Look for a field. */
 				value: Value; ok: bool
-				if value, ok = table_get(&instance.fields, name); !ok {
-					vm_panic(vm, "Undefined property '%s'.", name.chars)
-					return .INTERPRET_RUNTIME_ERROR
+				if value, ok = table_get(&instance.fields, name); ok {
+					vm_pop(vm) /* Instance. */
+					vm_push(vm, value)
+					break /* Step out of the switch statement. */
 				}
 
-				vm_pop(vm) /* Instance. */
-				vm_push(vm, value)
+				/* Look for a method. If we don't find one, it means that name
+				 * wasn't a field either, which is a runtime error. */
+				if !bind_method(vm, instance.klass, name) {
+					return .INTERPRET_RUNTIME_ERROR
+				}
 			}
 		case .OP_SET_PROPERTY:
 			{
@@ -414,7 +419,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			} else {
 				binary_op(vm, f64, "-") or_return
 			}
-			case .OP_MULTIPLY:
+		case .OP_MULTIPLY:
 			if is_complex(vm_peek(vm, 0)) || is_complex(vm_peek(vm, 1)) {
 				b: complex128; a: complex128
 
@@ -442,7 +447,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			} else {
 				binary_op(vm, f64, "*") or_return
 			}
-			case .OP_DIVIDE:
+		case .OP_DIVIDE:
 			if is_complex(vm_peek(vm, 0)) || is_complex(vm_peek(vm, 1)) {
 				b: complex128; a: complex128
 
@@ -472,49 +477,70 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			}
 			case .OP_NOT:
 			vm_push(vm, bool_val(is_falsey(vm_pop(vm))))
-			case .OP_NEGATE:
-			if !is_number(vm_peek(vm, 0)) && !is_complex(vm_peek(vm, 0)) {
-				vm_panic(vm, "Can only negate numbers.")
-				return .INTERPRET_RUNTIME_ERROR
-			}
+		case .OP_NEGATE:
+			{
+				if !is_number(vm_peek(vm, 0)) && !is_complex(vm_peek(vm, 0)) {
+					vm_panic(vm, "Can only negate numbers.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
 
-			if is_number(vm_peek(vm, 0)) {
-				vm_push(vm, number_val(-as_number(vm_pop(vm))))
-			} else {
-				vm_push(vm, complex_val(-as_complex(vm_pop(vm))))
+				if is_number(vm_peek(vm, 0)) {
+					vm_push(vm, number_val(-as_number(vm_pop(vm))))
+				} else {
+					vm_push(vm, complex_val(-as_complex(vm_pop(vm))))
+				}
 			}
-		case .OP_PRINT:
-			print_value(vm_pop(vm))
+		case .OP_PRINT: print_value(vm_pop(vm))
 		case .OP_JUMP:
-			offset := read_short(frame)
-			frame.ip = mem.ptr_offset(frame.ip, offset)
-		case .OP_JUMP_IF_FALSE:
-			offset := read_short(frame)
-			if is_falsey(vm_peek(vm, 0)) {
+			{
+				offset := read_short(frame)
 				frame.ip = mem.ptr_offset(frame.ip, offset)
 			}
+		case .OP_JUMP_IF_FALSE:
+			{
+				offset := read_short(frame)
+				if is_falsey(vm_peek(vm, 0)) {
+					frame.ip = mem.ptr_offset(frame.ip, offset)
+				}
+			}
 		case .OP_LOOP:
-			offset := read_short(frame)
-			frame.ip = mem.ptr_offset(frame.ip, -offset)
+			{
+				offset := read_short(frame)
+				frame.ip = mem.ptr_offset(frame.ip, -offset)
+			}
 		case .OP_CALL:
 			{
 				arg_count := read_byte(frame)
+
 				// Return with an error if the call fails.
 				if !call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count)) {
 					return .INTERPRET_RUNTIME_ERROR
 				}
+
+				frame = &vm.frames[vm.frame_count - 1]
+			}
+		case .OP_INVOKE:
+			{
+				method := read_string(frame)
+				arg_count := read_byte(frame)
+
+				if !invoke(vm, method, int(arg_count)) {
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
 				frame = &vm.frames[vm.frame_count - 1]
 			}
 		case .OP_LIST:
 			{
 				item_count := read_byte(frame)
-
 				list := new_list(vm.gc)
 
 				for i := 0; i < int(item_count); i += 1 {
 					write_value_array(&list.items, vm_pop(vm))
 				}
 
+				/* The list needs to be reversed since the list elements
+				 * were popped off the stack in reverse order. */
 				slice.reverse(list.items.values[:])
 
 				vm_push(vm, obj_val(list))
@@ -606,6 +632,10 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 		case .OP_CLASS:
 			{
 				vm_push(vm, obj_val(new_class(vm.gc, read_string(frame))))
+			}
+		case .OP_METHOD:
+		    {
+				define_method(vm, read_string(frame))
 			}
 		}
 	}
@@ -721,9 +751,30 @@ call :: proc(vm: ^VM, closure: ^ObjClosure, arg_count: int) -> bool {
 call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 	if is_obj(callee) {
 		#partial switch obj_type(callee) {
+		case .BOUND_METHOD: {
+			bound := as_bound_method(callee)
+
+			/* The receiver must be stored at stack slot zero. */
+			vm.stack[len(vm.stack) - arg_count - 1] = bound.receiver
+
+			/* Pull the raw closure out of the ObjBoundMethod and call it. */
+			return call(vm, bound.method, arg_count)
+		}
 		case .CLASS: {
 			klass := as_class(callee)
 			vm.stack[len(vm.stack) - arg_count - 1] = obj_val(new_instance(vm.gc, klass))
+
+			/* Look for an initializer. */
+			initializer: Value; ok: bool
+			if initializer, ok = table_get(&klass.methods, vm.gc.init_string); ok {
+				return call(vm, as_closure(initializer), arg_count)
+			} else if arg_count != 0 {
+				/* If there is no initializer, passing arguments to a class
+				 * call makes no sense and is thus an error. */
+				vm_panic(vm, "Expected 0 arguments but got %d.", arg_count)
+				return false
+			}
+
 			return true
 		}
 		/* We only handle ObjClosures here, since all ObjFunctions are wrapped
@@ -758,6 +809,65 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 
 	vm_panic(vm, "Can only call functions and classes.")
 	return false
+}
+
+@(private = "file")
+invoke_from_class :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString, arg_count: int) -> bool {
+	method: Value; ok: bool
+	if method, ok = table_get(&klass.methods, name); !ok {
+		vm_panic(vm, "Undefined property '%s'.", name.chars)
+		return false
+	}
+
+	return call(vm, as_closure(method), arg_count)
+}
+
+/* Invoke a method. */
+@(private = "file")
+invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
+	receiver := vm_peek(vm, arg_count)
+
+	if !is_instance(receiver) {
+		vm_panic(vm, "Only instances have methods.")
+		return false
+	}
+
+	instance := as_instance(receiver)
+
+	/* We've reached this point since the compiler thought that it saw a
+	 * method invocation. However, fields on instances can also contain 
+	 * functions, so it might have actually seen a field access and an immediate
+	 * call of the function stored in that field. To handle this corner case,
+	 * we need to look for a field of the same name in that instance first.
+	 * This is necessary but unfortunately sacrifices a bit of performance. */
+	value: Value; ok: bool
+	if value, ok = table_get(&instance.fields, name); ok {
+		/* Replace the receiver under the arguments with the value of the
+		 * field, since the function itself is always the first value in
+		 * its callframe. */
+		vm.stack[len(vm.stack) - arg_count - 1] = value
+		return call_value(vm, value, arg_count)
+	}
+
+	return invoke_from_class(vm, instance.klass, name, arg_count)
+}
+
+@(private = "file")
+bind_method :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString) -> bool {
+	/* Look for the method in the method table. */
+	method: Value; ok: bool
+	if method, ok = table_get(&klass.methods, name); !ok {
+		vm_panic(vm, "Undefined property '%s'.", name.chars)
+		return false
+	}
+
+	/* Create a bound method out of the method we pulled from the table and
+	 * its receiver on top of the stack. */
+	bound := new_bound_method(vm.gc, vm_peek(vm, 0), as_closure(method))
+
+	vm_pop(vm) /* Receiver. */
+	vm_push(vm, obj_val(bound))
+	return true
 }
 
 /* Capture the provided stack slot as an upvalue. */
@@ -798,6 +908,18 @@ close_upvalues :: proc(vm: ^VM, last: ^Value) {
 		upvalue.location = &upvalue.closed
 		vm.open_upvalues = upvalue.next_upvalue
 	}
+}
+
+/* 
+Define the method on top of the stack by adding it to the methods table of
+the class directly below it on the stack.
+*/
+@(private = "file")
+define_method :: proc(vm: ^VM, name: ^ObjString) {
+	method := vm_peek(vm, 0)
+	klass := as_class(vm_peek(vm, 1))
+	table_set(&klass.methods, name, method)
+	vm_pop(vm) /* Method closure. */
 }
 
 /* Concatenate two strings. */

@@ -1,0 +1,2 @@
+class Foo {}
+Foo.bar // ERR: Only instances have properties.

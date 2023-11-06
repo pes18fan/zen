@@ -1,0 +1,7 @@
+class Foo {
+  method() {
+    print method // ERR: Undefined variable 'method'.
+  }
+}
+
+Foo().method()

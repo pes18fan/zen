@@ -12,6 +12,7 @@ TokenType :: enum {
 	RSQUIRLY,
 	LSQUARE,
 	RSQUARE,
+	BACKSLASH,
 	COMMA,
 	DOT,
 	MINUS,
@@ -56,6 +57,8 @@ TokenType :: enum {
 	PRINT,
 	RETURN,
 	SWITCH,
+	SUPER,
+	THIS,
 	TRUE,
 	WHILE,
 	VAR,
@@ -206,6 +209,12 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 			 * since the last token will always be EOF and a newline will be at
 			 * most the second to last token. */
 
+			/* If the previous token is a backslash, the user is explicitly
+			 * continuing the current line, so move on. */
+			if tokens[idx - 1].type == .BACKSLASH {
+				continue
+			}
+
 			 /* Check the first and last points; append only if the previous
 			  * token IS one of some particular types and if the next token IS 
 			  * NOT one of some particular types. */
@@ -222,7 +231,9 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 				 }
 			 }
 		} else {
-			append(&result, token)
+			if token.type != .BACKSLASH {
+				append(&result, token)
+			}
 		}
 	}
 
@@ -338,9 +349,27 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 	case 'r':
 		return check_keyword(l, 1, 5, "eturn", .RETURN)
 	case 's':
-		return check_keyword(l, 1, 5, "witch", .SWITCH)
+		{
+			if l.current - l.start > 1 {
+				switch utf8.rune_at(l.source, l.start + 1) {
+				case 'u':
+					return check_keyword(l, 2, 3, "per", .SUPER)
+				case 'w':
+					return check_keyword(l, 2, 4, "itch", .SWITCH)
+				}
+			}
+		}
 	case 't':
-		return check_keyword(l, 1, 3, "rue", .TRUE)
+		{
+			if l.current - l.start > 1 {
+				switch utf8.rune_at(l.source, l.start + 1) {
+					case 'r':
+						return check_keyword(l, 2, 2, "ue", .TRUE)
+					case 'h':
+						return check_keyword(l, 2, 2, "is", .THIS)
+				}
+			}
+		}
 	case 'w':
 		return check_keyword(l, 1, 4, "hile", .WHILE)
 	case 'v':
@@ -453,6 +482,8 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 		return make_token(l, .MINUS)
 	case '+':
 		return make_token(l, .PLUS)
+	case '\\':
+		return make_token(l, .BACKSLASH)
 	case '/':
 		return make_token(l, .SLASH)
 	case '*':
