@@ -1399,7 +1399,7 @@ return_statement :: proc(p: ^Parser) {
 		emit_return(p)
 	} else {
 		if p.current_compiler.type == .INITIALIZER {
-			error(p, "Cannot return a value from an initializer.")
+			error(p, "Can't return a value from an initializer.")
 		}
 
 		expression(p)

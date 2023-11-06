@@ -1,0 +1,10 @@
+class Foo {
+  init() {
+    print "init\n"
+    return
+    print "nope\n"
+  }
+}
+
+var foo = Foo() // expect: init
+print foo // expect: Foo instance

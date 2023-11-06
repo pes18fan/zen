@@ -1,0 +1,10 @@
+class Foo {
+  init() {
+    func init() {
+      return "bar\n"
+    }
+    print init() // expect: bar
+  }
+}
+
+print Foo() // expect: Foo instance
