@@ -1,0 +1,20 @@
+class Outer {
+  method() {
+    puts(this) // expect: Outer instance
+
+    func f() {
+      puts(this) // expect: Outer instance
+
+      class Inner {
+        method() {
+          puts(this) // expect: Inner instance
+        }
+      }
+
+      Inner().method()
+    }
+    f()
+  }
+}
+
+Outer().method()

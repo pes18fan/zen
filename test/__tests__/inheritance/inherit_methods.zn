@@ -1,0 +1,14 @@
+class Foo {
+  methodOnFoo() { puts("foo"); }
+  override() { puts("foo"); }
+}
+
+class Bar < Foo {
+  methodOnBar() { puts("bar"); }
+  override() { puts("bar"); }
+}
+
+var bar = Bar()
+bar.methodOnFoo() // expect: foo
+bar.methodOnBar() // expect: bar
+bar.override() // expect: bar

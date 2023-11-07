@@ -1,0 +1,3 @@
+func foo() {}
+
+class Subclass < foo {} // ERR: Superclass must be a class.

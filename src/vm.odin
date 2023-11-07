@@ -337,10 +337,19 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				 * setter expression does. */
 				vm_push(vm, value)
 			}
-		case .OP_GET_IT:
-			vm_push(vm, pipeline_it)
-		case .OP_SET_IT:
-			pipeline_it = vm_pop(vm)
+		case .OP_GET_SUPER:
+			{
+				name := read_string(frame)
+				superclass := as_class(vm_pop(vm))
+
+				/* Look up the method in the superclass and push it to the
+				 * stack as an ObjBoundMethod. */
+				if !bind_method(vm, superclass, name) {
+					return .INTERPRET_RUNTIME_ERROR
+				}
+			}
+		case .OP_GET_IT: vm_push(vm, pipeline_it)
+		case .OP_SET_IT: pipeline_it = vm_pop(vm)
 		case .OP_EQUAL:
 			{
 				b := vm_pop(vm)
@@ -530,6 +539,18 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 				frame = &vm.frames[vm.frame_count - 1]
 			}
+		case .OP_SUPER_INVOKE:
+		    {
+				method := read_string(frame)
+				arg_count := read_byte(frame)
+				superclass := as_class(vm_pop(vm))
+
+				if !invoke_from_class(vm, superclass, method, int(arg_count)) {
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				frame = &vm.frames[vm.frame_count - 1]
+			}
 		case .OP_LIST:
 			{
 				item_count := read_byte(frame)
@@ -632,6 +653,25 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 		case .OP_CLASS:
 			{
 				vm_push(vm, obj_val(new_class(vm.gc, read_string(frame))))
+			}
+		case .OP_INHERIT:
+			{
+				superclass := vm_peek(vm, 1)
+
+				if !is_class(superclass) {
+					vm_panic(vm, "Superclass must be a class.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				subclass := as_class(vm_peek(vm, 0))
+
+				/* Copy all the superclass's methods to the subclass.
+				 * This is what we call "copy-down inheritance". */
+				table_add_all(
+					from = &as_class(superclass).methods,
+					to = &subclass.methods,
+				)
+				vm_pop(vm) /* Subclass. */
 			}
 		case .OP_METHOD:
 		    {

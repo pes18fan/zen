@@ -1,0 +1,3 @@
+func foo() {
+  super.bar() // ERR: Can't use 'super' outside a class.
+}

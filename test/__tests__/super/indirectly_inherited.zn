@@ -1,0 +1,18 @@
+class A {
+  foo() {
+    puts("A.foo()")
+  }
+}
+
+class B < A {}
+
+class C < B {
+  foo() {
+    puts("C.foo()")
+    super.foo()
+  }
+}
+
+C().foo()
+// expect: C.foo()
+// expect: A.foo()

@@ -110,6 +110,7 @@ table_delete :: proc(table: ^Table, key: ^ObjString) -> bool {
 	return true
 }
 
+/* Copy all entries in one table to another. */
 table_add_all :: proc(from: ^Table, to: ^Table) {
 	for i in 0 ..< from.capacity {
 		entry := &from.entries[i]

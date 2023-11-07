@@ -88,6 +88,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return constant_instruction("OP_GET_PROPERTY", c, offset)
 	case .OP_SET_PROPERTY:
 		return constant_instruction("OP_SET_PROPERTY", c, offset)
+	case .OP_GET_SUPER:
+		return constant_instruction("OP_GET_SUPER", c, offset)
 	case .OP_GET_IT:
 		return simple_instruction("OP_GET_IT", offset)
 	case .OP_SET_IT:
@@ -120,6 +122,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return byte_instruction("OP_CALL", c, offset)
 	case .OP_INVOKE:
 		return invoke_instruction("OP_INVOKE", c, offset)
+	case .OP_SUPER_INVOKE:
+		return invoke_instruction("OP_SUPER_INVOKE", c, offset)
 	case .OP_LIST:
 		return byte_instruction("OP_LIST", c, offset)
 	case .OP_SUBSCRIPT:
@@ -156,6 +160,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_RETURN", offset)
 	case .OP_CLASS:
 		return constant_instruction("OP_CLASS", c, offset)
+	case .OP_INHERIT:
+		return simple_instruction("OP_INHERIT", offset)
 	case .OP_METHOD:
 		return constant_instruction("OP_METHOD", c, offset)
 	case:

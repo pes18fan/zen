@@ -1,0 +1,16 @@
+class Base {
+  foo() {
+    puts("Base.foo()")
+  }
+}
+
+class Derived < Base {
+  bar() {
+    puts("Derived.bar()")
+    super.foo()
+  }
+}
+
+Derived().bar()
+// expect: Derived.bar()
+// expect: Base.foo()

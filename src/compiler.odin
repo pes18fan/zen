@@ -142,7 +142,8 @@ Compiler :: struct {
 A struct representing the current innermost class being compiled.
 */
 ClassCompiler :: struct {
-	enclosing:   ^ClassCompiler,
+	enclosing:      ^ClassCompiler,
+	has_superclass: bool,
 }
 
 current_chunk :: proc(p: ^Parser) -> ^Chunk {
@@ -768,6 +769,44 @@ variable :: proc(p: ^Parser, can_assign: bool) {
 	named_variable(p, p.previous, can_assign)
 }
 
+/* Create a synthetic token. */
+@(private = "file")
+synthetic_token :: proc(text: string) -> Token {
+	return Token {
+		lexeme = text,
+	}
+}
+
+@(private = "file")
+super_ :: proc(p: ^Parser, can_assign: bool) {
+	if p.current_class == nil {
+		error(p, "Can't use 'super' outside a class.")
+	} else if !p.current_class.has_superclass {
+		error(p, "Can't use 'super' in a class with no superclass.")
+	}
+
+	consume(p, .DOT, "Expect '.' after 'super'.")
+	consume(p, .IDENT, "Expect superclass method name.")
+	name := identifier_constant(p, &p.previous)
+
+	/* Place both the current receiver and the superclass on the stack. */
+	named_variable(p, synthetic_token("this"), can_assign = false)
+
+	/* Check if the method is immediately invoked or not; since we can apply
+	 * an optimization involving no use of bound methods if it is. */
+	if match(p, .LPAREN) {
+		arg_count := argument_list(p)
+		named_variable(p, synthetic_token("super"), can_assign = false)
+		emit_opcode(p, .OP_SUPER_INVOKE)
+		emit_byte(p, name)
+		emit_byte(p, arg_count)
+	} else {
+		named_variable(p, synthetic_token("super"), can_assign = false)
+		emit_opcode(p, .OP_GET_SUPER)
+		emit_byte(p, name)
+	}
+}
+
 @(private = "file")
 this_ :: proc(p: ^Parser, can_assign: bool) {
 	if p.current_class == nil {
@@ -856,7 +895,7 @@ rules: []ParseRule = {
 	TokenType.OR = ParseRule{nil, or_, .OR},
 	TokenType.PRINT = ParseRule{nil, nil, .NONE},
 	TokenType.RETURN = ParseRule{nil, nil, .NONE},
-	TokenType.SUPER = ParseRule{nil, nil, .NONE},
+	TokenType.SUPER = ParseRule{super_, nil, .NONE},
 	TokenType.THIS = ParseRule{this_, nil, .NONE},
 	TokenType.TRUE = ParseRule{literal, nil, .NONE},
 	TokenType.EOF = ParseRule{nil, nil, .NONE},
@@ -891,7 +930,7 @@ parse_precedence :: proc(p: ^Parser, precedence: Precedence) {
 	}
 }
 
-/* Parse an identifier name. */
+/* Store the lexeme of a token in the constant table. */
 @(private = "file")
 identifier_constant :: proc(p: ^Parser, name: ^Token) -> u8 {
 	return make_constant(p, obj_val(copy_string(p.gc, name.lexeme)))
@@ -1251,8 +1290,38 @@ class_declaration :: proc(p: ^Parser) {
 
 	/* Push the current class to the linked list of classes. */
 	class_compiler: ClassCompiler
+	class_compiler.has_superclass = false
 	class_compiler.enclosing = p.current_class
 	p.current_class = &class_compiler
+
+	/* Check if this class inherits from another. */
+	if match(p, .LESS) {
+		consume(p, .IDENT, "Expect superclass name.")
+
+		/* Push the superclass on the stack. */
+		variable(p, can_assign = false) 
+		
+		if identifiers_equal(&class_name, &p.previous) {
+			error(p, "A class can't inherit from itself.")
+		}
+
+		/* Create a local variable as the reference to the superclass. */
+		begin_scope(p)
+		add_local(p, synthetic_token("super"), .VAR)
+		define_variable(p, 0)
+
+		/* Push the inheriting class on the stack. */
+		named_variable(p, class_name, can_assign = false)
+
+		emit_opcode(p, .OP_INHERIT)
+		class_compiler.has_superclass = true
+	}
+
+	/* Note that we don't need to do anything extra to allow method overrides.
+	 * The OP_INHERIT instruction which copies all methods of the superclass
+	 * into the subclass runs before any methods of the subclass itself are
+	 * compiled, so if a method of the same name appears in the subclass it
+	 * will override that inherited entry. */
 
 	/* This call to named_variable() pushes the class back on the stack. */
 	named_variable(p, class_name, can_assign = false)
@@ -1277,6 +1346,10 @@ class_declaration :: proc(p: ^Parser) {
 
 	consume(p, .RSQUIRLY, "Expect '}' after class body.")
 	emit_pop(p) /* Pop the class object off. */
+
+	if class_compiler.has_superclass {
+		end_scope(p)
+	}
 
 	/* Set the current class to its enclosing one. */
 	p.current_class = p.current_class.enclosing

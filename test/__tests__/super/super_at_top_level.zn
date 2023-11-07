@@ -1,0 +1,1 @@
+super.foo("bar") // ERR: Can't use 'super' outside a class.
