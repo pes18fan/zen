@@ -21,13 +21,9 @@
                     "name": "keyword.control.zen"
                 },
                 {
-                    "name": "support.function.builtin.zen",
                     "match": "\\b(print)\\b"
+                    "name": "support.function.builtin.zen",
                 },
-                {
-                    "match": "\\b(import)\b",
-                    "name": "keyword.other.zen"
-                }
             ]
         },
         "comments": {
@@ -132,6 +128,17 @@
                                     "name": "variable.parameter.zen"
                                 }
                             ]
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(class)\\s+([A-Za-z_][A-Za-z0-9_?!]*)\\s*\\{",
+                    "captures": {
+                        "1": {
+                            "name": "storage.type.class.zen"
+                        },
+                        "2": {
+                            "name": "entity.name.class.zen"
                         }
                     }
                 }

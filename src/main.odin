@@ -38,9 +38,8 @@ repl :: proc(vm: ^VM) -> int {
 	fmt.println("Welcome to zen!")
 	fmt.println("Press 'Ctrl-D' to exit.")
 	buf: [1024]byte
-	i := 1
 
-	for {
+	for i := 1;; i += 1 {
 		fmt.printf("zen:%d> ", i)
 		n, err := os.read(os.stdin, buf[:])
 		if err < 0 {
@@ -57,7 +56,6 @@ repl :: proc(vm: ^VM) -> int {
 		line := string(buf[:n])
 
 		interpret(vm, vm.gc, line)
-		i += 1
 	}
 
 	return 0
