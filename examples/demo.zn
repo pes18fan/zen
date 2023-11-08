@@ -109,8 +109,6 @@ puts("69"
     |> it + 1) //=> 70
 
 // Things to expect in the future (topmost being the most likely):
-// - Classes and methods
-// - More standard library functions
 // - Modules
 // - Gradual typing
 // - Pattern matching
