@@ -325,7 +325,7 @@ copy_string :: proc(gc: ^GC, str: string) -> ^ObjString {
 
 
 allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
-	zstring := as_string(allocate_obj(gc, ObjString, .STRING))
+	zstring := as_string(obj_val(allocate_obj(gc, ObjString, .STRING)))
 	zstring.chars = str
 	zstring.hash = hash
 	zstring.len = len(str)
@@ -381,17 +381,17 @@ stringify_object :: proc(obj: ^Obj) -> string {
 		case .BOUND_METHOD:
 			/* Bound methods are an implementation detail, we don't expose that
 			 * since from the user's perspective they're just functions. */
-			return stringify_function(as_bound_method(obj).method.function)
+			return stringify_function(as_bound_method(obj_val(obj)).method.function)
 		case .CLASS:
-			return fmt.tprintf("%s", as_class(obj).name.chars)
+			return fmt.tprintf("%s", as_class(obj_val(obj)).name.chars)
 		case .CLOSURE:
-			return stringify_function(as_closure(obj).function)	
+			return stringify_function(as_closure(obj_val(obj)).function)	
 		case .FUNCTION:
-			return stringify_function(as_function(obj))
+			return stringify_function(as_function(obj_val(obj)))
 		case .INSTANCE:
-			return fmt.tprintf("%s instance", as_instance(obj).klass.name.chars)
+			return fmt.tprintf("%s instance", as_instance(obj_val(obj)).klass.name.chars)
 		case .LIST: {
-			list := as_list(obj)
+			list := as_list(obj_val(obj))
 			sb := strings.builder_make()	
 			
 			strings.write_string(&sb, "[")
@@ -411,7 +411,7 @@ stringify_object :: proc(obj: ^Obj) -> string {
 		case .NATIVE:
 			return "<native func>"
 		case .STRING:
-			return as_cstring(obj)
+			return as_cstring(obj_val(obj))
 		case .UPVALUE:
 			return "upvalue"
 	}
@@ -459,7 +459,7 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 		fn := (^ObjNative)(obj)
 		free(fn)
 	case .STRING:
-		zstr := as_string(obj)
+		zstr := (^ObjString)(obj)
 		delete(zstr.chars)
 		free(zstr)
 	case .UPVALUE:

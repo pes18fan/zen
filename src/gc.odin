@@ -108,7 +108,7 @@ mark_object :: proc(gc: ^GC, object: ^Obj) {
 
 	if config.log_gc {
 		fmt.eprintf("%p mark ", object)
-		print_value(object)
+		print_value(obj_val(object))
 		fmt.eprintf(" of type %s\n", type_of_obj(object))
 	}
 

@@ -215,7 +215,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 	/* This variable stores the value of the built-in `it` variable, which
 	refers to the value of the last expression in a pipeline. */
-	pipeline_it: Value = nil
+	pipeline_it: Value = nil_val()
 
 	for {
 		if config.trace_exec {
@@ -881,7 +881,7 @@ concatenate :: proc(vm: ^VM) {
 	vm_pop(vm)
 
 	/* And push the final result. */
-	vm_push(vm, (^Obj)(result))
+	vm_push(vm, obj_val((^Obj)(result)))
 }
 
 free_objects :: proc(gc: ^GC) {

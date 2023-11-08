@@ -57,7 +57,7 @@ clock_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 puts_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	print_value(args[0])
 	fmt.print("\n")
-	return nil, true
+	return nil_val(), true
 }
 
 /* Read a line from stdin. */
@@ -66,7 +66,7 @@ gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	n, err := os.read(os.stdin, buf[:])
 	if err < 0 {
 		vm_panic(vm, "Failed to read input.")
-		return nil, false
+		return nil_val(), false
 	}
 
 	return obj_val(copy_string(vm.gc, string(buf[:n]))), true
@@ -76,11 +76,11 @@ gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 panic_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
 		vm_panic(vm, "Panic message must be a string, not a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	vm_panic(vm, "%s", as_cstring(args[0]))
-	return nil, false
+	return nil_val(), false
 }
 
 /* 
@@ -90,13 +90,13 @@ Panics if a non-string is passed, or if the string is malformed.
 parse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
 		vm_panic(vm, "Can only parse strings, not %vs.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	n, ok := strconv.parse_f64(as_cstring(args[0]))
 	if !ok {
 		vm_panic(vm, "Cannot parse '%s' to a real number.", as_string(args[0]).chars)
-		return nil, false
+		return nil_val(), false
 	}
 
 	return number_val(n), true
@@ -106,14 +106,14 @@ parse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 sqrt_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_number(args[0]) {
 		vm_panic(vm, "Cannot find the square root of a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	n := as_number(args[0])
 
 	if n < 0 {
 		vm_panic(vm, "Cannot use 'sqrt' to find the square root of a negative number.")
-		return nil, false
+		return nil_val(), false
 	}
 
 	return number_val(math.sqrt(n)), true
@@ -129,7 +129,7 @@ ln_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	if n <= 0 {
 		vm_panic(vm, "Cannot find the natural log of a non-positive number.")
-		return nil, false
+		return nil_val(), false
 	}
 
 	return number_val(math.ln(n)), true
@@ -139,7 +139,7 @@ ln_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 pow_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_number(args[0]) || !is_number(args[1]) {
 		vm_panic(vm, "Arguments to 'pow' must be real numbers, not %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	return number_val(math.pow(as_number(args[0]), as_number(args[1]))), true
@@ -149,7 +149,7 @@ pow_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 floor_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_number(args[0]) {
 		vm_panic(vm, "Cannot floor a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	return number_val(math.floor(as_number(args[0]))), true
@@ -159,7 +159,7 @@ floor_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 ceil_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_number(args[0]) {
 		vm_panic(vm, "Cannot ceil a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	return number_val(math.ceil(as_number(args[0]))), true
@@ -169,7 +169,7 @@ ceil_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 round_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_number(args[0]) {
 		vm_panic(vm, "Cannot round a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	return number_val(math.round(as_number(args[0]))), true
@@ -179,7 +179,7 @@ round_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 abs_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_number(args[0]) {
 		vm_panic(vm, "Cannot get the absolute value of a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	return number_val(math.abs(as_number(args[0]))), true
@@ -189,7 +189,7 @@ abs_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 chomp_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
 		vm_panic(vm, "Cannot chomp a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	return obj_val(copy_string(vm.gc, strings.trim_space(as_string(args[0]).chars))), true
@@ -199,7 +199,7 @@ chomp_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 len_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) && !is_list(args[0]) {
 		vm_panic(vm, "Cannot get length of a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 	
 	if is_string(args[0]) {
@@ -221,7 +221,7 @@ replace_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 			"All arguments for gsub must be strings, got %v instead.",
 			type_of_value(args[0]),
 		)
-		return nil, false
+		return nil_val(), false
 	}
 
 	str, was_allocation := strings.replace_all(
@@ -241,13 +241,13 @@ replace_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 upcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
 		vm_panic(vm, "upcase() requires a string, not a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	str, err := strings.to_upper(as_string(args[0]).chars)
 	if err != nil {
 		vm_panic(vm, "Allocator error on upcase(): %s", err)
-		return nil, false
+		return nil_val(), false
 	}
 
 	return obj_val(take_string(vm.gc, str)), true
@@ -257,13 +257,13 @@ upcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 downcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
 		vm_panic(vm, "downcase() requires a string, not a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	str, err := strings.to_lower(as_string(args[0]).chars)
 	if err != nil {
 		vm_panic(vm, "Allocator error on downcase(): %s", err)
-		return nil, false
+		return nil_val(), false
 	}
 
 	return obj_val(take_string(vm.gc, str)), true
@@ -273,13 +273,13 @@ downcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool)
 reverse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
 		vm_panic(vm, "Can only reverse strings, not %vs.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	str, err := strings.reverse(as_cstring(args[0]))
 	if err != nil {
 		vm_panic(vm, "Allocator error on reverse(): %s", err)
-		return nil, false
+		return nil_val(), false
 	}
 
 	return obj_val(take_string(vm.gc, str)), true
@@ -299,28 +299,28 @@ typeof_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 push_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_list(args[0]) {
 		vm_panic(vm, "Cannot push a value to a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	list := as_list(args[0])
 	item := args[1]
 
 	write_value_array(&list.items, item)
-	return nil, true
+	return nil_val(), true
 }
 
 /* Pop a value off a list and return it. */
 pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_list(args[0]) {
 		vm_panic(vm, "Cannot pop a %v.", type_of_value(args[0]))
-		return nil, false
+		return nil_val(), false
 	}
 
 	list := as_list(args[0])
 	
 	if list.items.count == 0 {
 		vm_panic(vm, "Cannot pop an empty list.")
-		return nil, false
+		return nil_val(), false
 	}
 
 	return pop_value_array(&list.items), true
