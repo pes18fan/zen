@@ -22,10 +22,6 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "ceil", ceil_native, arity = 1)
 	define_native(gc, "round", round_native, arity = 1)
 	define_native(gc, "abs", abs_native, arity = 1)
-	define_native(gc, "complex", complex_native, arity = 2)
-	define_native(gc, "conjg", conjg_native, arity = 1)
-	define_native(gc, "real", real_native, arity = 1)
-	define_native(gc, "imag", imag_native, arity = 1)
 
 	// errors
 	define_native(gc, "panic", panic_native, arity = 1)
@@ -179,64 +175,14 @@ round_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return number_val(math.round(as_number(args[0]))), true
 }
 
-/* Find the magnitude / absolute value of a real or complex number. */
+/* Find the absolute value of a real number. */
 abs_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_number(args[0]) && !is_complex(args[0]) {
+	if !is_number(args[0]) {
 		vm_panic(vm, "Cannot get the absolute value of a %v.", type_of_value(args[0]))
 		return nil, false
 	}
 
-	if is_number(args[0]) {
-		return number_val(math.abs(as_number(args[0]))), true
-	} else {
-		mag := math.hypot(real(as_complex(args[0])), imag(as_complex(args[0])))
-		return number_val(mag), true
-	}
-}
-
-/* Create a complex number from a real and imaginary part. */
-complex_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_number(args[0]) || !is_number(args[1]) {
-		vm_panic(vm, "Both arguments of 'complex' must be real numbers.")
-		return nil, false
-	}
-
-	cmplex := complex128(as_number(args[0])) + 1i * complex128(as_number(args[1]))
-
-	return complex_val(cmplex), true
-}
-
-/* Find the complex conjugate of a number. */
-conjg_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_complex(args[0]) {
-		vm_panic(vm, "Only complex numbers have complex conjugates.")
-		return nil, false
-	}
-
-	n := as_complex(args[0])
-	conjg := complex128(real(n)) + 1i * complex128(-imag(n))
-
-	return complex_val(conjg), true
-}
-
-/* Get the real part of a complex number. */
-real_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_complex(args[0]) {
-		vm_panic(vm, "Can only take the real part of a complex number.")
-		return nil, false
-	}
-
-	return number_val(real(as_complex(args[0]))), true
-}
-
-/* Get the imaginary part of a complex number. */
-imag_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_complex(args[0]) {
-		vm_panic(vm, "Can only take the imaginary part of a complex number.")
-		return nil, false
-	}
-
-	return number_val(imag(as_complex(args[0]))), true
+	return number_val(math.abs(as_number(args[0]))), true
 }
 
 /* Trim whitespace from both sides of a string. */

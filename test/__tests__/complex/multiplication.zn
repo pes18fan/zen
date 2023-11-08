@@ -1,6 +1,0 @@
-val z1 = complex(2, 3)
-val z2 = complex(4, 5)
-val res = z1 * z2
-
-puts(real(res)) // expect: -7
-puts(imag(res)) // expect: 22

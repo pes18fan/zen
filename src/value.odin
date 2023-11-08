@@ -13,7 +13,6 @@ in the union, or nil.
 Value :: union {
     bool,
     f64,
-    complex128,
     ^Obj,
 }
 
@@ -21,7 +20,6 @@ type_of_value :: proc (value: Value) -> string {
     switch v in value {
         case bool: return "boolean"
         case f64: return "number"
-        case complex128: return "complex"
         case ^Obj: return type_of_obj(v)
         case: return "nil"
     }
@@ -36,10 +34,6 @@ is_number :: #force_inline proc (value: Value) -> bool {
     _, ok := value.(f64)
     return ok
 }
-is_complex :: #force_inline proc (value: Value) -> bool {
-    _, ok := value.(complex128)
-    return ok
-}
 is_obj :: #force_inline proc (value: Value) -> bool {
     _, ok := value.(^Obj)
     return ok
@@ -48,12 +42,10 @@ is_obj :: #force_inline proc (value: Value) -> bool {
 as_obj :: #force_inline proc (value: Value) -> ^Obj { return value.(^Obj) }
 as_bool :: #force_inline proc (value: Value) -> bool { return value.(bool) }
 as_number :: #force_inline proc (value: Value) -> f64 { return value.(f64) }
-as_complex :: #force_inline proc (value: Value) -> complex128 { return value.(complex128) }
 
 bool_val :: #force_inline proc (value: bool) -> Value { return Value(value) }
 nil_val :: #force_inline proc () -> Value { return Value(nil) }
 number_val :: #force_inline proc (value: f64) -> Value { return Value(value) }
-complex_val :: #force_inline proc (value: complex128) -> Value { return Value(value) }
 obj_val :: #force_inline proc (value: ^Obj) -> Value { return Value(value) }
 
 /* 
@@ -105,16 +97,7 @@ stringify_value :: proc (value: Value) -> string {
             } else {
                 return fmt.tprintf("%g", v)
             }
-        case complex128:
-            if imag(v) >= 0 {
-                return fmt.tprintf("%g + %gi", real(v), imag(v))
-            } else {
-                /* For some reason the compiler didn't allow me to do -imag(v)
-                 * in the printf statement lol */
-                img := -imag(v)
-                return fmt.tprintf("%g - %gi" , real(v), img)
-            }
-        case ^Obj:
+       case ^Obj:
             return stringify_object(v)
         case:
             return "nil"
@@ -135,7 +118,6 @@ values_equal :: proc (a: Value, b: Value) -> bool {
     switch v in a {
         case bool: return v == as_bool(b)
         case f64:  return v == as_number(b)
-        case complex128: return v == as_complex(b)
         case ^Obj: return as_obj(a) == as_obj(b)
         case: return true
     }  

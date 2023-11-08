@@ -1,5 +1,0 @@
-var z = complex(2, -5)
-var conj_z = conjg(z)
-
-puts(real(conj_z)) // expect: 2
-puts(imag(conj_z)) // expect: 5

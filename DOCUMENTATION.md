@@ -21,7 +21,6 @@ You can prevent automatic semicolon insertion by using a backslash.
 zen has the following datatypes:
 
 - `number`: A real number represented as a 64-bit floating point.
-- `complex`: A complex number represented with two 64-bit floating points.
 - `bool`: A boolean value i.e. true or false.
 - `string`: A sequence of text.
 
@@ -267,14 +266,7 @@ These include the following:
 - `floor(x)`: Find the largest integer less than `x`.
 - `ceil(x)`: Find the smallest integer greater than `x`.
 - `round(x)`: Round `x` to the nearest integer.
-
-#### complex
-
-- `complex(r, i)`: Create a complex number with real part `r` and imaginary part `i`.
-- `conjg(z)`: Find the complex conjugate of a number `z`.
-- `real(z)`: Get the real part of a complex number `z`.
-- `imag(z)`: Get the imaginary part of a complex number `z`.
-- `abs(z)`: Find the absolute value of a real number or the magnitude of a complex number.
+- `abs(x)`: Find the absolute value of a real number.
 
 ### errors
 

@@ -1,3 +1,0 @@
-var z = complex(3, 4)
-puts(real(z)) // expect: 3
-puts(imag(z)) // expect: 4
