@@ -8,7 +8,7 @@ import "core:fmt"
 
 /* Whether to use NaN boxing to represent values. Set to false to use a tagged
  * union representation instead. */
-NAN_BOXING :: false
+NAN_BOXING :: true
 
 when NAN_BOXING {
     SIGN_BIT :: cast(u64)0x8000000000000000
@@ -222,6 +222,7 @@ values_equal :: proc (a: Value, b: Value) -> bool {
         if is_number(a) && is_number(b) {
             return as_number(a) == as_number(b)
         }
+        return a == b
     } else {
         if type_of_value(a) != type_of_value(b) {
             return false
