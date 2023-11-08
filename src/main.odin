@@ -11,6 +11,7 @@ VERSION :: "zen 0.0.1"
 Config :: struct {
 	compile_only:     bool,
 	dump_disassembly: bool,
+	dump_tokens:      bool,
 	trace_exec:       bool,
 	check_leaks:      bool,
 	stress_gc:        bool,
@@ -22,6 +23,7 @@ Config :: struct {
 config := Config {
 	compile_only = false,
 	dump_disassembly = false,
+	dump_tokens = false,
 	trace_exec  = false,
 	check_leaks = false,
 	stress_gc   = false,
@@ -106,6 +108,7 @@ Options:
     -t, --time          Record time taken to compile and run
     -C, --compile       Compile only, useful with -D
     -D, --dump          Dump disassembled bytecode
+    --dump-tokens       Dump tokens from lexer and exit
     -T, --trace         Trace script execution
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation
@@ -135,6 +138,8 @@ Options:
 			config.compile_only = true
 		case "--dump":
 			config.dump_disassembly = true
+		case "--dump-tokens":
+			config.dump_tokens = true
 		case "--trace":
 			config.trace_exec = true
 		case "--time":

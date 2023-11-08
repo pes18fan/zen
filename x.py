@@ -25,13 +25,15 @@ def create_release_build():
         print(f"Error while creating release build: {e}", file=sys.stderr)
         exit(1)
 
-def benchmark(command, against):
+def benchmark():
+    print("Starting up the benchmark runner..")
     try:
-        subprocess.run(f"""hyperfine -N --warmup 3 --min-runs 5\
-                           bin/rel/zen {command} {against}""".split(),
-                       check=True)
+        subprocess.run(f"ruby ./run_benchmarks.rb".split(), cwd="test/", check=True)
     except FileNotFoundError:
-        print("hyperfine needed to benchmark", file=sys.stderr)
+        print("Ruby needed to run benchmarks!", file=sys.stderr)
+        exit(1)
+    except ProcError as e:
+        print(f"Error while benchmarking: {e}", file=sys.stderr)
         exit(1)
 
 def clean():
@@ -98,15 +100,8 @@ def main():
     rel_parser.set_defaults(func=create_release_build)
 
     # benchmark
-    bench_parser = subparsers.add_parser("bench", 
-                                         help="benchmark the release against another command")
-    bench_parser.add_argument("--args", 
-                              required=True,
-                              help="args to pass to the release build and the other command")
-    bench_parser.add_argument("--against", 
-                              required=True,
-                              help="command to benchmark against")
-    bench_parser.set_defaults(func=lambda args: benchmark(args.command, args.against))
+    bench_parser = subparsers.add_parser("bench", help="run benchmarks")
+    bench_parser.set_defaults(func=benchmark)
 
     # clean
     clean_parser = subparsers.add_parser("clean", help="clean build artifacts")

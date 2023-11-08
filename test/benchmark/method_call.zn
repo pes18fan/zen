@@ -1,0 +1,69 @@
+class Toggle {
+  init(startState) {
+    this.state = startState
+  }
+
+  value() { return this.state; }
+
+  activate() {
+    this.state = not this.state
+    return this
+  }
+}
+
+class NthToggle < Toggle {
+  init(startState, maxCounter) {
+    super.init(startState)
+    this.countMax = maxCounter
+    this.count = 0
+  }
+
+  activate() {
+    this.count = this.count + 1
+    if (this.count >= this.countMax) {
+      super.activate()
+      this.count = 0
+    }
+
+    return this
+  }
+}
+
+var start = clock()
+var n = 100000
+var value = true
+var toggle = Toggle(value)
+
+for var i = 0; i < n; i = i + 1 {
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+  value = toggle.activate().value()
+}
+
+puts(toggle.value())
+
+value = true
+var ntoggle = NthToggle(value, 3)
+
+for var i = 0; i < n; i = i + 1 {
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+  value = ntoggle.activate().value()
+}
+
+puts(ntoggle.value())
+puts(clock() - start)

@@ -704,6 +704,10 @@ interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
 		time.stopwatch_start(&sw)
 	}
 
+	if config.dump_tokens {
+		return .INTERPRET_OK
+	}
+
 	fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
 	if !cmp_ok {
 		return .INTERPRET_COMPILE_ERROR

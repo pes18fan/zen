@@ -219,7 +219,7 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 			  * token IS one of some particular types and if the next token IS 
 			  * NOT one of some particular types. */
 			 #partial switch tokens[idx - 1].type {
-			 case .IDENT, .STRING, .NUMBER, .TRUE, .FALSE, .NIL, .BREAK, 
+			 case .IDENT, .STRING, .NUMBER, .TRUE, .THIS, .FALSE, .NIL, .BREAK, 
 			 .CONTINUE, .RETURN, .RPAREN, .RSQUIRLY, .RSQUARE:
 			     #partial switch tokens[idx + 1].type {
 				 case .IN, .OR, .AND, .DOT, .PLUS, .MINUS, .STAR, .SLASH, .EQUAL, .EQUAL_EQUAL,
@@ -538,6 +538,13 @@ lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
 	}
 
 	tokens = insert_semis(toks[:])
+
+	if config.dump_tokens {
+		fmt.printf("TOKENS:\n")
+		for token in tokens {
+			fmt.printf("  %v\n", token)
+		}
+	}
 
 	return tokens, true
 }
