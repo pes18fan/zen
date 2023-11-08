@@ -55,7 +55,14 @@ table_set :: proc(table: ^Table, key: ^ObjString, value: Value) -> bool {
 
 @(private = "file")
 find_entry :: proc(entries: []Entry, capacity: int, key: ^ObjString) -> ^Entry {
-	index := key.hash % u32(capacity)
+	/* The size of our hash table starts at 8 and doubles as more entries are
+	 * added. In other words, it is always a power of two. To find the index
+	 * here, we need to modulo the hash by the capacity. However, since the
+	 * capacity is always a power of two, we can avoid the slow modulo
+	 * operator and bitwise AND the hash with the capacity minus one, which in
+	 * fact provides the exact same result as the modulo operation when the
+	 * divisor (capacity in this case) is a power of two. */
+	index := key.hash & (u32(capacity) - 1)
 	tombstone: ^Entry = nil
 
 	for {
@@ -71,7 +78,7 @@ find_entry :: proc(entries: []Entry, capacity: int, key: ^ObjString) -> ^Entry {
 			return entry
 		}
 
-		index = (index + 1) % u32(capacity)
+		index = (index + 1) & (u32(capacity) - 1)
 	}
 }
 
@@ -124,7 +131,9 @@ table_add_all :: proc(from: ^Table, to: ^Table) {
 table_find_string :: proc(table: ^Table, str: string, hash: u32) -> ^ObjString {
 	if table.count == 0 {return nil}
 
-	index := hash % u32(table.capacity)
+	/* Use the bitwise AND for speed. */
+	index := hash & (u32(table.capacity) - 1)
+
 	for {
 		entry := &table.entries[index]
 
@@ -136,7 +145,7 @@ table_find_string :: proc(table: ^Table, str: string, hash: u32) -> ^ObjString {
 			return entry.key
 		}
 
-		index = (index + 1) % u32(table.capacity)
+		index = (index + 1) & (u32(table.capacity) - 1)
 	}
 }
 

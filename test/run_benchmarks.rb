@@ -40,10 +40,9 @@ def bench(folder)
         puts error
       else
         puts "Got time: #{COL_GREEN}#{time}#{RESET}"
+        $benchmarks += 1
       end
     end
-
-    $benchmarks += 1
   end
 end
 
@@ -82,5 +81,4 @@ end
 bench($bench_folder)
 puts ""
 
-puts "Benchmarked #{$benchmarks} files."
-
+puts "Succesfully benchmarked #{$benchmarks} files."
