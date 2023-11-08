@@ -249,6 +249,32 @@ var maker = CoffeeMaker("coffee and chicory")
 maker.brew()
 ```
 
+Classes also support inheritance, where you can use `<` while defining a class
+to make it inherit from another. A subclass will inherit its parent class's
+methods. The `super` keyword followed by a dot and method name can be used
+to access the method as defined in the inheriting class's parent class.
+
+```zen
+class Animal {
+    init(name) {
+        this.name = name
+    }
+}
+
+class Dog < Animal {
+    init(name) {
+        super.init(name)
+    }
+
+    bark() {
+        puts(this.name + " says woof!")
+    }
+}
+
+val rover = Dog("Rover")
+rover.bark() // Rover says woof!
+```
+
 ## Standard library functions
 
 zen has several functions that are present for you to use in the standard library.
