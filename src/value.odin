@@ -11,6 +11,7 @@ import "core:fmt"
 NAN_BOXING :: true
 
 when NAN_BOXING {
+    /* A u64 with only the highest bit (the sign bit) set. */
     SIGN_BIT :: cast(u64)0x8000000000000000
 
     /* A NaN value with the highest mantissa bit as well as the second highest
@@ -34,17 +35,25 @@ when NAN_BOXING {
      * pointers techically need 64 bits, most widely used chips today only use 
      * 48 bits for pointers, so we can stuff the pointer with three bytes to 
      * spare. Those remaining three bytes can be used as type tags to 
-     * distinguish between the types. */
+     * distinguish between the types. This is what NaN boxing is all about. */
 
+    /* ORing FALSE_VAL (10 in binary) with 1 siply gives 11 in binary, which
+     * equals TRUE_VAL, and ORing TRUE_VAL gives itself. */
     is_bool :: #force_inline proc(value: Value) -> bool {
         return (value | 1) == TRUE_VAL
     }
     is_nil :: #force_inline proc(value: Value) -> bool {
         return value == nil_val() 
     }
+
+    /* In case of a number, ANDing it with the QNAN constant must not produce
+     * QNAN itself since well, that's a NaN. */
     is_number :: #force_inline proc(value: Value) -> bool {
         return (value & QNAN) != QNAN
     }
+
+    /* A quiet NaN with its sign bit set is said to be an object pointer in
+     * zen's NaN boxing convention. */
     is_obj :: #force_inline proc(value: Value) -> bool {
         return (value & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT)
     }
@@ -55,6 +64,9 @@ when NAN_BOXING {
     as_bool :: #force_inline proc(value: Value) -> bool {
         return value == TRUE_VAL
     }
+
+    /* This simply involves extracting the address from the last 48 bits of
+     * the value and casting it twice to turn it into an object pointer. */
     as_obj :: #force_inline proc(value: Value) -> ^Obj {
         return cast(^Obj)(cast(uintptr)(value &~ (SIGN_BIT | QNAN)))
     }
@@ -215,13 +227,15 @@ print_value :: proc (value: Value) {
 /* Determine if two `Value`s are equal. */
 values_equal :: proc (a: Value, b: Value) -> bool {
     when NAN_BOXING {
-        /* We could just do `return a == b`, but if we do that the result of
-         * NaN == NaN will be `true`, which is not correct as per IEEE 754.
-         * From what I know, that is because there is no reason to believe that
-         * two NaN's are the same non-number value. */
-        if is_number(a) && is_number(b) {
-            return as_number(a) == as_number(b)
-        }
+        /* As per IEEE 754, NaN is not equal to itself. That means we'd need
+         * to check if the two numbers are NaN values and return false if so.
+         * That's not directly doable, but we can just compare the two values
+         * as number types (if they are) and Odin will do the rest. However,
+         * that is if it was not impossible in zen to produce NaN values like
+         * infinity or such, since things that could produce NaN like division
+         * by zero and adding numbers to other types are disallowed and just 
+         * cause the VM to panic. Thus, there is no need to take that into
+         * consideration. */
         return a == b
     } else {
         if type_of_value(a) != type_of_value(b) {
