@@ -40,3 +40,7 @@ To test everything at once, run:
 ```bash
 ./x.py test
 ```
+
+# contributing
+
+zen may have a lot of bugs and problems lying around, feel free to open an issue or create a pull request if you find any!
