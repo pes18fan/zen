@@ -8,7 +8,7 @@ import "core:fmt"
 
 /* Whether to use NaN boxing to represent values. Set to false to use a tagged
  * union representation instead. */
-NAN_BOXING :: true
+NAN_BOXING :: false
 
 when NAN_BOXING {
     /* A u64 with only the highest bit (the sign bit) set. */
@@ -194,7 +194,7 @@ stringify_value :: proc (value: Value) -> string {
             if is_integer(as_number(value)) {
                 return fmt.tprintf("%d", int(as_number(value)))
             } else {
-                return fmt.tprintf("%g", as_number(value))
+                return fmt.tprintf("%.3f", as_number(value))
             }
         } else if is_obj(value) {
             return stringify_object(as_obj(value))
@@ -207,7 +207,7 @@ stringify_value :: proc (value: Value) -> string {
                 if is_integer(v) {
                     return fmt.tprintf("%d", int(v))
                 } else {
-                    return fmt.tprintf("%g", v)
+                    return fmt.tprintf("%.3f", v)
                 }
             case ^Obj:
                 return stringify_object(v)
