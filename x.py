@@ -2,6 +2,8 @@
 import argparse
 import subprocess
 import sys
+import os
+import shutil
 
 OC = "odin"
 ProcError = subprocess.CalledProcessError
@@ -10,6 +12,8 @@ DEBUG_FLAGS = """-debug -o:none"""
 def create_debug_build():
     try:
         print("Compiling the debug build..")
+
+        os.makedirs("bin/dbg", exist_ok=True)
         subprocess.run(f"{OC} build src/ -out:bin/dbg/dzen {DEBUG_FLAGS}".split(), 
                        check=True)
     except ProcError as e:
@@ -19,8 +23,12 @@ def create_debug_build():
 def create_release_build():
     try:
         print("Compiling in release mode..")
+
+        os.makedirs("bin/rel", exist_ok=True)
+        os.makedirs("bin/test", exist_ok=True)
         subprocess.run(f"{OC} build src/ -out:bin/rel/zen -o:speed".split(),
                        check=True)
+        shutil.copy("bin/rel/zen", "bin/test/")
     except ProcError as e:
         print(f"Error while creating release build: {e}", file=sys.stderr)
         exit(1)
@@ -37,7 +45,7 @@ def benchmark():
         exit(1)
 
 def clean():
-    subprocess.run("rm -rf bin/**".split(), check=True)
+    shutil.rmtree("bin", ignore_errors=True)
     print("cleaned build artifacts.")
 
 def generate_docs():
