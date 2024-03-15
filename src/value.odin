@@ -8,7 +8,7 @@ import "core:fmt"
 
 /* Whether to use NaN boxing to represent values. Set to false to use a tagged
  * union representation instead. */
-NAN_BOXING :: false
+NAN_BOXING :: true
 
 when NAN_BOXING {
     /* A u64 with only the highest bit (the sign bit) set. */
