@@ -1596,8 +1596,16 @@ switch_statement :: proc(p: ^Parser) {
 	has_else_clause := false
 
 	defer delete(case_jumps_to_end)
-	expression(p)
-	consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
+
+    /* If there is no switch variable, the value to switch on is assumed to
+       be the boolean value true. This is so that the switch statement can
+       be used like else if */
+    if match(p, .LSQUIRLY) {
+        emit_opcode(p, .OP_TRUE)
+    } else {
+        expression(p)        
+	    consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
+    }
 
 	for i := 0; !match(p, .RSQUIRLY); i += 1 {
 		if i >= U8_COUNT {

@@ -72,8 +72,7 @@ if false {
 zen has no `else if` / `elif` statement. However, the `switch` statement can be
 used in such a situation. A `switch` statement checks for equality between a
 selected value and an assortment of cases, from top to bottom. If a case matches,
-the code associated with it is executed and the statement exits. A `switch true` 
-can be used to easily emulate an `else if` statement.
+the code associated with it is executed and the statement exits. 
 
 ```
 var a = rand_int(0, 2)
@@ -90,6 +89,18 @@ switch a {
 ```
 
 Note that the `else` clause is mandatory.
+
+A `switch true` can be used to easily emulate an `else if` statement. In fact,
+by default if you don't specify any variable for the switch, the default value
+is `true`.
+
+```zen
+switch {
+    0 == 0 => puts("zero is zero!")
+    0 == 1 => puts("zero is on- wait what?")
+    else => puts("ok I don't even know anymore")
+}
+```
 
 ## Looping
 
