@@ -31,9 +31,7 @@ if false {
     puts("This is supposed to happen")
 }
 
-// There's no random number generator yet, so let's imagine that a is randomly
-// generated.
-val a = 4
+val a = rand() * 10 |> floor()
 
 switch a {
     0 => puts("a is 0")

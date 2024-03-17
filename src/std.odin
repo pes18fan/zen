@@ -2,6 +2,7 @@ package zen
 
 import "core:fmt"
 import "core:math"
+import "core:math/rand"
 import "core:time"
 import "core:os"
 import "core:strconv"
@@ -22,6 +23,7 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "ceil", ceil_native, arity = 1)
 	define_native(gc, "round", round_native, arity = 1)
 	define_native(gc, "abs", abs_native, arity = 1)
+    define_native(gc, "rand", rand_native, arity = 0)
 
 	// errors
 	define_native(gc, "panic", panic_native, arity = 1)
@@ -183,6 +185,11 @@ abs_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	return number_val(math.abs(as_number(args[0]))), true
+}
+
+/* Generate a random double floating point value in the interval [0, 1). */
+rand_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+    return number_val(rand.float64()), true
 }
 
 /* Trim whitespace from both sides of a string. */

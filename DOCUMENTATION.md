@@ -75,7 +75,7 @@ selected value and an assortment of cases, from top to bottom. If a case matches
 the code associated with it is executed and the statement exits. 
 
 ```
-var a = rand_int(0, 2)
+var a = rand() * 10 |> floor()
 
 switch a {
     0 => print "zero!"
@@ -304,6 +304,7 @@ These include the following:
 - `ceil(x)`: Find the smallest integer greater than `x`.
 - `round(x)`: Round `x` to the nearest integer.
 - `abs(x)`: Find the absolute value of a real number.
+- `rand()`: Create a random double in the interval [0, 1).
 
 ### errors
 
