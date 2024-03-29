@@ -44,6 +44,7 @@ TokenType :: enum {
 	CONTINUE,
 	CLASS,
 	ELSE,
+    EXPORT,
 	FALSE,
 	FOR,
 	FUNC,
@@ -302,7 +303,16 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 			}
 		}
 	case 'e':
-		return check_keyword(l, 1, 3, "lse", .ELSE)
+        {
+            if l.current - l.start > 1 {
+                switch utf8.rune_at(l.source, l.start + 1) {
+                    case 'l':
+                        return check_keyword(l, 2, 2, "se", .ELSE)
+                    case 'x':
+                        return check_keyword(l, 2, 4, "port", .EXPORT)
+                }
+            }
+        }
 	case 'f':
 		{
 			if l.current - l.start > 1 {

@@ -2,8 +2,8 @@ package zen
 
 import "core:fmt"
 import "core:math"
-import "core:slice"
 import "core:mem"
+import "core:slice"
 import "core:time"
 
 FRAMES_MAX :: 64
@@ -234,7 +234,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 		switch instruction {
 		case .OP_NOOP:
-			// Do nothing.
+		// Do nothing.
 		case .OP_CONSTANT:
 			constant := read_constant(frame)
 			vm_push(vm, constant)
@@ -290,7 +290,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
 			}
 		case .OP_GET_PROPERTY:
-		    {
+			{
 				if !is_instance(vm_peek(vm, 0)) {
 					vm_panic(vm, "Only instances have properties.")
 					return .INTERPRET_RUNTIME_ERROR
@@ -300,7 +300,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				name := read_string(frame)
 
 				/* Look for a field. */
-				value: Value; ok: bool
+				value: Value;ok: bool
 				if value, ok = table_get(&instance.fields, name); ok {
 					vm_pop(vm) /* Instance. */
 					vm_push(vm, value)
@@ -348,8 +348,10 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
-		case .OP_GET_IT: vm_push(vm, pipeline_it)
-		case .OP_SET_IT: pipeline_it = vm_pop(vm)
+		case .OP_GET_IT:
+			vm_push(vm, pipeline_it)
+		case .OP_SET_IT:
+			pipeline_it = vm_pop(vm)
 		case .OP_EQUAL:
 			{
 				b := vm_pop(vm)
@@ -393,7 +395,8 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 				vm_push(vm, number_val(-as_number(vm_pop(vm))))
 			}
-		case .OP_PRINT: print_value(vm_pop(vm))
+		case .OP_PRINT:
+			print_value(vm_pop(vm))
 		case .OP_JUMP:
 			{
 				offset := read_short(frame)
@@ -434,7 +437,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				frame = &vm.frames[vm.frame_count - 1]
 			}
 		case .OP_SUPER_INVOKE:
-		    {
+			{
 				method := read_string(frame)
 				arg_count := read_byte(frame)
 				superclass := as_class(vm_pop(vm))
@@ -502,7 +505,10 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 					if is_local {
 						// Close over a local var of the surrounding function.
-						closure.upvalues[i] = capture_upvalue(vm, mem.ptr_offset(frame.slots, index))
+						closure.upvalues[i] = capture_upvalue(
+							vm,
+							mem.ptr_offset(frame.slots, index),
+						)
 					} else {
 						// Capture an upvalue from the surrounding function.
 						/* When the OP_CLOSURE instruction is being executed,
@@ -561,14 +567,11 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 
 				/* Copy all the superclass's methods to the subclass.
 				 * This is what we call "copy-down inheritance". */
-				table_add_all(
-					from = &as_class(superclass).methods,
-					to = &subclass.methods,
-				)
+				table_add_all(from = &as_class(superclass).methods, to = &subclass.methods)
 				vm_pop(vm) /* Subclass. */
 			}
 		case .OP_METHOD:
-		    {
+			{
 				define_method(vm, read_string(frame))
 			}
 		}
@@ -689,32 +692,34 @@ call :: proc(vm: ^VM, closure: ^ObjClosure, arg_count: int) -> bool {
 call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 	if is_obj(callee) {
 		#partial switch obj_type(callee) {
-		case .BOUND_METHOD: {
-			bound := as_bound_method(callee)
+		case .BOUND_METHOD:
+			{
+				bound := as_bound_method(callee)
 
-			/* The receiver must be stored at stack slot zero. */
-			vm.stack[len(vm.stack) - arg_count - 1] = bound.receiver
+				/* The receiver must be stored at stack slot zero. */
+				vm.stack[len(vm.stack) - arg_count - 1] = bound.receiver
 
-			/* Pull the raw closure out of the ObjBoundMethod and call it. */
-			return call(vm, bound.method, arg_count)
-		}
-		case .CLASS: {
-			klass := as_class(callee)
-			vm.stack[len(vm.stack) - arg_count - 1] = obj_val(new_instance(vm.gc, klass))
-
-			/* Look for an initializer. */
-			initializer: Value; ok: bool
-			if initializer, ok = table_get(&klass.methods, vm.gc.init_string); ok {
-				return call(vm, as_closure(initializer), arg_count)
-			} else if arg_count != 0 {
-				/* If there is no initializer, passing arguments to a class
-				 * call makes no sense and is thus an error. */
-				vm_panic(vm, "Expected 0 arguments but got %d.", arg_count)
-				return false
+				/* Pull the raw closure out of the ObjBoundMethod and call it. */
+				return call(vm, bound.method, arg_count)
 			}
+		case .CLASS:
+			{
+				klass := as_class(callee)
+				vm.stack[len(vm.stack) - arg_count - 1] = obj_val(new_instance(vm.gc, klass))
 
-			return true
-		}
+				/* Look for an initializer. */
+				initializer: Value;ok: bool
+				if initializer, ok = table_get(&klass.methods, vm.gc.init_string); ok {
+					return call(vm, as_closure(initializer), arg_count)
+				} else if arg_count != 0 {
+					/* If there is no initializer, passing arguments to a class
+				 * call makes no sense and is thus an error. */
+					vm_panic(vm, "Expected 0 arguments but got %d.", arg_count)
+					return false
+				}
+
+				return true
+			}
 		/* We only handle ObjClosures here, since all ObjFunctions are wrapped
 		into closures as soon as they're pulled out of the constant table. */
 		case .CLOSURE:
@@ -751,7 +756,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 
 @(private = "file")
 invoke_from_class :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString, arg_count: int) -> bool {
-	method: Value; ok: bool
+	method: Value;ok: bool
 	if method, ok = table_get(&klass.methods, name); !ok {
 		vm_panic(vm, "Undefined property '%s'.", name.chars)
 		return false
@@ -778,7 +783,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 	 * call of the function stored in that field. To handle this corner case,
 	 * we need to look for a field of the same name in that instance first.
 	 * This is necessary but unfortunately sacrifices a bit of performance. */
-	value: Value; ok: bool
+	value: Value;ok: bool
 	if value, ok = table_get(&instance.fields, name); ok {
 		/* Replace the receiver under the arguments with the value of the
 		 * field, since the function itself is always the first value in
@@ -793,7 +798,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 @(private = "file")
 bind_method :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString) -> bool {
 	/* Look for the method in the method table. */
-	method: Value; ok: bool
+	method: Value;ok: bool
 	if method, ok = table_get(&klass.methods, name); !ok {
 		vm_panic(vm, "Undefined property '%s'.", name.chars)
 		return false

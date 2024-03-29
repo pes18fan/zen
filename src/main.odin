@@ -97,7 +97,8 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 	argv_0 := argv[0]
 	script := ""
 
-	help_message :: `Usage: zen <options> <path>
+	help_message :: `zen: Compiler for the zen programming language
+Usage: zen <options> <path>
 
 Options:
     -h, -?, --help      Print this help message and exit
