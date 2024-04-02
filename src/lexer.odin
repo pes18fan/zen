@@ -44,7 +44,7 @@ TokenType :: enum {
 	CONTINUE,
 	CLASS,
 	ELSE,
-    EXPORT,
+	EXPORT,
 	FALSE,
 	FOR,
 	FUNC,
@@ -196,9 +196,9 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 		/* Insert a semi after a line's final token. */
 		if token.type == .NEWLINE {
 			semi := Token {
-				type = .SEMI,
+				type   = .SEMI,
 				lexeme = ";",
-				line = token.line,
+				line   = token.line,
 			}
 
 			/* If the very first token is a newline, ignore it and continue. */
@@ -216,21 +216,18 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 				continue
 			}
 
-			 /* Check the first and last points; append only if the previous
+			/* Check the first and last points; append only if the previous
 			  * token IS one of some particular types and if the next token IS 
 			  * NOT one of some particular types. */
-			 #partial switch tokens[idx - 1].type {
-			 case .IDENT, .STRING, .NUMBER, .TRUE, .THIS, .FALSE, .NIL, .BREAK, 
-			 .CONTINUE, .RETURN, .RPAREN, .RSQUIRLY, .RSQUARE:
-			     #partial switch tokens[idx + 1].type {
-				 case .IN, .OR, .AND, .DOT, .PLUS, .MINUS, .STAR, .SLASH, .EQUAL, .EQUAL_EQUAL,
-				 .BANG_EQUAL, .LESS, .LESS_EQUAL, .GREATER, .GREATER_EQUAL, .BAR_GREATER,
-				 .COMMA, .FAT_ARROW:
-				     continue
-				 case:
+			#partial switch tokens[idx - 1].type {
+			case .IDENT, .STRING, .NUMBER, .TRUE, .THIS, .FALSE, .NIL, .BREAK, .CONTINUE, .RETURN, .RPAREN, .RSQUIRLY, .RSQUARE, .IT:
+				#partial switch tokens[idx + 1].type {
+				case .IN, .OR, .AND, .DOT, .PLUS, .MINUS, .STAR, .SLASH, .EQUAL, .EQUAL_EQUAL, .BANG_EQUAL, .LESS, .LESS_EQUAL, .GREATER, .GREATER_EQUAL, .BAR_GREATER, .COMMA, .FAT_ARROW:
+					continue
+				case:
 					append(&result, semi)
-				 }
-			 }
+				}
+			}
 		} else {
 			if token.type != .BACKSLASH {
 				append(&result, token)
@@ -295,24 +292,24 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 		{
 			if l.current - l.start > 1 {
 				switch utf8.rune_at(l.source, l.start + 1) {
-					case 'o':
-						return check_keyword(l, 2, 6, "ntinue", .CONTINUE)
-					case 'l':
-						return check_keyword(l, 2, 3, "ass", .CLASS)
+				case 'o':
+					return check_keyword(l, 2, 6, "ntinue", .CONTINUE)
+				case 'l':
+					return check_keyword(l, 2, 3, "ass", .CLASS)
 				}
 			}
 		}
 	case 'e':
-        {
-            if l.current - l.start > 1 {
-                switch utf8.rune_at(l.source, l.start + 1) {
-                    case 'l':
-                        return check_keyword(l, 2, 2, "se", .ELSE)
-                    case 'x':
-                        return check_keyword(l, 2, 4, "port", .EXPORT)
-                }
-            }
-        }
+		{
+			if l.current - l.start > 1 {
+				switch utf8.rune_at(l.source, l.start + 1) {
+				case 'l':
+					return check_keyword(l, 2, 2, "se", .ELSE)
+				case 'x':
+					return check_keyword(l, 2, 4, "port", .EXPORT)
+				}
+			}
+		}
 	case 'f':
 		{
 			if l.current - l.start > 1 {
@@ -373,10 +370,10 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 		{
 			if l.current - l.start > 1 {
 				switch utf8.rune_at(l.source, l.start + 1) {
-					case 'r':
-						return check_keyword(l, 2, 2, "ue", .TRUE)
-					case 'h':
-						return check_keyword(l, 2, 2, "is", .THIS)
+				case 'r':
+					return check_keyword(l, 2, 2, "ue", .TRUE)
+				case 'h':
+					return check_keyword(l, 2, 2, "is", .THIS)
 				}
 			}
 		}
@@ -389,11 +386,11 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 				case 'a':
 					if l.current - l.start > 2 {
 						switch utf8.rune_at(l.source, l.start + 2) {
-							case 'r':
-								return check_keyword(l, 3, 0, "", .VAR)
-							case 'l':
-								return check_keyword(l, 3, 0, "", .VAL)
-						} 
+						case 'r':
+							return check_keyword(l, 3, 0, "", .VAR)
+						case 'l':
+							return check_keyword(l, 3, 0, "", .VAL)
+						}
 					}
 				}
 			}
