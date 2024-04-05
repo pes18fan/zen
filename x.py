@@ -82,7 +82,7 @@ def test():
 
 def run_build(args):
     try:
-        subprocess.run([f"./bin/dbg/dzen"] + args.split(), check=True)
+        subprocess.run([f"./bin/dbg/dzen.exe"] + args.split(), check=True)
     except ProcError as e:
         print(f"Error running the build: {e}", file=sys.stderr)
         exit(1)
