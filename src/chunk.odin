@@ -52,6 +52,8 @@ OpCode :: enum {
 	OP_CLASS,
 	OP_INHERIT,
 	OP_METHOD,
+	OP_MODULE_BUILTIN,
+	OP_MODULE_USER,
 }
 
 /*

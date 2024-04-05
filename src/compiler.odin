@@ -2,6 +2,7 @@ package zen
 
 import "core:fmt"
 import "core:os"
+import "core:slice"
 import "core:strconv"
 import "core:strings"
 
@@ -118,6 +119,11 @@ FunctionType :: enum {
 	INITIALIZER,
 	METHOD,
 	SCRIPT,
+}
+
+ModuleType :: enum {
+	BUILTIN,
+	USER,
 }
 
 /*
@@ -880,6 +886,7 @@ rules: []ParseRule = {
 	TokenType.AND           = ParseRule{nil, and_, .AND},
 	TokenType.BREAK         = ParseRule{nil, nil, .NONE},
 	TokenType.ELSE          = ParseRule{nil, nil, .NONE},
+	TokenType.EXPORT        = ParseRule{nil, nil, .NONE},
 	TokenType.FALSE         = ParseRule{literal, nil, .NONE},
 	TokenType.VAL           = ParseRule{nil, nil, .NONE},
 	TokenType.FOR           = ParseRule{nil, nil, .NONE},
@@ -933,6 +940,14 @@ parse_precedence :: proc(p: ^Parser, precedence: Precedence) {
 @(private = "file")
 identifier_constant :: proc(p: ^Parser, name: ^Token) -> u8 {
 	return make_constant(p, obj_val(copy_string(p.gc, name.lexeme)))
+}
+
+/* Similar to identifier_constant, but you can pass in just a string.
+ * Used to implement the modules, as module names are STRING tokens rather than
+ * IDENT tokens. */
+@(private = "file")
+string_constant :: proc(p: ^Parser, text: string) -> u8 {
+	return make_constant(p, obj_val(copy_string(p.gc, text)))
 }
 
 /* Check if two idents are equal. */
@@ -1358,6 +1373,66 @@ class_declaration :: proc(p: ^Parser) {
 	p.current_class = p.current_class.enclosing
 }
 
+@(private = "file")
+module_declaration :: proc(p: ^Parser) {
+	mod_type: ModuleType
+	consume(p, .STRING, "Expect module path.")
+
+	path := strings.trim(p.previous.lexeme[1:len(p.previous.lexeme) - 1], " ")
+
+	// look for the path in the stdlib, if not present look for a file at the path
+	found := slice.contains(p.gc.std_modules[:], path)
+	if found {
+		mod_type = .BUILTIN
+	} else {
+		found := os.exists(path)
+		if !found {
+			error(p, fmt.tprintf("Module '%s' not found.", path))
+		}
+
+		mod_type = .USER
+	}
+
+	mod_name: string
+	switch mod_type {
+	case .BUILTIN:
+		{
+			mod_name = path
+		}
+	case .USER:
+		{
+			/* The module name is the last part of the path for files. */
+
+			// if path = "a/b/c.zn", parts = ["a", "b", "c.zn"]
+			parts := strings.split(path, "/")
+			defer delete(parts)
+
+			// if file = "c.zn", mod_name = "c"
+			file := parts[len(parts) - 1]
+			mod_name = strings.split(file, ".")[0]
+		}
+	}
+
+	name_constant := string_constant(p, mod_name)
+
+	/* Standard library modules and user modules are implemented differently, so
+       we need to emit the correct opcode. */
+	switch mod_type {
+	case .BUILTIN:
+		{
+			emit_opcode(p, .OP_MODULE_BUILTIN)
+			emit_byte(p, name_constant)
+		}
+	case .USER:
+		{
+			emit_opcode(p, .OP_MODULE_USER)
+			emit_byte(p, name_constant)
+		}
+	}
+
+	define_variable(p, name_constant)
+}
+
 /* 
 Parse a function declaration. 
 Functions are first class, so they are parsed like variables.
@@ -1775,6 +1850,8 @@ declaration :: proc(p: ^Parser) {
 		var_declaration(p)
 	case match(p, .CLASS):
 		class_declaration(p)
+	case match(p, .IMPORT):
+		module_declaration(p)
 	case match(p, .FUNC):
 		func_declaration(p)
 	case:

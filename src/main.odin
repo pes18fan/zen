@@ -21,15 +21,15 @@ Config :: struct {
 }
 
 config := Config {
-	compile_only = false,
+	compile_only     = false,
 	dump_disassembly = false,
-	dump_tokens = false,
-	trace_exec  = false,
-	check_leaks = false,
-	stress_gc   = false,
-	log_gc      = false,
-	record_time = false,
-	repl        = false,
+	dump_tokens      = false,
+	trace_exec       = false,
+	check_leaks      = false,
+	stress_gc        = false,
+	log_gc           = false,
+	record_time      = false,
+	repl             = false,
 }
 
 /* Fire up a REPL. */
@@ -112,7 +112,7 @@ Options:
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation
     -c, --check-leaks   Report memory leaks on exit`
-	
+
 	version_message :: VERSION + "\n" + "written with <3 by pes18fan"
 
 	outer: for len(argv) > 1 {
@@ -243,6 +243,7 @@ main :: proc() {
 
 	vm.gc.init_string = copy_string(vm.gc, "init")
 
+	init_builtin_modules(&gc)
 	init_natives(&gc)
 
 	status = parse_argv(&vm)

@@ -10,6 +10,7 @@ ObjType :: enum {
 	FUNCTION,
 	INSTANCE,
 	LIST,
+	MODULE,
 	NATIVE,
 	STRING,
 	UPVALUE,
@@ -114,13 +115,23 @@ ObjBoundMethod :: struct {
 	 * here is simply for convenience and to avoid having to cast it every
 	 * time. */
 	receiver:  Value,
-	method:   ^ObjClosure,
+	method:    ^ObjClosure,
 }
 
 /* A list. */
 ObjList :: struct {
 	using obj: Obj,
 	items:     ValueArray,
+}
+
+/* 
+A module is not much more than a hash table containing the variables in the
+global scope of an imported module.
+*/
+ObjModule :: struct {
+	using obj: Obj,
+	name:      ^ObjString,
+	values:    Table,
 }
 
 obj_type :: #force_inline proc(value: Value) -> ObjType {
@@ -157,6 +168,10 @@ is_native :: #force_inline proc(value: Value) -> bool {
 
 is_string :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .STRING)
+}
+
+is_module :: #force_inline proc(value: Value) -> bool {
+	return is_obj_type(value, .MODULE)
 }
 
 as_bound_method :: #force_inline proc(value: Value) -> ^ObjBoundMethod {
@@ -199,6 +214,10 @@ as_cstring :: #force_inline proc(value: Value) -> string {
 	return (^ObjString)(as_string(value)).chars
 }
 
+as_module :: #force_inline proc(value: Value) -> ^ObjModule {
+	return (^ObjModule)(as_obj(value))
+}
+
 is_obj_type :: #force_inline proc(value: Value, type: ObjType) -> bool {
 	return is_obj(value) && as_obj(value).type == type
 }
@@ -213,6 +232,8 @@ type_of_obj :: proc(obj: ^Obj) -> string {
 		return "instance"
 	case .LIST:
 		return "list"
+	case .MODULE:
+		return "module"
 	case .STRING:
 		return "string"
 	case .UPVALUE:
@@ -293,6 +314,13 @@ new_list :: proc(gc: ^GC) -> ^ObjList {
 	list := cast(^ObjList)(allocate_obj(gc, ObjList, .LIST))
 	list.items = init_value_array()
 	return list
+}
+
+new_module :: proc(gc: ^GC, name: ^ObjString) -> ^ObjModule {
+	module := cast(^ObjModule)(allocate_obj(gc, ObjModule, .MODULE))
+	module.name = name
+	module.values = init_table()
+	return module
 }
 
 new_native :: proc(gc: ^GC, function: NativeFn, arity: int) -> ^ObjNative {
@@ -378,22 +406,23 @@ stringify_function :: proc(fn: ^ObjFunction) -> string {
 
 stringify_object :: proc(obj: ^Obj) -> string {
 	switch obj.type {
-		case .BOUND_METHOD:
-			/* Bound methods are an implementation detail, we don't expose that
+	case .BOUND_METHOD:
+		/* Bound methods are an implementation detail, we don't expose that
 			 * since from the user's perspective they're just functions. */
-			return stringify_function(as_bound_method(obj_val(obj)).method.function)
-		case .CLASS:
-			return fmt.tprintf("%s", as_class(obj_val(obj)).name.chars)
-		case .CLOSURE:
-			return stringify_function(as_closure(obj_val(obj)).function)	
-		case .FUNCTION:
-			return stringify_function(as_function(obj_val(obj)))
-		case .INSTANCE:
-			return fmt.tprintf("%s instance", as_instance(obj_val(obj)).klass.name.chars)
-		case .LIST: {
+		return stringify_function(as_bound_method(obj_val(obj)).method.function)
+	case .CLASS:
+		return fmt.tprintf("%s", as_class(obj_val(obj)).name.chars)
+	case .CLOSURE:
+		return stringify_function(as_closure(obj_val(obj)).function)
+	case .FUNCTION:
+		return stringify_function(as_function(obj_val(obj)))
+	case .INSTANCE:
+		return fmt.tprintf("%s instance", as_instance(obj_val(obj)).klass.name.chars)
+	case .LIST:
+		{
 			list := as_list(obj_val(obj))
-			sb := strings.builder_make()	
-			
+			sb := strings.builder_make()
+
 			strings.write_string(&sb, "[")
 
 			for i := 0; i < list.items.count; i += 1 {
@@ -408,12 +437,14 @@ stringify_object :: proc(obj: ^Obj) -> string {
 			str := strings.to_string(sb)
 			return str
 		}
-		case .NATIVE:
-			return "<native func>"
-		case .STRING:
-			return as_cstring(obj_val(obj))
-		case .UPVALUE:
-			return "upvalue"
+	case .MODULE:
+		return fmt.tprintf("%s module", as_module(obj_val(obj)).name.chars)
+	case .NATIVE:
+		return "<native func>"
+	case .STRING:
+		return as_cstring(obj_val(obj))
+	case .UPVALUE:
+		return "upvalue"
 	}
 
 	unreachable()
@@ -455,6 +486,10 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 		list := (^ObjList)(obj)
 		free_value_array(&list.items)
 		free(list)
+	case .MODULE:
+		module := (^ObjModule)(obj)
+		free_table(&module.values)
+		free(module)
 	case .NATIVE:
 		fn := (^ObjNative)(obj)
 		free(fn)

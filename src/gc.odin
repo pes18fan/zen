@@ -24,6 +24,13 @@ GC :: struct {
 
 	/* The "init" string. */
 	init_string:     ^ObjString,
+
+	/* The list of standard modules built into the language.
+     * Except for `typeof()`, `str()`, `parse()`, `puts()` and `gets()`, all
+     * built-in functions are accessed via a standard module.
+     * Not defined directly once the GC starts, but only when the native modules
+     * are to be defined in init_builtin_modules() */
+	std_modules:     [dynamic]string,
 }
 
 RootSource :: union {
@@ -49,7 +56,7 @@ as_parser :: #force_inline proc(source: RootSource) -> ^Parser {
 
 init_gc :: proc() -> GC {
 	return(
-		GC{
+		GC {
 			objects = nil,
 			bytes_allocated = 0,
 			next_gc = 1024 * 1024,
@@ -58,6 +65,7 @@ init_gc :: proc() -> GC {
 			mark_roots_arg = nil,
 			strings = init_table(),
 			init_string = nil,
+			std_modules = make([dynamic]string),
 			globals = init_table(),
 		} \
 	)
@@ -65,13 +73,16 @@ init_gc :: proc() -> GC {
 
 /* Free the GC's memory; also frees all allocated objects. */
 free_gc :: proc(gc: ^GC) {
+	/* std_modules is not deleted because slice literals don't need to be */
 	free_table(&gc.strings)
 	free_table(&gc.globals)
+	delete(gc.std_modules)
 	gc.init_string = nil
 	free_objects(gc)
 	delete(gc.gray_stack)
 }
 
+/* Temporarily push a value to the stack. */
 temp_push :: proc(gc: ^GC, value: Value) {
 	switch s in gc.mark_roots_arg {
 	case ^Parser:
@@ -85,6 +96,7 @@ temp_push :: proc(gc: ^GC, value: Value) {
 	}
 }
 
+/* Temporarily pop a value out of the stack. */
 temp_pop :: proc(gc: ^GC) -> Value {
 	value: Value
 	switch s in gc.mark_roots_arg {
@@ -248,16 +260,24 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 	/* An instance contains a reference to its class and references to
 	 * its fields. */
 	case .INSTANCE:
-	    {
+		{
 			instance := (^ObjInstance)(object)
 			mark_object(gc, (^Obj)(instance.klass))
 			mark_table(gc, &instance.fields)
 		}
 	/* A list contains references to its elements. */
 	case .LIST:
-	    {
+		{
 			list := (^ObjList)(object)
 			mark_array(gc, &list.items)
+		}
+	/* A module contains a reference to an ObjString with its name and
+     * a table with its values. */
+	case .MODULE:
+		{
+			module := (^ObjModule)(object)
+			mark_object(gc, (^Obj)(module.name))
+			mark_table(gc, &module.values)
 		}
 	/* An upvalue contains a reference to a closed-over value if
         it is closed. */
