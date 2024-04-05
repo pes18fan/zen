@@ -60,6 +60,3 @@ color_reset :: proc(stream: os.Handle) {
 		}
 	}
 }
-
-COL_RED :: "\e[31m"
-RESET :: "\e[0m"
