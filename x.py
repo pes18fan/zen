@@ -14,7 +14,7 @@ def create_debug_build():
         print("Compiling the debug build..")
 
         os.makedirs("bin/dbg", exist_ok=True)
-        subprocess.run(f"{OC} build src/ -out:bin/dbg/dzen {DEBUG_FLAGS}".split(), 
+        subprocess.run(f"{OC} build src/ -out:bin/dbg/dzen.exe {DEBUG_FLAGS}".split(), 
                        check=True)
     except ProcError as e:
         print(f"Error while creating debug build: {e}", file=sys.stderr)
@@ -26,9 +26,9 @@ def create_release_build():
 
         os.makedirs("bin/rel", exist_ok=True)
         os.makedirs("bin/test", exist_ok=True)
-        subprocess.run(f"{OC} build src/ -out:bin/rel/zen -o:speed".split(),
+        subprocess.run(f"{OC} build src/ -out:bin/rel/zen.exe -o:speed".split(),
                        check=True)
-        shutil.copy("bin/rel/zen", "bin/test/")
+        shutil.copy("bin/rel/zen.exe", "bin/test/")
     except ProcError as e:
         print(f"Error while creating release build: {e}", file=sys.stderr)
         exit(1)
