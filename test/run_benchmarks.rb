@@ -1,7 +1,7 @@
 require "open3"
 
 $bench_folder = "benchmark"
-$compiler = "../bin/rel/zen"
+$compiler = "../bin/rel/zen.exe"
 
 $benchmarks = 0
 

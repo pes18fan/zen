@@ -1,7 +1,7 @@
 require "open3"
 
 test_folder = "__tests__"
-$compiler = "../bin/rel/zen"
+$compiler = "../bin/rel/zen.exe"
 
 $tests = 0
 $passed = 0
