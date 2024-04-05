@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:os"
 
 /*
 Each operation in bytecode has a one-byte operation code or opcode. These
@@ -103,7 +104,7 @@ get_line :: proc(lines: [dynamic]int, offset: int) -> int {
 		}
 	}
 
-	fmt.eprint(COL_RED, "bug: ", RESET)
+	color_red("bug: ", os.stderr)
 	fmt.eprintf("Failed to find line number for offset %d\n", offset)
 	unreachable()
 }
@@ -111,7 +112,7 @@ get_line :: proc(lines: [dynamic]int, offset: int) -> int {
 /* Initializes a chunk. */
 init_chunk :: proc() -> Chunk {
 	return(
-		Chunk{
+		Chunk {
 			code = make([dynamic]byte, 0, 0),
 			constants = init_value_array(),
 			lines = make([dynamic]int, 0, 0),
