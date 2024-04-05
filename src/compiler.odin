@@ -1,8 +1,9 @@
 package zen
 
 import "core:fmt"
-import "core:strings"
+import "core:os"
 import "core:strconv"
+import "core:strings"
 
 /* Maximum limit for a eight bit unsigned integer. */
 U8_MAX :: 255
@@ -79,10 +80,10 @@ PipelineState :: enum {
 A local variable.
 */
 Local :: struct {
-	name:        Token,
-	depth:       int,
-	final:       Variability,
-	is_captured: bool,
+	name:             Token,
+	depth:            int,
+	final:            Variability,
+	is_captured:      bool,
 	is_loop_variable: bool,
 }
 
@@ -155,7 +156,7 @@ current_chunk :: proc(p: ^Parser) -> ^Chunk {
 error_at :: proc(p: ^Parser, token: ^Token, message: string) {
 	if p.panic_mode do return
 	p.panic_mode = true
-	fmt.eprintf("%scompile error%s ", COL_RED, RESET)
+	color_red("compile error ", os.stderr)
 
 	if token.type == TokenType.EOF {
 		fmt.eprintf("at end")
@@ -772,9 +773,7 @@ variable :: proc(p: ^Parser, can_assign: bool) {
 /* Create a synthetic token. */
 @(private = "file")
 synthetic_token :: proc(text: string) -> Token {
-	return Token {
-		lexeme = text,
-	}
+	return Token{lexeme = text}
 }
 
 @(private = "file")
@@ -854,51 +853,51 @@ unary :: proc(p: ^Parser, can_assign: bool) {
 
 /* A table of the parsing rules for all the token types. */
 rules: []ParseRule = {
-	TokenType.LPAREN = ParseRule{grouping, call, .CALL},
-	TokenType.RPAREN = ParseRule{nil, nil, .NONE},
-	TokenType.LSQUIRLY = ParseRule{nil, nil, .NONE},
-	TokenType.RSQUIRLY = ParseRule{nil, nil, .NONE},
-	TokenType.LSQUARE = ParseRule{list, subscript, .CALL},
-	TokenType.RSQUARE = ParseRule{nil, nil, .NONE},
-	TokenType.COMMA = ParseRule{nil, nil, .NONE},
-	TokenType.DOT = ParseRule{nil, dot, .CALL},
-	TokenType.MINUS = ParseRule{unary, binary, .TERM},
-	TokenType.PLUS = ParseRule{nil, binary, .TERM},
-	TokenType.SEMI = ParseRule{nil, nil, .NONE},
-	TokenType.SLASH = ParseRule{nil, binary, .FACTOR},
-	TokenType.STAR = ParseRule{nil, binary, .FACTOR},
-	TokenType.BANG_EQUAL = ParseRule{nil, binary, .EQUALITY},
-	TokenType.BAR_GREATER = ParseRule{nil, nil, .NONE},
-	TokenType.EQUAL = ParseRule{nil, nil, .NONE},
-	TokenType.EQUAL_EQUAL = ParseRule{nil, binary, .EQUALITY},
-	TokenType.GREATER = ParseRule{nil, binary, .COMPARISON},
+	TokenType.LPAREN        = ParseRule{grouping, call, .CALL},
+	TokenType.RPAREN        = ParseRule{nil, nil, .NONE},
+	TokenType.LSQUIRLY      = ParseRule{nil, nil, .NONE},
+	TokenType.RSQUIRLY      = ParseRule{nil, nil, .NONE},
+	TokenType.LSQUARE       = ParseRule{list, subscript, .CALL},
+	TokenType.RSQUARE       = ParseRule{nil, nil, .NONE},
+	TokenType.COMMA         = ParseRule{nil, nil, .NONE},
+	TokenType.DOT           = ParseRule{nil, dot, .CALL},
+	TokenType.MINUS         = ParseRule{unary, binary, .TERM},
+	TokenType.PLUS          = ParseRule{nil, binary, .TERM},
+	TokenType.SEMI          = ParseRule{nil, nil, .NONE},
+	TokenType.SLASH         = ParseRule{nil, binary, .FACTOR},
+	TokenType.STAR          = ParseRule{nil, binary, .FACTOR},
+	TokenType.BANG_EQUAL    = ParseRule{nil, binary, .EQUALITY},
+	TokenType.BAR_GREATER   = ParseRule{nil, nil, .NONE},
+	TokenType.EQUAL         = ParseRule{nil, nil, .NONE},
+	TokenType.EQUAL_EQUAL   = ParseRule{nil, binary, .EQUALITY},
+	TokenType.GREATER       = ParseRule{nil, binary, .COMPARISON},
 	TokenType.GREATER_EQUAL = ParseRule{nil, binary, .COMPARISON},
-	TokenType.LESS = ParseRule{nil, binary, .COMPARISON},
-	TokenType.LESS_EQUAL = ParseRule{nil, binary, .COMPARISON},
-	TokenType.IDENT = ParseRule{variable, nil, .NONE},
-	TokenType.STRING = ParseRule{zstring, nil, .NONE},
-	TokenType.NUMBER = ParseRule{number, nil, .NONE},
-	TokenType.AND = ParseRule{nil, and_, .AND},
-	TokenType.BREAK = ParseRule{nil, nil, .NONE},
-	TokenType.ELSE = ParseRule{nil, nil, .NONE},
-	TokenType.FALSE = ParseRule{literal, nil, .NONE},
-	TokenType.VAL = ParseRule{nil, nil, .NONE},
-	TokenType.FOR = ParseRule{nil, nil, .NONE},
-	TokenType.FUNC = ParseRule{lambda, nil, .NONE},
-	TokenType.IF = ParseRule{nil, nil, .NONE},
-	TokenType.IMPORT = ParseRule{nil, nil, .NONE},
-	TokenType.IN = ParseRule{nil, nil, .NONE},
-	TokenType.IT = ParseRule{it_, nil, .NONE},
-	TokenType.VAR = ParseRule{nil, nil, .NONE},
-	TokenType.NIL = ParseRule{literal, nil, .NONE},
-	TokenType.NOT = ParseRule{unary, nil, .NONE},
-	TokenType.OR = ParseRule{nil, or_, .OR},
-	TokenType.PRINT = ParseRule{nil, nil, .NONE},
-	TokenType.RETURN = ParseRule{nil, nil, .NONE},
-	TokenType.SUPER = ParseRule{super_, nil, .NONE},
-	TokenType.THIS = ParseRule{this_, nil, .NONE},
-	TokenType.TRUE = ParseRule{literal, nil, .NONE},
-	TokenType.EOF = ParseRule{nil, nil, .NONE},
+	TokenType.LESS          = ParseRule{nil, binary, .COMPARISON},
+	TokenType.LESS_EQUAL    = ParseRule{nil, binary, .COMPARISON},
+	TokenType.IDENT         = ParseRule{variable, nil, .NONE},
+	TokenType.STRING        = ParseRule{zstring, nil, .NONE},
+	TokenType.NUMBER        = ParseRule{number, nil, .NONE},
+	TokenType.AND           = ParseRule{nil, and_, .AND},
+	TokenType.BREAK         = ParseRule{nil, nil, .NONE},
+	TokenType.ELSE          = ParseRule{nil, nil, .NONE},
+	TokenType.FALSE         = ParseRule{literal, nil, .NONE},
+	TokenType.VAL           = ParseRule{nil, nil, .NONE},
+	TokenType.FOR           = ParseRule{nil, nil, .NONE},
+	TokenType.FUNC          = ParseRule{lambda, nil, .NONE},
+	TokenType.IF            = ParseRule{nil, nil, .NONE},
+	TokenType.IMPORT        = ParseRule{nil, nil, .NONE},
+	TokenType.IN            = ParseRule{nil, nil, .NONE},
+	TokenType.IT            = ParseRule{it_, nil, .NONE},
+	TokenType.VAR           = ParseRule{nil, nil, .NONE},
+	TokenType.NIL           = ParseRule{literal, nil, .NONE},
+	TokenType.NOT           = ParseRule{unary, nil, .NONE},
+	TokenType.OR            = ParseRule{nil, or_, .OR},
+	TokenType.PRINT         = ParseRule{nil, nil, .NONE},
+	TokenType.RETURN        = ParseRule{nil, nil, .NONE},
+	TokenType.SUPER         = ParseRule{super_, nil, .NONE},
+	TokenType.THIS          = ParseRule{this_, nil, .NONE},
+	TokenType.TRUE          = ParseRule{literal, nil, .NONE},
+	TokenType.EOF           = ParseRule{nil, nil, .NONE},
 }
 
 /* 
@@ -1070,7 +1069,12 @@ declare_variable :: proc(p: ^Parser, final: Variability, is_loop_variable: bool 
 
 /* Parse a variable or `final` declaration. */
 @(private = "file")
-parse_variable :: proc(p: ^Parser, error_message: string, final: Variability, is_loop_variable: bool = false) -> u8 {
+parse_variable :: proc(
+	p: ^Parser,
+	error_message: string,
+	final: Variability,
+	is_loop_variable: bool = false,
+) -> u8 {
 	consume(p, .IDENT, error_message)
 
 	declare_variable(p, final, is_loop_variable)
@@ -1243,8 +1247,7 @@ method :: proc(p: ^Parser) {
 
 	type: FunctionType = .METHOD
 	/* Check if the method is an initializer. */
-	if len(p.previous.lexeme) == 4 &&
-		strings.compare(p.previous.lexeme, "init") == 0 {
+	if len(p.previous.lexeme) == 4 && strings.compare(p.previous.lexeme, "init") == 0 {
 		type = .INITIALIZER
 	}
 	function(p, type)
@@ -1299,8 +1302,8 @@ class_declaration :: proc(p: ^Parser) {
 		consume(p, .IDENT, "Expect superclass name.")
 
 		/* Push the superclass on the stack. */
-		variable(p, can_assign = false) 
-		
+		variable(p, can_assign = false)
+
 		if identifiers_equal(&class_name, &p.previous) {
 			error(p, "A class can't inherit from itself.")
 		}
@@ -1597,15 +1600,15 @@ switch_statement :: proc(p: ^Parser) {
 
 	defer delete(case_jumps_to_end)
 
-    /* If there is no switch variable, the value to switch on is assumed to
+	/* If there is no switch variable, the value to switch on is assumed to
        be the boolean value true. This is so that the switch statement can
        be used like else if */
-    if match(p, .LSQUIRLY) {
-        emit_opcode(p, .OP_TRUE)
-    } else {
-        expression(p)        
-	    consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
-    }
+	if match(p, .LSQUIRLY) {
+		emit_opcode(p, .OP_TRUE)
+	} else {
+		expression(p)
+		consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
+	}
 
 	for i := 0; !match(p, .RSQUIRLY); i += 1 {
 		if i >= U8_COUNT {
@@ -1808,7 +1811,7 @@ statement :: proc(p: ^Parser) {
 	case match(p, .WHILE):
 		while_statement(p)
 	case match(p, .SEMI):
-		// Do nothing. This is equivalent to `pass`.
+	// Do nothing. This is equivalent to `pass`.
 	case:
 		expression_statement(p)
 	}

@@ -3,6 +3,7 @@ package zen
 import "core:fmt"
 import "core:math"
 import "core:mem"
+import "core:os"
 import "core:slice"
 import "core:time"
 
@@ -61,7 +62,7 @@ InterpretResult :: enum {
 
 /* Raise a runtime error. */
 vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
-	fmt.eprintf("%spanic:%s ", COL_RED, RESET)
+	color_red("panic: ", os.stderr)
 	fmt.eprintf("%s", fmt.tprintf(format, ..args))
 	fmt.eprintln()
 
@@ -197,7 +198,7 @@ binary_op :: proc(v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
 			}
 		}
 	case:
-		fmt.eprint(COL_RED, "bug:", RESET, " ")
+		color_red("bug: ", os.stderr)
 		fmt.eprintf("Invalid return type for binary operation '%s'.\n", op)
 		unreachable()
 	}

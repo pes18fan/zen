@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:os"
 import "core:unicode/utf8"
 
 /* The type of a token. */
@@ -94,7 +95,7 @@ illegal tokens are returned on syntax errors.
 */
 @(private = "file")
 syntax_error :: proc(l: ^Lexer, message: string) {
-	fmt.eprintf("%ssyntax error:%s ", COL_RED, RESET)
+	color_red("syntax error: ", os.stderr)
 	fmt.eprintf("%s\n", message)
 	fmt.eprintf("  on [line %d]\n", l.line)
 	l.had_error = true
