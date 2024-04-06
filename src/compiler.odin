@@ -162,7 +162,7 @@ current_chunk :: proc(p: ^Parser) -> ^Chunk {
 error_at :: proc(p: ^Parser, token: ^Token, message: string) {
 	if p.panic_mode do return
 	p.panic_mode = true
-	color_red("compile error ", os.stderr)
+	color_red(os.stderr, "compile error ")
 
 	if token.type == TokenType.EOF {
 		fmt.eprintf("at end")

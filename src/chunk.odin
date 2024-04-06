@@ -106,7 +106,7 @@ get_line :: proc(lines: [dynamic]int, offset: int) -> int {
 		}
 	}
 
-	color_red("bug: ", os.stderr)
+	color_red(os.stderr, "bug: ")
 	fmt.eprintf("Failed to find line number for offset %d\n", offset)
 	unreachable()
 }
