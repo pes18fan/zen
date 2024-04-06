@@ -1,5 +1,7 @@
+import "list"
+
 var l = [1, 2, 3]
-push(l, 4)
+list.push(l, 4)
 
 puts(len(l)) // expect: 4
 puts(l[len(l) - 1]) // expect: 4

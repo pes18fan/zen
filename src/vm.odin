@@ -486,7 +486,6 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				method := read_string(frame)
 				arg_count := read_byte(frame)
 
-
 				if !invoke(vm, method, int(arg_count)) {
 					return .INTERPRET_RUNTIME_ERROR
 				}
@@ -845,7 +844,6 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 	if is_module(receiver) {
 		module := as_module(receiver)
 
-		fmt.printf("\n")
 		value: Value;ok: bool
 
 		if value, ok = table_get(&module.values, name); ok {

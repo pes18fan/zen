@@ -1,4 +1,6 @@
+import "string"
+
 var x = ""
-    |> chomp()
-    |> replace("hello", "hi")
+    |> string.chomp()
+    |> string.replace("hello", "hi")
 print x // expect:

@@ -60,7 +60,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 	case .STRING:
 		{
 			append(&module_functions, ModuleFunction{"chomp", chomp_native, 1})
-			append(&module_functions, ModuleFunction{"replace", len_native, 3})
+			append(&module_functions, ModuleFunction{"replace", replace_native, 3})
 			append(&module_functions, ModuleFunction{"upcase", upcase_native, 1})
 			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
 			append(&module_functions, ModuleFunction{"reverse", reverse_native, 1})

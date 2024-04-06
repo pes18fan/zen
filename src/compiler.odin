@@ -515,9 +515,9 @@ subscript :: proc(p: ^Parser, can_assign: bool) {
 
 @(private = "file")
 dot :: proc(p: ^Parser, can_assign: bool) {
-	instance := p.tokens[p.curr_idx - 3]
-	possible_local := resolve_local(p, p.current_compiler, &instance)
-	possible_upvalue := resolve_upvalue(p, p.current_compiler, &instance)
+	receiver := p.tokens[p.curr_idx - 3]
+	possible_local := resolve_local(p, p.current_compiler, &receiver)
+	possible_upvalue := resolve_upvalue(p, p.current_compiler, &receiver)
 	set_op: OpCode
 
 	if possible_local != -1 {
@@ -536,14 +536,14 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		if set_op == .OP_SET_LOCAL {
 			for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
 				local := &p.current_compiler.locals[i]
-				if identifiers_equal(&instance, &local.name) && local.final == .FINAL {
+				if identifiers_equal(&receiver, &local.name) && local.final == .FINAL {
 					error(p, "Can only set a final variable once.")
 				}
 			}
 		}
 
 		if set_op == .OP_SET_GLOBAL {
-			global_o_str := copy_string(p.gc, instance.lexeme)
+			global_o_str := copy_string(p.gc, receiver.lexeme)
 			value: Value;ok: bool
 
 			if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
@@ -559,8 +559,16 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		emit_opcode(p, .OP_SET_PROPERTY)
 		emit_byte(p, name)
 	} else if match(p, .LPAREN) {
+		/* Check if the receiver is a module. */
+		arg_count: u8 = 0
+
+		if p.pipeline_state == .ACTIVE {
+			emit_opcode(p, .OP_GET_IT)
+			arg_count += 1
+		}
+
 		/* We have a method call here, so we compile it like a function call. */
-		arg_count := argument_list(p)
+		arg_count += argument_list(p)
 		emit_opcode(p, .OP_INVOKE)
 		emit_byte(p, name)
 		emit_byte(p, arg_count)
@@ -1490,15 +1498,19 @@ expression_statement :: proc(p: ^Parser) {
 	if config.repl {
 		/* If in a repl session, print out the expression's value.
 		 * The print instruction also pops off the value at the top of the
-		 * stack, so no need to add another pop instruction in this case. */
-		emit_constant(p, obj_val(copy_string(p.gc, "=> ")))
-		emit_opcode(p, .OP_PRINT)
+		 * stack, so no need to add another pop instruction in this case.
+         * This is only done when the program is at the top level i.e. the value
+         * of current_compiler is SCRIPT. */
+		if p.current_compiler.type == .SCRIPT {
+			emit_constant(p, obj_val(copy_string(p.gc, "=> ")))
+			emit_opcode(p, .OP_PRINT)
 
-		emit_opcode(p, .OP_PRINT)
+			emit_opcode(p, .OP_PRINT)
 
-		/* Add a newline, since OP_PRINT does not append a newline. */
-		emit_constant(p, obj_val(copy_string(p.gc, "\n")))
-		emit_opcode(p, .OP_PRINT)
+			/* Add a newline, since OP_PRINT does not append a newline. */
+			emit_constant(p, obj_val(copy_string(p.gc, "\n")))
+			emit_opcode(p, .OP_PRINT)
+		}
 	} else {
 		emit_pop(p)
 	}
