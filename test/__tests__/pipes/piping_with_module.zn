@@ -1,4 +1,4 @@
-import "string"
+use "string"
 
 print "Hello, world" 
     |> string.replace("world", "universe") // expect: Hello, universe

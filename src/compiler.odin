@@ -900,7 +900,7 @@ rules: []ParseRule = {
 	TokenType.FOR           = ParseRule{nil, nil, .NONE},
 	TokenType.FUNC          = ParseRule{lambda, nil, .NONE},
 	TokenType.IF            = ParseRule{nil, nil, .NONE},
-	TokenType.IMPORT        = ParseRule{nil, nil, .NONE},
+	TokenType.USE           = ParseRule{nil, nil, .NONE},
 	TokenType.IN            = ParseRule{nil, nil, .NONE},
 	TokenType.IT            = ParseRule{it_, nil, .NONE},
 	TokenType.VAR           = ParseRule{nil, nil, .NONE},
@@ -1862,7 +1862,7 @@ declaration :: proc(p: ^Parser) {
 		var_declaration(p)
 	case match(p, .CLASS):
 		class_declaration(p)
-	case match(p, .IMPORT):
+	case match(p, .USE):
 		module_declaration(p)
 	case match(p, .FUNC):
 		func_declaration(p)

@@ -50,7 +50,6 @@ TokenType :: enum {
 	FOR,
 	FUNC,
 	IF,
-	IMPORT,
 	IN,
 	IT,
 	NIL,
@@ -62,6 +61,7 @@ TokenType :: enum {
 	SUPER,
 	THIS,
 	TRUE,
+	USE,
 	WHILE,
 	VAR,
 	VAL,
@@ -330,8 +330,6 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 				switch utf8.rune_at(l.source, l.start + 1) {
 				case 'f':
 					return check_keyword(l, 2, 0, "", .IF)
-				case 'm':
-					return check_keyword(l, 2, 4, "port", .IMPORT)
 				case 'n':
 					return check_keyword(l, 2, 0, "", .IN)
 				case 't':
@@ -378,6 +376,8 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 				}
 			}
 		}
+	case 'u':
+		return check_keyword(l, 1, 2, "se", .USE)
 	case 'w':
 		return check_keyword(l, 1, 4, "hile", .WHILE)
 	case 'v':

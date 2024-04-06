@@ -1,4 +1,4 @@
-import "string"
+use "string"
 
 var x = ""
     |> string.chomp()

@@ -1,4 +1,4 @@
-import "list"
+use "list"
 
 var l = [1, 2, 3]
 list.push(l, 4)
