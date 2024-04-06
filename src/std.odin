@@ -60,7 +60,6 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 	case .STRING:
 		{
 			append(&module_functions, ModuleFunction{"chomp", chomp_native, 1})
-			append(&module_functions, ModuleFunction{"len", len_native, 1})
 			append(&module_functions, ModuleFunction{"replace", len_native, 3})
 			append(&module_functions, ModuleFunction{"upcase", upcase_native, 1})
 			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
@@ -77,6 +76,8 @@ init_natives :: proc(gc: ^GC) {
 	// io
 	define_native(gc, "puts", puts_native, arity = 1)
 	define_native(gc, "gets", gets_native, arity = 0)
+
+	define_native(gc, "len", len_native, arity = 1)
 
 	// types and conversion
 	define_native(gc, "str", str_native, arity = 1)
