@@ -95,7 +95,7 @@ illegal tokens are returned on syntax errors.
 */
 @(private = "file")
 syntax_error :: proc(l: ^Lexer, message: string) {
-	color_red("syntax error: ", os.stderr)
+	color_red(os.stderr, "syntax error: ")
 	fmt.eprintf("%s\n", message)
 	fmt.eprintf("  on [line %d]\n", l.line)
 	l.had_error = true

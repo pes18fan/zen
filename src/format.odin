@@ -4,7 +4,7 @@ import "core:fmt"
 import "core:os"
 import "core:sys/windows"
 
-color_red :: proc(text: string, stream: os.Handle) {
+color_red :: proc(stream: os.Handle, text: string) {
 	when ODIN_OS == .Windows {
 		switch stream {
 		case os.stdout:
@@ -19,12 +19,30 @@ color_red :: proc(text: string, stream: os.Handle) {
 			)
 		}
 	} else {
+		fmt.fprint(stream, "\x1b[31m")
+	}
+
+	fmt.fprint(stream, text)
+
+	color_reset(stream)
+}
+
+color_green :: proc(stream: os.Handle, text: string) {
+	when ODIN_OS == .Windows {
 		switch stream {
 		case os.stdout:
-			fmt.print("\x1b[31m")
+			windows.SetConsoleTextAttribute(
+				windows.GetStdHandle(windows.STD_OUTPUT_HANDLE),
+				windows.FOREGROUND_GREEN,
+			)
 		case os.stderr:
-			fmt.eprint("\x1b[31m")
+			windows.SetConsoleTextAttribute(
+				windows.GetStdHandle(windows.STD_ERROR_HANDLE),
+				windows.FOREGROUND_GREEN,
+			)
 		}
+	} else {
+		fmt.fprint(stream, "\x1b[32m")
 	}
 
 	fmt.fprint(stream, text)

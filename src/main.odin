@@ -5,7 +5,7 @@ import "core:mem"
 import "core:os"
 import "core:strings"
 
-VERSION :: "zen 0.0.1"
+VERSION :: "0.0.1-beta"
 
 /* Config values set on start, mostly for debugging. */
 Config :: struct {
@@ -21,15 +21,15 @@ Config :: struct {
 }
 
 config := Config {
-	compile_only = false,
+	compile_only     = false,
 	dump_disassembly = false,
-	dump_tokens = false,
-	trace_exec  = false,
-	check_leaks = false,
-	stress_gc   = false,
-	log_gc      = false,
-	record_time = false,
-	repl        = false,
+	dump_tokens      = false,
+	trace_exec       = false,
+	check_leaks      = false,
+	stress_gc        = false,
+	log_gc           = false,
+	record_time      = false,
+	repl             = false,
 }
 
 /* Fire up a REPL. */
@@ -88,19 +88,10 @@ run_file :: proc(vm: ^VM, path: string) -> int {
 	return 0
 }
 
-/* Parse the arguments passed to the program. */
 @(private = "file")
-parse_argv :: proc(vm: ^VM) -> (status: int) {
-	argc := len(os.args)
-	argv := os.args
-	argv_i := 0
-	argv_0 := argv[0]
-	script := ""
-
-	help_message :: `zen: Compiler for the zen programming language
-Usage: zen <options> <path>
-
-Options:
+print_help :: proc(stream: os.Handle) {
+	usage :: `zen <options> <path>`
+	options :: `
     -h, -?, --help      Print this help message and exit
     -v, --version       Print version information and exit
 
@@ -112,8 +103,36 @@ Options:
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation
     -c, --check-leaks   Report memory leaks on exit`
-	
-	version_message :: VERSION + "\n" + "written with <3 by pes18fan"
+
+	color_green(stream, "zen ")
+	fmt.fprintfln(stream, "%s", VERSION)
+	fmt.fprintln(stream, "Compiler for the zen programming language.")
+	fmt.fprintln(stream)
+
+	color_green(stream, "Usage:")
+	fmt.fprintln(stream)
+	fmt.fprintln(stream, "    ", usage)
+	fmt.fprintln(stream)
+
+	color_green(stream, "Options:")
+	fmt.fprintln(stream, options)
+}
+
+@(private = "file")
+print_version_message :: proc(stream: os.Handle) {
+	color_green(stream, "zen ")
+	fmt.fprintln(stream, VERSION)
+	fmt.fprintln(stream, "written with <3 by pes18fan")
+}
+
+/* Parse the arguments passed to the program. */
+@(private = "file")
+parse_argv :: proc(vm: ^VM) -> (status: int) {
+	argc := len(os.args)
+	argv := os.args
+	argv_i := 0
+	argv_0 := argv[0]
+	script := ""
 
 	outer: for len(argv) > 1 {
 		switch argv[1] {
@@ -125,12 +144,12 @@ Options:
 			}
 		case "--version":
 			{
-				fmt.println(version_message)
+				print_version_message(os.stdout)
 				return 0
 			}
 		case "--help":
 			{
-				fmt.println(help_message)
+				print_help(os.stdout)
 				return 0
 			}
 		case "--compile":
@@ -153,7 +172,7 @@ Options:
 			{
 				if argv[1][:2] == "--" {
 					fmt.eprintf("Unknown option: %s\n", argv[1])
-					fmt.eprintln(help_message)
+					print_help(os.stderr)
 					return 1
 				} else if argv[1][0] == '-' {
 					if len(argv[1]) == 1 {
@@ -164,10 +183,10 @@ Options:
 					for c in arg {
 						switch c {
 						case 'v':
-							fmt.println(version_message)
+							print_version_message(os.stdout)
 							return 0
 						case '?', 'h':
-							fmt.println(help_message)
+							print_help(os.stdout)
 							return 0
 						case 'C':
 							config.compile_only = true
@@ -185,7 +204,7 @@ Options:
 							config.stress_gc = true
 						case:
 							fmt.eprintf("Unknown option: %c", c)
-							fmt.eprintln(help_message)
+							print_help(os.stderr)
 							return 1
 						}
 					}

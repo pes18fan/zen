@@ -62,7 +62,7 @@ InterpretResult :: enum {
 
 /* Raise a runtime error. */
 vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
-	color_red("panic: ", os.stderr)
+	color_red(os.stderr, "panic: ")
 	fmt.eprintf("%s", fmt.tprintf(format, ..args))
 	fmt.eprintln()
 
@@ -198,7 +198,7 @@ binary_op :: proc(v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
 			}
 		}
 	case:
-		color_red("bug: ", os.stderr)
+		color_red(os.stderr, "bug: ")
 		fmt.eprintf("Invalid return type for binary operation '%s'.\n", op)
 		unreachable()
 	}
