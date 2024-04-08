@@ -984,6 +984,7 @@ concatenate :: proc(vm: ^VM) {
 	vm_push(vm, obj_val((^Obj)(result)))
 }
 
+/* Free all allocated `Obj`s. */
 free_objects :: proc(gc: ^GC) {
 	object := gc.objects
 

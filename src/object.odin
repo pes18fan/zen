@@ -3,6 +3,7 @@ package zen
 import "core:fmt"
 import "core:strings"
 
+/* The type of an `Obj`. */
 ObjType :: enum {
 	BOUND_METHOD,
 	CLASS,
@@ -35,6 +36,7 @@ ObjFunction :: struct {
 	has_returned:  bool,
 }
 
+/* A function available to use in programs written into the compiler itself. */
 NativeFn :: #type proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool)
 
 /* A native function implemented in Odin itself. */
@@ -134,6 +136,7 @@ ObjModule :: struct {
 	values:    Table,
 }
 
+/* Return the type of an `Obj`. */
 obj_type :: #force_inline proc(value: Value) -> ObjType {
 	return as_obj(value).type
 }

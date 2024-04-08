@@ -88,6 +88,7 @@ run_file :: proc(vm: ^VM, path: string) -> int {
 	return 0
 }
 
+/* Print a help string in `stream`. */
 @(private = "file")
 print_help :: proc(stream: os.Handle) {
 	usage :: `zen <options> <path>`
@@ -118,6 +119,7 @@ print_help :: proc(stream: os.Handle) {
 	fmt.fprintln(stream, options)
 }
 
+/* Print the version message in `stream`. */
 @(private = "file")
 print_version_message :: proc(stream: os.Handle) {
 	color_green(stream, "zen ")
@@ -228,6 +230,7 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 	}
 }
 
+/* The entry point for the compiler. */
 main :: proc() {
 	status: int
 	defer os.exit(status)

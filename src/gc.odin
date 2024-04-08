@@ -5,6 +5,8 @@ import "core:fmt"
 /* Amount of bytes to allocate before the next garbage collection. */
 GC_HEAP_GROW_FACTOR :: 2
 
+/* All values required by the GC as well as values whose memory is managed by
+ * the GC (e.g. the table consisting of all the allocated strings). */
 GC :: struct {
 	/* All of the objects that have been allocated. */
 	objects:         ^Obj,
@@ -33,27 +35,35 @@ GC :: struct {
 	std_modules:     [dynamic]string,
 }
 
+/* Source for the roots for the root marking step in the GC. */
 RootSource :: union {
 	^Parser,
 	^VM,
 }
 
+/* Check if the root source is the VM. */
 is_vm :: #force_inline proc(source: RootSource) -> bool {
 	_, ok := source.(^VM)
 	return ok
 }
+
+/* Check if the root source is the parser. */
 is_parser :: #force_inline proc(source: RootSource) -> bool {
 	_, ok := source.(^Parser)
 	return ok
 }
 
+/* Cast the `source` to a VM pointer. */
 as_vm :: #force_inline proc(source: RootSource) -> ^VM {
 	return source.(^VM)
 }
+
+/* Cast the `source` to a parser pointer. */
 as_parser :: #force_inline proc(source: RootSource) -> ^Parser {
 	return source.(^Parser)
 }
 
+/* Initialize the GC and all its values. */
 init_gc :: proc() -> GC {
 	return(
 		GC {
@@ -112,6 +122,7 @@ temp_pop :: proc(gc: ^GC) -> Value {
 	return value
 }
 
+/* Mark an object. */
 mark_object :: proc(gc: ^GC, object: ^Obj) {
 	if object == nil {return}
 
@@ -139,6 +150,8 @@ mark_object :: proc(gc: ^GC, object: ^Obj) {
 	gc.gray_count += 1
 }
 
+/* Mark a `Value`. Note that only `Obj`s need marking, since only they are
+ * garbage collected. */
 mark_value :: proc(gc: ^GC, value: Value) {
 	/* Only Objs are garbage collected. */
 	if (is_obj(value)) {
@@ -146,12 +159,14 @@ mark_value :: proc(gc: ^GC, value: Value) {
 	}
 }
 
+/* Mark all values in an array. */
 mark_array :: proc(gc: ^GC, array: ^ValueArray) {
 	for i in 0 ..< array.count {
 		mark_value(gc, array.values[i])
 	}
 }
 
+/* Mark all the keys and values in a table. */
 mark_table :: proc(gc: ^GC, table: ^Table) {
 	for i in 0 ..< table.capacity {
 		entry := &table.entries[i]
@@ -160,6 +175,8 @@ mark_table :: proc(gc: ^GC, table: ^Table) {
 	}
 }
 
+/* Mark roots for the `Compiler`; this involves marking each function the 
+ * compiler is compiling into. */
 mark_compiler_roots :: proc(gc: ^GC, compiler: ^Compiler) {
 	cmp := compiler
 	/* Mark each ObjFunction the compiler is compiling into. */
@@ -169,6 +186,8 @@ mark_compiler_roots :: proc(gc: ^GC, compiler: ^Compiler) {
 	}
 }
 
+/* Mark all roots for the VM; including its stack, closures in the callframe,
+ * open upvalues. */
 mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
 	/* Mark the VM's stack */
 	for value in vm.stack {
@@ -187,6 +206,7 @@ mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
 	}
 }
 
+/* Start the root marking step of the GC. */
 mark_roots :: proc(gc: ^GC, source: RootSource) {
 	/* Mark global variables. */
 	mark_table(gc, &gc.globals)
@@ -199,11 +219,13 @@ mark_roots :: proc(gc: ^GC, source: RootSource) {
 	}
 }
 
+/* 
+This function runs just before the sweep phase, and removes every white 
+object from the strings, before it is swept. This makes sure that there are 
+no dangling pointers to the strings in the table (which is used more like a
+hash set than a hashmap since just the keys are used).
+*/
 fix_weak :: proc(gc: ^GC) {
-	/* This function runs just before the sweep phase, and removes every white 
-    object from the strings, before it is swept. This makes sure that there are 
-    no dangling pointers to the strings in the table (which is used more like a
-    hash set than a hashmap since just the keys are used). */
 	for i in 0 ..< gc.strings.capacity {
 		/* If the key is unmarked, it is white. Delete it. */
 		entry := &gc.strings.entries[i]
@@ -213,6 +235,7 @@ fix_weak :: proc(gc: ^GC) {
 	}
 }
 
+/* Blacken a `Obj`, indicating that it is reachable. */
 blacken_object :: proc(gc: ^GC, object: ^Obj) {
 	if config.log_gc {
 		fmt.eprintf("%p blacken ", object)
@@ -290,6 +313,7 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 	}
 }
 
+/* Trace all references that can be reached. */
 trace_references :: proc(gc: ^GC) {
 	for gc.gray_count > 0 {
 		object := pop(&gc.gray_stack)
@@ -298,6 +322,7 @@ trace_references :: proc(gc: ^GC) {
 	}
 }
 
+/* Last step of the GC; sweep everything that cannot be reached. */
 sweep :: proc(gc: ^GC) {
 	/* At this point, all objects in the graph are black or white. We'll
     sweep everything that's white. */
@@ -331,6 +356,7 @@ sweep :: proc(gc: ^GC) {
 	}
 }
 
+/* Run a GC cycle. */
 collect_garbage :: proc(gc: ^GC) {
 	if config.log_gc {
 		fmt.eprintln("-- gc begin")

@@ -18,7 +18,10 @@ U8_COUNT :: 256
 /* Number of sixteen bit unsigned integers in existence. */
 U16_COUNT :: 65536
 
-/* The language parser. */
+/*
+The language parser. Consists of pretty much every value necessary during the
+compilation process.
+*/
 Parser :: struct {
 	tokens:           []Token,
 	curr_idx:         int,
@@ -84,7 +87,11 @@ Local :: struct {
 	name:             Token,
 	depth:            int,
 	final:            Variability,
+
+	/* Whether the local variable is captured in a closure. */
 	is_captured:      bool,
+
+	/* Whether the variable is a loop variable of a `for` loop. */
 	is_loop_variable: bool,
 }
 
@@ -153,6 +160,8 @@ ClassCompiler :: struct {
 	has_superclass: bool,
 }
 
+/* Returns the chunk that is currently being compiled. This function is just
+for convenience. */
 current_chunk :: proc(p: ^Parser) -> ^Chunk {
 	return &p.current_compiler.function.chunk
 }
@@ -188,8 +197,7 @@ error_at_current :: proc(p: ^Parser, message: string, args: ..any) {
 }
 
 /*
-Advance to the next token. Reports an error if that token is an
-ILLEGAL token variant.
+Advance to the next token.
 */
 @(private = "file")
 advance :: proc(p: ^Parser) #no_bounds_check {
@@ -214,6 +222,7 @@ consume :: proc(p: ^Parser, type: TokenType, message: string) {
 	error_at_current(p, message)
 }
 
+/* Wrapper over `consume()` to consume a semicolon with a certain message. */
 @(private = "file")
 consume_semi :: proc(p: ^Parser, message: string) {
 	consume(p, .SEMI, fmt.tprintf("Expect ';' after %s.", message))
@@ -505,6 +514,7 @@ call :: proc(p: ^Parser, can_assign: bool) {
 	emit_bytes(p, byte(OpCode.OP_CALL), arg_count)
 }
 
+/* Subscript a list to get a value out of it. */
 @(private = "file")
 subscript :: proc(p: ^Parser, can_assign: bool) {
 	expression(p)
@@ -513,6 +523,7 @@ subscript :: proc(p: ^Parser, can_assign: bool) {
 	emit_opcode(p, .OP_SUBSCRIPT)
 }
 
+/* Access or set a instance's property, or access a value from a module. */
 @(private = "file")
 dot :: proc(p: ^Parser, can_assign: bool) {
 	receiver := p.tokens[p.curr_idx - 3]
@@ -681,7 +692,11 @@ concatenate_byte :: proc(a: string, b: byte) -> string {
 
 /*
 Translate escape sequences in a string literal.
-This function allocates a string, but doesn't take ownership of the input.
+This function allocates a string, but doesn't take ownership of the input; therefore
+the input will still need to be freed if necessary. In this compiler, it is used
+to create an escape-sequenced string out of a slice of the program input itself,
+which should NOT be freed until the program ends; therefore it is not necessary
+for it to take ownership.
 
 So far, only the newline and tab sequences are supported.
 */
@@ -784,12 +799,14 @@ variable :: proc(p: ^Parser, can_assign: bool) {
 	named_variable(p, p.previous, can_assign)
 }
 
-/* Create a synthetic token. */
+/* Create a synthetic token i.e. a token that doesn't actually exist in the
+ * source code. Used for `super` and `this`, to create a variable out of them. */
 @(private = "file")
 synthetic_token :: proc(text: string) -> Token {
 	return Token{lexeme = text}
 }
 
+/* Parse the `super` keyword. */
 @(private = "file")
 super_ :: proc(p: ^Parser, can_assign: bool) {
 	if p.current_class == nil {
@@ -820,6 +837,7 @@ super_ :: proc(p: ^Parser, can_assign: bool) {
 	}
 }
 
+/* Parse the `this` keyword. */
 @(private = "file")
 this_ :: proc(p: ^Parser, can_assign: bool) {
 	if p.current_class == nil {
@@ -833,6 +851,7 @@ this_ :: proc(p: ^Parser, can_assign: bool) {
 	variable(p, can_assign = false)
 }
 
+/* Parse the `it` keyword, used in pipelines. */
 @(private = "file")
 it_ :: proc(p: ^Parser, can_assign: bool) {
 	if p.pipeline_state == .NONE {
@@ -985,6 +1004,7 @@ resolve_local :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
 	return -1
 }
 
+/* Add an upvalue to the function. */
 @(private = "file")
 add_upvalue :: proc(p: ^Parser, compiler: ^Compiler, index: u8, is_local: bool) -> int {
 	upvalue_count := compiler.function.upvalue_count
@@ -1009,6 +1029,8 @@ add_upvalue :: proc(p: ^Parser, compiler: ^Compiler, index: u8, is_local: bool) 
 	return compiler.function.upvalue_count
 }
 
+/* Find an upvalue in the function's local scope and scopes above it, and return
+ * the index to its name in the constant table. */
 @(private = "file")
 resolve_upvalue :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
 	/* Base case 1: We reached the end of the compiler stack, so the name is probably in the
@@ -1143,7 +1165,10 @@ define_variable :: proc(p: ^Parser, global: byte) {
 	emit_bytes(p, byte(OpCode.OP_DEFINE_GLOBAL), global)
 }
 
-/* Parse function arguments. */
+/* 
+Parse function arguments.
+TODO: Allow for more than 255 arguments.
+*/
 @(private = "file")
 argument_list :: proc(p: ^Parser) -> u8 {
 	arg_count: u8 = 0
@@ -1166,7 +1191,7 @@ argument_list :: proc(p: ^Parser) -> u8 {
 	return arg_count
 }
 
-/* Parse any expression. */
+/* Parse any expression. Also handles pipelines. */
 @(private = "file")
 expression :: proc(p: ^Parser) {
 	for i := 0;; i += 1 {
@@ -1200,6 +1225,7 @@ block :: proc(p: ^Parser) {
 	consume(p, .RSQUIRLY, "Expect '}' after block.")
 }
 
+/* Parse a function, either a named or anonymous, including arrow functions. */
 @(private = "file")
 function :: proc(p: ^Parser, type: FunctionType) {
 	compiler: Compiler
@@ -1689,7 +1715,7 @@ switch_statement :: proc(p: ^Parser) {
 
 	/* If there is no switch variable, the value to switch on is assumed to
        be the boolean value true. This is so that the switch statement can
-       be used like else if */
+       be used like else if. */
 	if match(p, .LSQUIRLY) {
 		emit_opcode(p, .OP_TRUE)
 	} else {
@@ -1779,6 +1805,7 @@ while_statement :: proc(p: ^Parser) {
 	end_loop(p)
 }
 
+/* Parse a for loop. */
 @(private = "file")
 for_statement :: proc(p: ^Parser) {
 	begin_scope(p)
@@ -1854,7 +1881,8 @@ synchronize :: proc(p: ^Parser) {
 	}
 }
 
-/* Parse a declaration. */
+/* Parse a declaration of some value. Includes variables, classes, functions
+ * and module imports. */
 @(private = "file")
 declaration :: proc(p: ^Parser) {
 	switch {
@@ -1906,6 +1934,7 @@ statement :: proc(p: ^Parser) {
 	}
 }
 
+/* Restore the GC to its previous state, i.e. change the roots. */
 restore_gc :: proc(p: ^Parser) {
 	p.gc.mark_roots_arg = p.prev_mark_roots
 }

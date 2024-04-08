@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:os"
 import "core:sys/windows"
 
+/* Print text in red in the specific `stream`. */
 color_red :: proc(stream: os.Handle, text: string) {
 	when ODIN_OS == .Windows {
 		switch stream {
@@ -27,6 +28,7 @@ color_red :: proc(stream: os.Handle, text: string) {
 	color_reset(stream)
 }
 
+/* Print text in green in the specific `stream`. */
 color_green :: proc(stream: os.Handle, text: string) {
 	when ODIN_OS == .Windows {
 		switch stream {

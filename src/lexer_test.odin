@@ -3,11 +3,13 @@ package zen
 import "core:fmt"
 import tt "core:testing"
 
+/* A `Token` or nil. */
 @(private = "file")
 MaybeToken :: union {
 	Token,
 }
 
+/* Check if two slices of `Token`s are the same. */
 @(private = "file")
 expect_tokens_equal :: proc(
 	want: []Token,
@@ -30,6 +32,7 @@ expect_tokens_equal :: proc(
 	return true, nil, nil
 }
 
+/* A basic test of the lexer. */
 @(test)
 test_lexer_default :: proc(t: ^tt.T) {
 	source := `// this is a comment
@@ -53,7 +56,7 @@ func test() {
 	}
 	defer delete(got)
 
-	want := []Token{
+	want := []Token {
 		Token{type = .FUNC, lexeme = "func", line = 2},
 		Token{type = .IDENT, lexeme = "foo", line = 2},
 		Token{type = .LPAREN, lexeme = "(", line = 2},
@@ -112,6 +115,7 @@ func test() {
 	}
 }
 
+/* Test chained multiline method calls for the lexer. */
 @(test)
 test_lexer_chained_calls :: proc(t: ^tt.T) {
 	source := `some_string
@@ -125,7 +129,7 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
 	}
 	defer delete(got)
 
-	want := []Token{
+	want := []Token {
 		Token{type = .IDENT, lexeme = "some_string", line = 1},
 		Token{type = .DOT, lexeme = ".", line = 2},
 		Token{type = .IDENT, lexeme = "reverse", line = 2},
