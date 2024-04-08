@@ -52,6 +52,30 @@ color_green :: proc(stream: os.Handle, text: string) {
 	color_reset(stream)
 }
 
+/* Print text in yellow in the specific `stream`. */
+color_yellow :: proc(stream: os.Handle, text: string) {
+	when ODIN_OS == .Windows {
+		switch stream {
+		case os.stdout:
+			windows.SetConsoleTextAttribute(
+				windows.GetStdHandle(windows.STD_OUTPUT_HANDLE),
+				windows.FOREGROUND_RED | windows.FOREGROUND_GREEN,
+			)
+		case os.stderr:
+			windows.SetConsoleTextAttribute(
+				windows.GetStdHandle(windows.STD_ERROR_HANDLE),
+				windows.FOREGROUND_RED | windows.FOREGROUND_GREEN,
+			)
+		}
+	} else {
+		fmt.fprint(stream, "\x1b[33m")
+	}
+
+	fmt.fprint(stream, text)
+
+	color_reset(stream)
+}
+
 /* 
 Reset the text color in the terminal.
 This does not need to be called manually, all the coloring functions call it in

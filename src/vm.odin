@@ -36,6 +36,18 @@ CallFrame :: struct {
 
 /* The virtual machine that interprets the bytecode. */
 VM :: struct {
+	/* The path of the running program. Used to distinguish programs since they
+     * can import each other as modules, and so it is necessary to disallow
+     * cyclic imports. Value is the file path for a file and an empty string
+     * for a REPL, since you can't import REPLs. */
+	path:             string,
+
+	/* Just the path, except with the file extension and other path stuff stripped
+     * out, like in a module name. For instance, for a path "a/b/c.zn", the name
+     * will be just "c". Used for working with user-defined modules, but NOT
+     * for distinguishing them. */
+	name:             string,
+
 	/* The chunk being interpreted. */
 	chunk:            ^Chunk,
 
@@ -59,6 +71,7 @@ InterpretResult :: enum {
 	INTERPRET_OK,
 	INTERPRET_LEX_ERROR,
 	INTERPRET_COMPILE_ERROR,
+	INTERPRET_READ_ERROR,
 	INTERPRET_RUNTIME_ERROR,
 }
 
@@ -80,6 +93,13 @@ vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
 		} else {
 			fmt.eprintf(" %s()\n", function.name.chars)
 		}
+	}
+
+	color_yellow(os.stderr, "  (at")
+	if vm.path == "REPL" {
+		color_yellow(os.stderr, " REPL)\n")
+	} else {
+		color_yellow(os.stderr, fmt.tprintf(" file %s)\n", vm.path))
 	}
 
 	reset_stack(vm)
@@ -140,6 +160,8 @@ reset_stack :: proc(vm: ^VM) {
 /* Returns a newly created VM. */
 init_VM :: proc() -> VM {
 	vm := VM {
+		name             = "",
+		path             = "",
 		chunk            = nil,
 		stack            = make([dynamic]Value, 0, 0),
 		open_upvalues    = nil,
@@ -642,15 +664,57 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			}
 		case .OP_MODULE_USER:
 			{
-				// TODO
+				module_name := read_string(frame)
+				module_path := read_string(frame)
+
+				/* Add a new module onto the stack. */
 				vm_push(vm, obj_val(new_module(vm.gc, read_string(frame))))
+
+				/* Create a new VM for the imported module. */
+				mod_vm := init_VM()
+				defer free_VM(&mod_vm)
+
+				current_mark_roots := vm.gc.mark_roots_arg
+				vm.gc.mark_roots_arg = &mod_vm
+				defer vm.gc.mark_roots_arg = current_mark_roots
+
+				mod_vm.gc = vm.gc
+
+				// run the VM on the file
+				result := run_file(
+					&mod_vm,
+					module_path.chars,
+					importer = ImportingModuleStruct{path = vm.path, name = vm.name, vm = vm},
+				)
+				if result != .INTERPRET_OK {
+					return result /* Return the errored program back out */
+				}
+
+				pop(&vm.gc.import_stack) /* Remove the path from the import stack. */
 			}
 		}
 	}
 }
 
 /* Interpret a chunk. */
-interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
+interpret :: proc(
+	vm: ^VM,
+	gc: ^GC,
+	source: string,
+	importer: ImportingModule = nil,
+) -> InterpretResult {
+	/* If the name of the VM and the importing module are both the same (if the
+     * importing module is not nil), then we have a cyclic import, which causes
+     * all sorts of problems. So we have to disallow that. */
+	importer_struct, importer_exists := importer.(ImportingModuleStruct)
+
+	if importer_exists && slice.contains(vm.gc.import_stack[:], vm.path) {
+		vm_panic(vm, "Cannot perform a cyclic import.")
+		return .INTERPRET_RUNTIME_ERROR
+	}
+
+	append(&vm.gc.import_stack, vm.path)
+
 	/* Start the stopwatch. */
 	sw: time.Stopwatch
 	if config.record_time {

@@ -36,6 +36,15 @@ constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	return offset + 2
 }
 
+/* Print debug info for a user-defined module import. */
+@(private = "file")
+user_module_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
+	module_name := c.code[offset + 1]
+	module_path := c.code[offset + 2]
+	fmt.eprintf("%-16s %4d '%s' (path '%s')\n", name, module_name, module_path)
+	return offset + 3
+}
+
 /* Print debug info for the OP_INVOKE opcode. */
 @(private = "file")
 invoke_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
@@ -172,7 +181,7 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_MODULE_BUILTIN:
 		return constant_instruction("OP_MODULE_BUILTIN", c, offset)
 	case .OP_MODULE_USER:
-		return constant_instruction("OP_MODULE_USER", c, offset)
+		return user_module_instruction("OP_MODULE_USER", c, offset)
 	case:
 		fmt.eprintf("Unknown opcode %d\n", instruction)
 		return offset + 1

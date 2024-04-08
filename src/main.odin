@@ -35,6 +35,9 @@ config := Config {
 /* Fire up a REPL. */
 @(private = "file")
 repl :: proc(vm: ^VM) -> int {
+	vm.name = "REPL"
+	vm.path = "REPL"
+
 	fmt.println("Welcome to zen!")
 	fmt.println("Press 'Ctrl-D' to exit.")
 	buf: [1024]byte
@@ -73,19 +76,38 @@ read_file :: proc(path: string) -> (string, bool) {
 	return string(data[:]), true
 }
 
-/* Run a file. */
-@(private = "file")
-run_file :: proc(vm: ^VM, path: string) -> int {
+/* DO NOT USE DIRECTLY, USE ImportingModule INSTEAD */
+ImportingModuleStruct :: struct {
+	path: string,
+	name: string,
+	vm:   ^VM,
+}
+
+/* A module that imports another. It may be nil, so it is set as a union. */
+ImportingModule :: union {
+	ImportingModuleStruct,
+}
+
+/* 
+Run a file.
+This is not private to the file as it is used in the VM for importing modules.
+*/
+run_file :: proc(vm: ^VM, path: string, importer: ImportingModule = nil) -> InterpretResult {
 	source, ok := read_file(path)
 	defer delete(source)
-	if !ok {return 74}
-	result := interpret(vm, vm.gc, source)
+	if !ok {return .INTERPRET_READ_ERROR}
 
-	if result == .INTERPRET_LEX_ERROR do return 65
-	if result == .INTERPRET_COMPILE_ERROR do return 65
-	if result == .INTERPRET_RUNTIME_ERROR do return 70
+	vm.path = path
 
-	return 0
+	/* Set the module name for the VM */
+	parts := strings.split(path, "/")
+	defer delete(parts)
+	file := parts[len(parts) - 1]
+	vm.name = strings.split(file, ".")[0]
+
+	result := interpret(vm, vm.gc, source, importer)
+
+	return result
 }
 
 /* Print a help string in `stream`. */
@@ -226,7 +248,22 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		config.repl = true
 		return repl(vm)
 	} else {
-		return run_file(vm, script)
+		result := run_file(vm, script)
+
+		switch result {
+		case .INTERPRET_LEX_ERROR:
+			return 65
+		case .INTERPRET_COMPILE_ERROR:
+			return 65
+		case .INTERPRET_RUNTIME_ERROR:
+			return 70
+		case .INTERPRET_READ_ERROR:
+			return 74
+		case .INTERPRET_OK:
+			return 0
+		}
+
+		unreachable()
 	}
 }
 

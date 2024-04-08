@@ -1459,8 +1459,10 @@ module_declaration :: proc(p: ^Parser) {
 		}
 	case .USER:
 		{
+			/* Provide the name of the module and the path as bytecode args. */
 			emit_opcode(p, .OP_MODULE_USER)
 			emit_byte(p, name_constant)
+			emit_byte(p, string_constant(p, path))
 		}
 	}
 
