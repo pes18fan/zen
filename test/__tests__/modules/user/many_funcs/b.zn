@@ -1,0 +1,11 @@
+func foo() {
+    puts("bar")
+}
+
+func bar() {
+    puts("baz")
+}
+
+func baz() {
+    puts("plop")
+}

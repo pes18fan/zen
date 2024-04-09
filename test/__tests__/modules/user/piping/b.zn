@@ -1,0 +1,11 @@
+func a() {
+    return "a"
+}
+
+func b(a) {
+    return a + "b"
+}
+
+func c(b) {
+    return b + "c"
+}

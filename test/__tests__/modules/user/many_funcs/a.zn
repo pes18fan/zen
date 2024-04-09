@@ -1,0 +1,5 @@
+use "b.zn"
+
+b.foo() // expect: bar
+b.bar() // expect: baz
+b.baz() // expect: plop
