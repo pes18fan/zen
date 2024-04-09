@@ -21,11 +21,11 @@
                     "name": "keyword.control.zen"
                 },
                 {
-                    "match": "\\b(print)\\b"
-                    "name": "support.function.builtin.zen",
+                    "match": "\\b(print)\\b",
+                    "name": "support.function.builtin.zen"
                 },
                 {
-                    "match": "\\b(use)\\b",
+                    "match": "\\b(use|pub)\\b",
                     "name": "keyword.other.zen"
                 }
             ]
