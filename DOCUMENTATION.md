@@ -75,7 +75,9 @@ selected value and an assortment of cases, from top to bottom. If a case matches
 the code associated with it is executed and the statement exits. 
 
 ```
-var a = rand() * 10 |> floor()
+use "math"
+
+var a = math.rand() * 10 |> math.floor()
 
 switch a {
     0 => print "zero!"
@@ -210,8 +212,9 @@ of it.
 list[0] //=> 1
 ```
 
-The `push()` and `pop()` native functions can be used to add and remove items
-from a list, and the `len()` function can be used to get the length of the list.
+The `push()` and `pop()` native functions in the `list` module can be used to 
+add and remove items from a list, and the global `len()` native function can be used 
+to get the length of the list.
 
 ## Classes
 
@@ -328,7 +331,7 @@ pub func foo() {
 
 This will print out "bar".
 
-> NOTE: `pub` keyword hasn't been implemented yet
+Functions without the `pub` keyword will NOT be imported when a file is `use`d.
 
 ## Standard library
 
