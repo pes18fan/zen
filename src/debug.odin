@@ -39,9 +39,9 @@ constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 /* Print debug info for a user-defined module import. */
 @(private = "file")
 user_module_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
-	module_name := c.code[offset + 1]
-	module_path := c.code[offset + 2]
-	fmt.eprintf("%-16s %4d '%s' (path '%s')\n", name, module_name, module_path)
+	module_name := stringify_value(c.constants.values[c.code[offset + 1]])
+	module_path := stringify_value(c.constants.values[c.code[offset + 2]])
+	fmt.eprintf("%-16s (module '%s', path '%s')\n", name, module_name, module_path)
 	return offset + 3
 }
 

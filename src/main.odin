@@ -78,9 +78,9 @@ read_file :: proc(path: string) -> (string, bool) {
 
 /* DO NOT USE DIRECTLY, USE ImportingModule INSTEAD */
 ImportingModuleStruct :: struct {
-	path: string,
-	name: string,
-	vm:   ^VM,
+	path:   string,
+	name:   string,
+	module: ^ObjModule,
 }
 
 /* A module that imports another. It may be nil, so it is set as a union. */

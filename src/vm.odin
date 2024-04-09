@@ -262,7 +262,7 @@ Run the VM, going through the bytecode and interpreting each instruction
 one by one.
 */
 @(private = "file")
-run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
+run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bounds_check {
 	frame := &vm.frames[vm.frame_count - 1]
 
 	/* This variable stores the value of the built-in `it` variable, which
@@ -560,7 +560,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				list := as_list(a)
 
 				if math.floor(index) != index || index < 0 {
-					vm_panic(vm, "List index must be a positive integer.")
+					vm_panic(vm, "List index must be a non-negative integer.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
@@ -595,6 +595,13 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 						current CalLFrame. */
 						closure.upvalues[i] = frame.closure.upvalues[index]
 					}
+				}
+
+				/* If the current file is being imported, add the declared closure
+                 * into the module that's importing it. */
+				if importing_module, ok := importer.(ImportingModuleStruct); ok {
+					module := importing_module.module
+					table_set(&module.values, closure.function.name, vm_peek(vm, 0))
 				}
 			}
 		case .OP_CLOSE_UPVALUE:
@@ -668,29 +675,35 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				module_path := read_string(frame)
 
 				/* Add a new module onto the stack. */
-				vm_push(vm, obj_val(new_module(vm.gc, read_string(frame))))
+				module := new_module(vm.gc, module_name)
 
 				/* Create a new VM for the imported module. */
 				mod_vm := init_VM()
 				defer free_VM(&mod_vm)
 
-				current_mark_roots := vm.gc.mark_roots_arg
-				vm.gc.mark_roots_arg = &mod_vm
-				defer vm.gc.mark_roots_arg = current_mark_roots
-
 				mod_vm.gc = vm.gc
+
+				prev_mark_roots := vm
+				vm.gc.mark_roots_arg = &mod_vm
+				defer vm.gc.mark_roots_arg = prev_mark_roots
 
 				// run the VM on the file
 				result := run_file(
 					&mod_vm,
 					module_path.chars,
-					importer = ImportingModuleStruct{path = vm.path, name = vm.name, vm = vm},
+					importer = ImportingModuleStruct {
+						path = vm.path,
+						name = vm.name,
+						module = module,
+					},
 				)
 				if result != .INTERPRET_OK {
 					return result /* Return the errored program back out */
 				}
 
 				pop(&vm.gc.import_stack) /* Remove the path from the import stack. */
+
+				vm_push(vm, obj_val(module))
 			}
 		}
 	}
@@ -770,7 +783,7 @@ interpret :: proc(
 	vm_push(vm, obj_val(closure))
 	call(vm, closure, 0) // The script itself is a function, so call it.
 
-	return run(vm)
+	return run(vm, importer)
 }
 
 /* Push a value onto the stack. */
