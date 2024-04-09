@@ -11,6 +11,7 @@ numbers are RLE encoded. Fail if that's not the case.
 @(test)
 test_chunk_write_lines :: proc(t: ^tt.T) {
 	chunk := init_chunk()
+
 	/* Write a chunk with line numbers upto 20. If `i` is even, write an extra 
     instruction. The contents of the chunk don't matter here since this is a 
     test for the line number encoding. */

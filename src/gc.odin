@@ -99,7 +99,7 @@ free_gc :: proc(gc: ^GC) {
 	delete(gc.gray_stack)
 }
 
-/* Temporarily push a value to the stack. */
+/* Push a value on the stack temporarily. */
 temp_push :: proc(gc: ^GC, value: Value) {
 	switch s in gc.mark_roots_arg {
 	case ^Parser:
@@ -113,7 +113,7 @@ temp_push :: proc(gc: ^GC, value: Value) {
 	}
 }
 
-/* Temporarily pop a value out of the stack. */
+/* Pop a value from the stack temporarily. */
 temp_pop :: proc(gc: ^GC) -> Value {
 	value: Value
 	switch s in gc.mark_roots_arg {
