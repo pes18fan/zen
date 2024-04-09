@@ -149,7 +149,11 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 			constant := c.code[offset]
 			fmt.eprintf("%-16s %4d ", "OP_CLOSURE", constant)
 			fmt.eprintf(stringify_value(c.constants.values[constant]))
+			offset += 1
+			public := bool(c.code[offset])
+			fmt.eprintf(", %s", public ? "public" : "private")
 			fmt.eprintln()
+			offset += 1
 
 			function := as_function(c.constants.values[constant])
 			for j in 0 ..< function.upvalue_count {

@@ -56,6 +56,7 @@ TokenType :: enum {
 	NOT,
 	OR,
 	PRINT,
+	PUB,
 	RETURN,
 	SWITCH,
 	SUPER,
@@ -351,7 +352,16 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 	case 'o':
 		return check_keyword(l, 1, 1, "r", .OR)
 	case 'p':
-		return check_keyword(l, 1, 4, "rint", .PRINT)
+		{
+			if l.current - l.start > 1 {
+				switch utf8.rune_at(l.source, l.start + 1) {
+				case 'r':
+					return check_keyword(l, 2, 3, "int", .PRINT)
+				case 'u':
+					return check_keyword(l, 2, 1, "b", .PUB)
+				}
+			}
+		}
 	case 'r':
 		return check_keyword(l, 1, 5, "eturn", .RETURN)
 	case 's':

@@ -356,12 +356,13 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 						vm_push(vm, value)
 						break /* Step out of the switch statement. */
 					} else {
-						vm_panic(
-							vm,
-							"Undefined value '%s' in module '%s'.",
+						panic_str := fmt.tprintf(
+							`Function '%s' does not exist on module '%s'.
+       If this module is a file, you may have forgotten the pub keyword.`,
 							name.chars,
 							module.name.chars,
 						)
+						vm_panic(vm, panic_str)
 						return .INTERPRET_RUNTIME_ERROR
 					}
 				} else if is_instance(vm_peek(vm, 0)) {
@@ -577,6 +578,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				closure := new_closure(vm.gc, function)
 				vm_push(vm, obj_val(closure))
 
+				is_public := bool(read_byte(frame))
+
 				for i in 0 ..< closure.upvalue_count {
 					is_local := bool(read_byte(frame))
 					index := read_byte(frame)
@@ -597,9 +600,11 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					}
 				}
 
-				/* If the current file is being imported, add the declared closure
-                 * into the module that's importing it. */
-				if importing_module, ok := importer.(ImportingModuleStruct); ok {
+				/* If the current file is being imported AND the function being
+                 * compiled is set as public with the `pub` keyword, add the 
+                 * declared closure into the module that's importing it. */
+				importing_module, ok := importer.(ImportingModuleStruct)
+				if is_public && ok {
 					module := importing_module.module
 					table_set(&module.values, closure.function.name, vm_peek(vm, 0))
 				}
@@ -939,6 +944,15 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 			}
 
 			return call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count))
+		} else {
+			panic_str := fmt.tprintf(
+				`Function '%s' does not exist on module '%s'.
+       If this module is a file, you may have forgotten the pub keyword.`,
+				name.chars,
+				module.name.chars,
+			)
+			vm_panic(vm, panic_str)
+			return false
 		}
 	}
 

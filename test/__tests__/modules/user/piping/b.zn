@@ -1,11 +1,11 @@
-func a() {
+pub func a() {
     return "a"
 }
 
-func b(a) {
+pub func b(a) {
     return a + "b"
 }
 
-func c(b) {
+pub func c(b) {
     return b + "c"
 }

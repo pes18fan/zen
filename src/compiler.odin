@@ -928,6 +928,7 @@ rules: []ParseRule = {
 	TokenType.NOT           = ParseRule{unary, nil, .NONE},
 	TokenType.OR            = ParseRule{nil, or_, .OR},
 	TokenType.PRINT         = ParseRule{nil, nil, .NONE},
+	TokenType.PUB           = ParseRule{nil, nil, .NONE},
 	TokenType.RETURN        = ParseRule{nil, nil, .NONE},
 	TokenType.SUPER         = ParseRule{super_, nil, .NONE},
 	TokenType.THIS          = ParseRule{this_, nil, .NONE},
@@ -1228,7 +1229,7 @@ block :: proc(p: ^Parser) {
 
 /* Parse a function, either a named or anonymous, including arrow functions. */
 @(private = "file")
-function :: proc(p: ^Parser, type: FunctionType) {
+function :: proc(p: ^Parser, type: FunctionType, public: bool = false) {
 	compiler: Compiler
 	init_compiler(&compiler, p, type)
 
@@ -1271,6 +1272,10 @@ function :: proc(p: ^Parser, type: FunctionType) {
 
 	function := end_compiler(p)
 	emit_bytes(p, byte(OpCode.OP_CLOSURE), make_constant(p, obj_val(function)))
+
+	/* Emit a final byte indicating whether the function should be available to
+     * other files importing the file it is in. */
+	emit_byte(p, 1 if public else 0)
 
 	/* OP_CLOSURE has a variably sized encoding. For each upvalue captured by
 	the closure, there are two single-byte operands: a boolean indicating
@@ -1468,10 +1473,10 @@ Parse a function declaration.
 Functions are first class, so they are parsed like variables.
 */
 @(private = "file")
-func_declaration :: proc(p: ^Parser) {
+func_declaration :: proc(p: ^Parser, public: bool = false) {
 	global := parse_variable(p, "Expect function name.", .VAR)
 	mark_initialized(p)
-	function(p, .FUNCTION)
+	function(p, .FUNCTION, public)
 	define_variable(p, global)
 }
 
@@ -1890,6 +1895,13 @@ declaration :: proc(p: ^Parser) {
 		module_declaration(p)
 	case match(p, .FUNC):
 		func_declaration(p)
+	case match(p, .PUB):
+		{
+			if !match(p, .FUNC) {
+				error(p, "Only functions can be set as public.")
+			}
+			func_declaration(p, public = true)
+		}
 	case:
 		statement(p)
 	}
