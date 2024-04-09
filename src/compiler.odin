@@ -2,6 +2,7 @@ package zen
 
 import "core:fmt"
 import "core:os"
+import "core:path/filepath"
 import "core:slice"
 import "core:strconv"
 import "core:strings"
@@ -1413,15 +1414,16 @@ module_declaration :: proc(p: ^Parser) {
 	consume(p, .STRING, "Expect module path.")
 
 	path := strings.trim(p.previous.lexeme[1:len(p.previous.lexeme) - 1], " ")
+	abs_path := filepath.join([]string{config.__dirname, path})
 
 	// look for the path in the stdlib, if not present look for a file at the path
 	found := slice.contains(p.gc.std_modules[:], path)
 	if found {
 		mod_type = .BUILTIN
 	} else {
-		found := os.exists(path)
+		found := os.exists(abs_path)
 		if !found {
-			error(p, fmt.tprintf("Module '%s' not found.", path))
+			error(p, fmt.tprintf("Module '%s' not found.", abs_path))
 		}
 
 		mod_type = .USER
@@ -1435,15 +1437,7 @@ module_declaration :: proc(p: ^Parser) {
 		}
 	case .USER:
 		{
-			/* The module name is the last part of the path for files. */
-
-			// if path = "a/b/c.zn", parts = ["a", "b", "c.zn"]
-			parts := strings.split(path, "/")
-			defer delete(parts)
-
-			// if file = "c.zn", mod_name = "c"
-			file := parts[len(parts) - 1]
-			mod_name = strings.split(file, ".")[0]
+			mod_name = filepath.short_stem(path)
 		}
 	}
 
@@ -1462,7 +1456,7 @@ module_declaration :: proc(p: ^Parser) {
 			/* Provide the name of the module and the path as bytecode args. */
 			emit_opcode(p, .OP_MODULE_USER)
 			emit_byte(p, name_constant)
-			emit_byte(p, string_constant(p, path))
+			emit_byte(p, string_constant(p, abs_path))
 		}
 	}
 

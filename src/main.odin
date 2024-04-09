@@ -3,6 +3,7 @@ package zen
 import "core:fmt"
 import "core:mem"
 import "core:os"
+import "core:path/filepath"
 import "core:strings"
 
 VERSION :: "0.0.1-beta"
@@ -18,6 +19,12 @@ Config :: struct {
 	log_gc:           bool,
 	record_time:      bool,
 	repl:             bool,
+
+	/* Path to the running file. */
+	__path:           string,
+
+	/* Directory the running file is in. */
+	__dirname:        string,
 }
 
 config := Config {
@@ -30,6 +37,8 @@ config := Config {
 	log_gc           = false,
 	record_time      = false,
 	repl             = false,
+	__path           = "",
+	__dirname        = "",
 }
 
 /* Fire up a REPL. */
@@ -99,11 +108,8 @@ run_file :: proc(vm: ^VM, path: string, importer: ImportingModule = nil) -> Inte
 
 	vm.path = path
 
-	/* Set the module name for the VM */
-	parts := strings.split(path, "/")
-	defer delete(parts)
-	file := parts[len(parts) - 1]
-	vm.name = strings.split(file, ".")[0]
+	/* Get the name of the file from the path */
+	vm.name = filepath.short_stem(path)
 
 	result := interpret(vm, vm.gc, source, importer)
 
@@ -248,6 +254,10 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		config.repl = true
 		return repl(vm)
 	} else {
+		config.__path = filepath.join([]string{os.get_current_directory(), script})
+		config.__dirname, _ = filepath.split(config.__path)
+		defer delete(config.__path)
+
 		result := run_file(vm, script)
 
 		switch result {
@@ -261,9 +271,9 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 			return 74
 		case .INTERPRET_OK:
 			return 0
+		case:
+			return 0
 		}
-
-		unreachable()
 	}
 }
 
