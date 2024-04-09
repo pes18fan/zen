@@ -1,0 +1,3 @@
+use "b.zn"
+
+b.private() // ERR: Function 'private' does not exist on module 'b'
