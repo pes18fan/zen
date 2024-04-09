@@ -1,1 +1,3 @@
-pop([]) // ERR: Cannot pop an empty list.
+use "list"
+
+list.pop([]) // ERR: Cannot pop an empty list.

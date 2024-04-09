@@ -1,0 +1,3 @@
+pub func foo() {
+    print "bar"
+}

@@ -4,7 +4,9 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import "core:os"
+import "core:reflect"
 import "core:slice"
+import "core:strings"
 import "core:time"
 
 FRAMES_MAX :: 64
@@ -34,6 +36,18 @@ CallFrame :: struct {
 
 /* The virtual machine that interprets the bytecode. */
 VM :: struct {
+	/* The path of the running program. Used to distinguish programs since they
+     * can import each other as modules, and so it is necessary to disallow
+     * cyclic imports. Value is the file path for a file and an empty string
+     * for a REPL, since you can't import REPLs. */
+	path:             string,
+
+	/* Just the path, except with the file extension and other path stuff stripped
+     * out, like in a module name. For instance, for a path "a/b/c.zn", the name
+     * will be just "c". Used for working with user-defined modules, but NOT
+     * for distinguishing them. */
+	name:             string,
+
 	/* The chunk being interpreted. */
 	chunk:            ^Chunk,
 
@@ -57,6 +71,7 @@ InterpretResult :: enum {
 	INTERPRET_OK,
 	INTERPRET_LEX_ERROR,
 	INTERPRET_COMPILE_ERROR,
+	INTERPRET_READ_ERROR,
 	INTERPRET_RUNTIME_ERROR,
 }
 
@@ -80,6 +95,13 @@ vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
 		}
 	}
 
+	color_yellow(os.stderr, "  (at")
+	if vm.path == "REPL" {
+		color_yellow(os.stderr, " REPL)\n")
+	} else {
+		color_yellow(os.stderr, fmt.tprintf(" file %s)\n", vm.path))
+	}
+
 	reset_stack(vm)
 }
 
@@ -98,6 +120,33 @@ define_native :: proc(gc: ^GC, name: string, function: NativeFn, arity: int) {
 	vm_pop(vm)
 }
 
+define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
+	vm := as_vm(gc.mark_roots_arg)
+
+	obj_module := new_module(gc, copy_string(gc, name))
+	vm_push(vm, obj_val(copy_string(gc, name)))
+	vm_push(vm, obj_val(obj_module))
+	table_set(&gc.globals, as_string(vm.stack[0]), vm.stack[1])
+
+	vm_pop(vm)
+	vm_pop(vm)
+
+	module_functions := get_builtin_module(gc, module)
+	defer delete(module_functions)
+
+	for function in module_functions {
+		vm_push(vm, obj_val(copy_string(gc, function.name)))
+		vm_push(vm, obj_val(new_native(gc, function.function, function.arity)))
+
+		table_set(&obj_module.values, as_string(vm.stack[1]), vm.stack[2])
+
+		vm_pop(vm)
+		vm_pop(vm)
+	}
+
+	vm_push(vm, obj_val(obj_module))
+}
+
 /* Resets the stack. */
 reset_stack :: proc(vm: ^VM) {
 	defer {
@@ -111,6 +160,8 @@ reset_stack :: proc(vm: ^VM) {
 /* Returns a newly created VM. */
 init_VM :: proc() -> VM {
 	vm := VM {
+		name             = "",
+		path             = "",
 		chunk            = nil,
 		stack            = make([dynamic]Value, 0, 0),
 		open_upvalues    = nil,
@@ -211,7 +262,7 @@ Run the VM, going through the bytecode and interpreting each instruction
 one by one.
 */
 @(private = "file")
-run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
+run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bounds_check {
 	frame := &vm.frames[vm.frame_count - 1]
 
 	/* This variable stores the value of the built-in `it` variable, which
@@ -290,32 +341,59 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				// Take the value on top of the stack and store it into the slot.
 				frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
 			}
+		/* This opcode is used both to get properties of an instance and to get
+         * values in a module. */
 		case .OP_GET_PROPERTY:
 			{
-				if !is_instance(vm_peek(vm, 0)) {
+				if is_module(vm_peek(vm, 0)) {
+					module := as_module(vm_peek(vm, 0))
+					name := read_string(frame)
+
+					/* Look for the value in the module. */
+					value: Value;ok: bool
+					if value, ok = table_get(&module.values, name); ok {
+						vm_pop(vm) /* Module. */
+						vm_push(vm, value)
+						break /* Step out of the switch statement. */
+					} else {
+						panic_str := fmt.tprintf(
+							`Function '%s' does not exist on module '%s'.
+       If this module is a file, you may have forgotten the pub keyword.`,
+							name.chars,
+							module.name.chars,
+						)
+						vm_panic(vm, panic_str)
+						return .INTERPRET_RUNTIME_ERROR
+					}
+				} else if is_instance(vm_peek(vm, 0)) {
+					instance := as_instance(vm_peek(vm, 0))
+					name := read_string(frame)
+
+					/* Look for a field. */
+					value: Value;ok: bool
+					if value, ok = table_get(&instance.fields, name); ok {
+						vm_pop(vm) /* Instance. */
+						vm_push(vm, value)
+						break /* Step out of the switch statement. */
+					}
+
+					/* Look for a method. If we don't find one, it means that name
+				     * wasn't a field either, which is a runtime error. */
+					if !bind_method(vm, instance.klass, name) {
+						return .INTERPRET_RUNTIME_ERROR
+					}
+				} else {
 					vm_panic(vm, "Only instances have properties.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				instance := as_instance(vm_peek(vm, 0))
-				name := read_string(frame)
-
-				/* Look for a field. */
-				value: Value;ok: bool
-				if value, ok = table_get(&instance.fields, name); ok {
-					vm_pop(vm) /* Instance. */
-					vm_push(vm, value)
-					break /* Step out of the switch statement. */
-				}
-
-				/* Look for a method. If we don't find one, it means that name
-				 * wasn't a field either, which is a runtime error. */
-				if !bind_method(vm, instance.klass, name) {
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
 		case .OP_SET_PROPERTY:
 			{
+				if is_module(vm_peek(vm, 1)) {
+					vm_panic(vm, "Cannot change the values of a module.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
 				if !is_instance(vm_peek(vm, 1)) {
 					vm_panic(vm, "Only instances have fields.")
 					return .INTERPRET_RUNTIME_ERROR
@@ -483,7 +561,7 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				list := as_list(a)
 
 				if math.floor(index) != index || index < 0 {
-					vm_panic(vm, "List index must be a positive integer.")
+					vm_panic(vm, "List index must be a non-negative integer.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
@@ -499,6 +577,8 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 				function := as_function(read_constant(frame))
 				closure := new_closure(vm.gc, function)
 				vm_push(vm, obj_val(closure))
+
+				is_public := bool(read_byte(frame))
 
 				for i in 0 ..< closure.upvalue_count {
 					is_local := bool(read_byte(frame))
@@ -518,6 +598,15 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 						current CalLFrame. */
 						closure.upvalues[i] = frame.closure.upvalues[index]
 					}
+				}
+
+				/* If the current file is being imported AND the function being
+                 * compiled is set as public with the `pub` keyword, add the 
+                 * declared closure into the module that's importing it. */
+				importing_module, ok := importer.(ImportingModuleStruct)
+				if is_public && ok {
+					module := importing_module.module
+					table_set(&module.values, closure.function.name, vm_peek(vm, 0))
 				}
 			}
 		case .OP_CLOSE_UPVALUE:
@@ -575,12 +664,75 @@ run :: proc(vm: ^VM) -> InterpretResult #no_bounds_check {
 			{
 				define_method(vm, read_string(frame))
 			}
+		case .OP_MODULE_BUILTIN:
+			{
+				module_str := strings.to_upper(read_string(frame).chars)
+				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
+				if !ok {
+					vm_panic(vm, "Unknown builtin module %s.", module_str)
+				}
+
+				define_builtin_module(vm.gc, strings.to_lower(module_str), module)
+			}
+		case .OP_MODULE_USER:
+			{
+				module_name := read_string(frame)
+				module_path := read_string(frame)
+
+				/* Add a new module onto the stack. */
+				module := new_module(vm.gc, module_name)
+
+				/* Create a new VM for the imported module. */
+				mod_vm := init_VM()
+				defer free_VM(&mod_vm)
+
+				mod_vm.gc = vm.gc
+
+				prev_mark_roots := vm
+				vm.gc.mark_roots_arg = &mod_vm
+				defer vm.gc.mark_roots_arg = prev_mark_roots
+
+				// run the VM on the file
+				result := run_file(
+					&mod_vm,
+					module_path.chars,
+					importer = ImportingModuleStruct {
+						path = vm.path,
+						name = vm.name,
+						module = module,
+					},
+				)
+				if result != .INTERPRET_OK {
+					return result /* Return the errored program back out */
+				}
+
+				pop(&vm.gc.import_stack) /* Remove the path from the import stack. */
+
+				vm_push(vm, obj_val(module))
+			}
 		}
 	}
 }
 
 /* Interpret a chunk. */
-interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
+interpret :: proc(
+	vm: ^VM,
+	gc: ^GC,
+	source: string,
+	importer: ImportingModule = nil,
+) -> InterpretResult {
+	/* If the name of the VM and the importing module are both the same (if the
+     * importing module is not nil), then we have a cyclic import, which causes
+     * all sorts of problems. So we have to disallow that. */
+	importer_struct, importer_exists := importer.(ImportingModuleStruct)
+
+	if importer_exists && slice.contains(vm.gc.import_stack[:], vm.path) {
+		vm_panic(vm, "Cannot perform a cyclic import.")
+		return .INTERPRET_RUNTIME_ERROR
+	}
+
+	append(&vm.gc.import_stack, vm.path)
+
 	/* Start the stopwatch. */
 	sw: time.Stopwatch
 	if config.record_time {
@@ -636,7 +788,7 @@ interpret :: proc(vm: ^VM, gc: ^GC, source: string) -> InterpretResult {
 	vm_push(vm, obj_val(closure))
 	call(vm, closure, 0) // The script itself is a function, so call it.
 
-	return run(vm)
+	return run(vm, importer)
 }
 
 /* Push a value onto the stack. */
@@ -766,13 +918,46 @@ invoke_from_class :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString, arg_count
 	return call(vm, as_closure(method), arg_count)
 }
 
-/* Invoke a method. */
+/* Invoke a method or a function in a module. */
 @(private = "file")
 invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 	receiver := vm_peek(vm, arg_count)
 
+	if is_module(receiver) {
+		module := as_module(receiver)
+
+		value: Value;ok: bool
+
+		if value, ok = table_get(&module.values, name); ok {
+			args := make([dynamic]Value)
+			defer delete(args)
+
+			for i in 0 ..< int(arg_count) {
+				append(&args, vm_pop(vm)) /* Temporarily pop off all the args. */
+			}
+
+			vm_pop(vm) /* Module. */
+			vm_push(vm, value) /* Push the invoked function on the stack. */
+
+			#reverse for a in args {
+				vm_push(vm, a) /* Push back all the args on the stack. */
+			}
+
+			return call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count))
+		} else {
+			panic_str := fmt.tprintf(
+				`Function '%s' does not exist on module '%s'.
+       If this module is a file, you may have forgotten the pub keyword.`,
+				name.chars,
+				module.name.chars,
+			)
+			vm_panic(vm, panic_str)
+			return false
+		}
+	}
+
 	if !is_instance(receiver) {
-		vm_panic(vm, "Only instances have methods.")
+		vm_panic(vm, "Only methods and module functions can be invoked.")
 		return false
 	}
 
@@ -890,6 +1075,7 @@ concatenate :: proc(vm: ^VM) {
 	vm_push(vm, obj_val((^Obj)(result)))
 }
 
+/* Free all allocated `Obj`s. */
 free_objects :: proc(gc: ^GC) {
 	object := gc.objects
 

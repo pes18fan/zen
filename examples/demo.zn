@@ -1,3 +1,8 @@
+// Some builtin modules, with many useful functions.
+use "list"
+use "math"
+use "string"
+
 // Hello world! (This is a comment btw)
 print "Hello, world!"
 print "\n" // The print statement does not append a newline by default.
@@ -16,9 +21,8 @@ val
     is_nice = true,
     is_not_nice = false
 
-// Some convenience functions are available in the global scope.
-puts(upcase("hello")) //=> "HELLO"
-puts(ln(2)) //=> 0.693
+puts(string.upcase("hello")) //=> "HELLO"
+puts(math.ln(2)) //=> 0.693
 
 // Note that the puts() native function appends a newline unlike the print
 // statement.
@@ -31,7 +35,7 @@ if false {
     puts("This is supposed to happen")
 }
 
-val a = rand() * 10 |> floor()
+val a = math.rand() * 10 |> math.floor()
 
 switch a {
     0 => puts("a is 0")
@@ -57,8 +61,8 @@ for var i = 0; i < 10; i = i + 1 {
 // Lists.
 val l = [7, 69, 420]
 
-push(l, 27)
-puts(pop(l)) //=> 27
+list.push(l, 27)
+puts(list.pop(l)) //=> 27
 
 for var i = 0; i < len(l); i = i + 1 {
     puts(i)
@@ -96,8 +100,8 @@ val anon = func() {
 // Pipes!
 // Pipes are used to pass expressions to other expressions.
 // For example, the following two lines are equivalent:
-puts(upcase("hello"))
-puts("hello" |> upcase())
+puts(string.upcase("hello"))
+puts("hello" |> string.upcase())
 
 // In a pipeline, any function call implicitly takes the last expression as its
 // first argument.
@@ -106,7 +110,19 @@ puts("69"
     |> parse()
     |> it + 1) //=> 70
 
-// Things to expect in the future (topmost being the most likely):
-// - Modules
-// - Gradual typing
-// - Pattern matching
+// Modules!
+// You can use one of the builtin modules:
+use "time"
+
+time.clock() // Current time in UNIX ms
+
+// You can also import your own files.
+use "./helper.zn"
+
+helper.woo() //=> from a module!
+
+// Note that if you import your own files, to use functions in them they must
+// be explicitly set as public using the `pub` keyword.
+pub func foo() {
+    puts("You can use this from any file!")    
+}

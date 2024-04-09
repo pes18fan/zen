@@ -3,6 +3,7 @@ package zen
 import "core:fmt"
 import "core:mem"
 import "core:os"
+import "core:path/filepath"
 import "core:strings"
 
 VERSION :: "0.0.1-beta"
@@ -18,6 +19,12 @@ Config :: struct {
 	log_gc:           bool,
 	record_time:      bool,
 	repl:             bool,
+
+	/* Path to the running file. */
+	__path:           string,
+
+	/* Directory the running file is in. */
+	__dirname:        string,
 }
 
 config := Config {
@@ -30,11 +37,16 @@ config := Config {
 	log_gc           = false,
 	record_time      = false,
 	repl             = false,
+	__path           = "",
+	__dirname        = "",
 }
 
 /* Fire up a REPL. */
 @(private = "file")
 repl :: proc(vm: ^VM) -> int {
+	vm.name = "REPL"
+	vm.path = "REPL"
+
 	fmt.println("Welcome to zen!")
 	fmt.println("Press 'Ctrl-D' to exit.")
 	buf: [1024]byte
@@ -73,21 +85,38 @@ read_file :: proc(path: string) -> (string, bool) {
 	return string(data[:]), true
 }
 
-/* Run a file. */
-@(private = "file")
-run_file :: proc(vm: ^VM, path: string) -> int {
-	source, ok := read_file(path)
-	defer delete(source)
-	if !ok {return 74}
-	result := interpret(vm, vm.gc, source)
-
-	if result == .INTERPRET_LEX_ERROR do return 65
-	if result == .INTERPRET_COMPILE_ERROR do return 65
-	if result == .INTERPRET_RUNTIME_ERROR do return 70
-
-	return 0
+/* DO NOT USE DIRECTLY, USE ImportingModule INSTEAD */
+ImportingModuleStruct :: struct {
+	path:   string,
+	name:   string,
+	module: ^ObjModule,
 }
 
+/* A module that imports another. It may be nil, so it is set as a union. */
+ImportingModule :: union {
+	ImportingModuleStruct,
+}
+
+/* 
+Run a file.
+This is not private to the file as it is used in the VM for importing modules.
+*/
+run_file :: proc(vm: ^VM, path: string, importer: ImportingModule = nil) -> InterpretResult {
+	source, ok := read_file(path)
+	defer delete(source)
+	if !ok {return .INTERPRET_READ_ERROR}
+
+	vm.path = path
+
+	/* Get the name of the file from the path */
+	vm.name = filepath.short_stem(path)
+
+	result := interpret(vm, vm.gc, source, importer)
+
+	return result
+}
+
+/* Print a help string in `stream`. */
 @(private = "file")
 print_help :: proc(stream: os.Handle) {
 	usage :: `zen <options> <path>`
@@ -118,6 +147,7 @@ print_help :: proc(stream: os.Handle) {
 	fmt.fprintln(stream, options)
 }
 
+/* Print the version message in `stream`. */
 @(private = "file")
 print_version_message :: proc(stream: os.Handle) {
 	color_green(stream, "zen ")
@@ -224,10 +254,30 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		config.repl = true
 		return repl(vm)
 	} else {
-		return run_file(vm, script)
+		config.__path = filepath.join([]string{os.get_current_directory(), script})
+		config.__dirname, _ = filepath.split(config.__path)
+		defer delete(config.__path)
+
+		result := run_file(vm, script)
+
+		switch result {
+		case .INTERPRET_LEX_ERROR:
+			return 65
+		case .INTERPRET_COMPILE_ERROR:
+			return 65
+		case .INTERPRET_RUNTIME_ERROR:
+			return 70
+		case .INTERPRET_READ_ERROR:
+			return 74
+		case .INTERPRET_OK:
+			return 0
+		case:
+			return 0
+		}
 	}
 }
 
+/* The entry point for the compiler. */
 main :: proc() {
 	status: int
 	defer os.exit(status)
@@ -262,6 +312,7 @@ main :: proc() {
 
 	vm.gc.init_string = copy_string(vm.gc, "init")
 
+	init_builtin_modules(&gc)
 	init_natives(&gc)
 
 	status = parse_argv(&vm)

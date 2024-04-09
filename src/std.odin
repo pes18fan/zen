@@ -3,46 +3,81 @@ package zen
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
-import "core:time"
 import "core:os"
 import "core:strconv"
 import "core:strings"
+import "core:time"
 
-// All the native functions in zen are in this file.
+BuiltinModule :: enum {
+	TIME,
+	MATH,
+	OS,
+	STRING,
+	LIST,
+}
 
+ModuleFunction :: struct {
+	name:     string,
+	function: NativeFn,
+	arity:    int,
+}
+
+/* Initialize the list of builtin modules. */
+init_builtin_modules :: proc(gc: ^GC) {
+	append(&gc.std_modules, "time", "math", "os", "string", "list")
+}
+
+/* Get all the information required to import a builtin module into the global
+ * scope. */
+get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunction {
+	module_functions := make([dynamic]ModuleFunction)
+
+	#partial switch module_name {
+	case .TIME:
+		{
+			append(&module_functions, ModuleFunction{"clock", clock_native, 0})
+		}
+	case .MATH:
+		{
+			append(&module_functions, ModuleFunction{"sqrt", sqrt_native, 1})
+			append(&module_functions, ModuleFunction{"ln", ln_native, 1})
+			append(&module_functions, ModuleFunction{"pow", pow_native, 2})
+			append(&module_functions, ModuleFunction{"floor", floor_native, 1})
+			append(&module_functions, ModuleFunction{"ceil", ceil_native, 1})
+			append(&module_functions, ModuleFunction{"round", round_native, 1})
+			append(&module_functions, ModuleFunction{"abs", abs_native, 1})
+			append(&module_functions, ModuleFunction{"rand", rand_native, 0})
+		}
+	case .OS:
+		{
+			append(&module_functions, ModuleFunction{"panic", panic_native, 1})
+		}
+	case .LIST:
+		{
+			append(&module_functions, ModuleFunction{"push", push_native, 2})
+			append(&module_functions, ModuleFunction{"pop", pop_native, 1})
+		}
+	case .STRING:
+		{
+			append(&module_functions, ModuleFunction{"chomp", chomp_native, 1})
+			append(&module_functions, ModuleFunction{"replace", replace_native, 3})
+			append(&module_functions, ModuleFunction{"upcase", upcase_native, 1})
+			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
+			append(&module_functions, ModuleFunction{"reverse", reverse_native, 1})
+		}
+	}
+
+	return module_functions[:]
+}
+
+/* These are the functions available in the global scope. Only five functions
+ * are available as such. The rest are in their corresponding modules. */
 init_natives :: proc(gc: ^GC) {
-	// Define native functions
-	// time
-	define_native(gc, "clock", clock_native, arity = 0)
-
-	// numbers and math
-	define_native(gc, "sqrt", sqrt_native, arity = 1)
-	define_native(gc, "ln", ln_native, arity = 1)
-	define_native(gc, "pow", pow_native, arity = 2)
-	define_native(gc, "floor", floor_native, arity = 1)
-	define_native(gc, "ceil", ceil_native, arity = 1)
-	define_native(gc, "round", round_native, arity = 1)
-	define_native(gc, "abs", abs_native, arity = 1)
-    define_native(gc, "rand", rand_native, arity = 0)
-
-	// errors
-	define_native(gc, "panic", panic_native, arity = 1)
-
 	// io
 	define_native(gc, "puts", puts_native, arity = 1)
 	define_native(gc, "gets", gets_native, arity = 0)
 
-	// lists
-	define_native(gc, "push", push_native, arity = 2)
-	define_native(gc, "pop", pop_native, arity = 1)
-
-	// strings
-	define_native(gc, "chomp", chomp_native, arity = 1)
 	define_native(gc, "len", len_native, arity = 1)
-	define_native(gc, "replace", replace_native, arity = 3)
-	define_native(gc, "upcase", upcase_native, arity = 1)
-	define_native(gc, "downcase", downcase_native, arity = 1)
-	define_native(gc, "reverse", reverse_native, arity = 1)
 
 	// types and conversion
 	define_native(gc, "str", str_native, arity = 1)
@@ -124,7 +159,11 @@ sqrt_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 /* Find the natural logarithm of a number. */
 ln_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_number(args[0]) {
-		vm_panic(vm, "Argument for 'ln' must be a positive real number, not %v.", type_of_value(args[0]))
+		vm_panic(
+			vm,
+			"Argument for 'ln' must be a positive real number, not %v.",
+			type_of_value(args[0]),
+		)
 	}
 
 	n := as_number(args[0])
@@ -189,7 +228,7 @@ abs_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 /* Generate a random double floating point value in the interval [0, 1). */
 rand_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-    return number_val(rand.float64()), true
+	return number_val(rand.float64()), true
 }
 
 /* Trim whitespace from both sides of a string. */
@@ -208,7 +247,7 @@ len_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		vm_panic(vm, "Cannot get length of a %v.", type_of_value(args[0]))
 		return nil_val(), false
 	}
-	
+
 	if is_string(args[0]) {
 		return number_val(f64(as_string(args[0]).len)), true
 	} else {
@@ -324,7 +363,7 @@ pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	list := as_list(args[0])
-	
+
 	if list.items.count == 0 {
 		vm_panic(vm, "Cannot pop an empty list.")
 		return nil_val(), false

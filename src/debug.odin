@@ -2,12 +2,14 @@ package zen
 
 import "core:fmt"
 
+/* Print debug info for a simple instruction. */
 @(private = "file")
 simple_instruction :: proc(name: string, offset: int) -> int {
 	fmt.eprintf("%s\n", name)
 	return offset + 1
 }
 
+/* Print debug info for an instruction with one byte operand. */
 @(private = "file")
 byte_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	slot := c.code[offset + 1]
@@ -15,6 +17,7 @@ byte_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	return offset + 2
 }
 
+/* Print debug info for a jump instruction. */
 @(private = "file")
 jump_instruction :: proc(name: string, sign: int, c: ^Chunk, offset: int) -> int {
 	jump := int(c.code[offset + 1]) << 8
@@ -23,6 +26,7 @@ jump_instruction :: proc(name: string, sign: int, c: ^Chunk, offset: int) -> int
 	return offset + 3
 }
 
+/* Print debug info for an instruction that loads a constant. */
 @(private = "file")
 constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
@@ -32,6 +36,16 @@ constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	return offset + 2
 }
 
+/* Print debug info for a user-defined module import. */
+@(private = "file")
+user_module_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
+	module_name := stringify_value(c.constants.values[c.code[offset + 1]])
+	module_path := stringify_value(c.constants.values[c.code[offset + 2]])
+	fmt.eprintf("%-16s (module '%s', path '%s')\n", name, module_name, module_path)
+	return offset + 3
+}
+
+/* Print debug info for the OP_INVOKE opcode. */
 @(private = "file")
 invoke_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
@@ -135,7 +149,11 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 			constant := c.code[offset]
 			fmt.eprintf("%-16s %4d ", "OP_CLOSURE", constant)
 			fmt.eprintf(stringify_value(c.constants.values[constant]))
+			offset += 1
+			public := bool(c.code[offset])
+			fmt.eprintf(", %s", public ? "public" : "private")
 			fmt.eprintln()
+			offset += 1
 
 			function := as_function(c.constants.values[constant])
 			for j in 0 ..< function.upvalue_count {
@@ -164,6 +182,10 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_INHERIT", offset)
 	case .OP_METHOD:
 		return constant_instruction("OP_METHOD", c, offset)
+	case .OP_MODULE_BUILTIN:
+		return constant_instruction("OP_MODULE_BUILTIN", c, offset)
+	case .OP_MODULE_USER:
+		return user_module_instruction("OP_MODULE_USER", c, offset)
 	case:
 		fmt.eprintf("Unknown opcode %d\n", instruction)
 		return offset + 1

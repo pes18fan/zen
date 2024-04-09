@@ -1,0 +1,11 @@
+pub func a() {
+    return "a"
+}
+
+pub func b(a) {
+    return a + "b"
+}
+
+pub func c(b) {
+    return b + "c"
+}

@@ -2,6 +2,8 @@ package zen
 
 import "core:fmt"
 import "core:os"
+import "core:path/filepath"
+import "core:slice"
 import "core:strconv"
 import "core:strings"
 
@@ -17,7 +19,10 @@ U8_COUNT :: 256
 /* Number of sixteen bit unsigned integers in existence. */
 U16_COUNT :: 65536
 
-/* The language parser. */
+/*
+The language parser. Consists of pretty much every value necessary during the
+compilation process.
+*/
 Parser :: struct {
 	tokens:           []Token,
 	curr_idx:         int,
@@ -83,7 +88,11 @@ Local :: struct {
 	name:             Token,
 	depth:            int,
 	final:            Variability,
+
+	/* Whether the local variable is captured in a closure. */
 	is_captured:      bool,
+
+	/* Whether the variable is a loop variable of a `for` loop. */
 	is_loop_variable: bool,
 }
 
@@ -120,6 +129,11 @@ FunctionType :: enum {
 	SCRIPT,
 }
 
+ModuleType :: enum {
+	BUILTIN,
+	USER,
+}
+
 /*
 A struct that holds variables and scope info.
 Each Compiler struct is associated with a function, and each also points back
@@ -147,6 +161,8 @@ ClassCompiler :: struct {
 	has_superclass: bool,
 }
 
+/* Returns the chunk that is currently being compiled. This function is just
+for convenience. */
 current_chunk :: proc(p: ^Parser) -> ^Chunk {
 	return &p.current_compiler.function.chunk
 }
@@ -182,8 +198,7 @@ error_at_current :: proc(p: ^Parser, message: string, args: ..any) {
 }
 
 /*
-Advance to the next token. Reports an error if that token is an
-ILLEGAL token variant.
+Advance to the next token.
 */
 @(private = "file")
 advance :: proc(p: ^Parser) #no_bounds_check {
@@ -208,6 +223,7 @@ consume :: proc(p: ^Parser, type: TokenType, message: string) {
 	error_at_current(p, message)
 }
 
+/* Wrapper over `consume()` to consume a semicolon with a certain message. */
 @(private = "file")
 consume_semi :: proc(p: ^Parser, message: string) {
 	consume(p, .SEMI, fmt.tprintf("Expect ';' after %s.", message))
@@ -499,6 +515,7 @@ call :: proc(p: ^Parser, can_assign: bool) {
 	emit_bytes(p, byte(OpCode.OP_CALL), arg_count)
 }
 
+/* Subscript a list to get a value out of it. */
 @(private = "file")
 subscript :: proc(p: ^Parser, can_assign: bool) {
 	expression(p)
@@ -507,11 +524,12 @@ subscript :: proc(p: ^Parser, can_assign: bool) {
 	emit_opcode(p, .OP_SUBSCRIPT)
 }
 
+/* Access or set a instance's property, or access a value from a module. */
 @(private = "file")
 dot :: proc(p: ^Parser, can_assign: bool) {
-	instance := p.tokens[p.curr_idx - 3]
-	possible_local := resolve_local(p, p.current_compiler, &instance)
-	possible_upvalue := resolve_upvalue(p, p.current_compiler, &instance)
+	receiver := p.tokens[p.curr_idx - 3]
+	possible_local := resolve_local(p, p.current_compiler, &receiver)
+	possible_upvalue := resolve_upvalue(p, p.current_compiler, &receiver)
 	set_op: OpCode
 
 	if possible_local != -1 {
@@ -530,14 +548,14 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		if set_op == .OP_SET_LOCAL {
 			for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
 				local := &p.current_compiler.locals[i]
-				if identifiers_equal(&instance, &local.name) && local.final == .FINAL {
+				if identifiers_equal(&receiver, &local.name) && local.final == .FINAL {
 					error(p, "Can only set a final variable once.")
 				}
 			}
 		}
 
 		if set_op == .OP_SET_GLOBAL {
-			global_o_str := copy_string(p.gc, instance.lexeme)
+			global_o_str := copy_string(p.gc, receiver.lexeme)
 			value: Value;ok: bool
 
 			if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
@@ -553,8 +571,16 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		emit_opcode(p, .OP_SET_PROPERTY)
 		emit_byte(p, name)
 	} else if match(p, .LPAREN) {
+		/* Check if the receiver is a module. */
+		arg_count: u8 = 0
+
+		if p.pipeline_state == .ACTIVE {
+			emit_opcode(p, .OP_GET_IT)
+			arg_count += 1
+		}
+
 		/* We have a method call here, so we compile it like a function call. */
-		arg_count := argument_list(p)
+		arg_count += argument_list(p)
 		emit_opcode(p, .OP_INVOKE)
 		emit_byte(p, name)
 		emit_byte(p, arg_count)
@@ -667,7 +693,11 @@ concatenate_byte :: proc(a: string, b: byte) -> string {
 
 /*
 Translate escape sequences in a string literal.
-This function allocates a string, but doesn't take ownership of the input.
+This function allocates a string, but doesn't take ownership of the input; therefore
+the input will still need to be freed if necessary. In this compiler, it is used
+to create an escape-sequenced string out of a slice of the program input itself,
+which should NOT be freed until the program ends; therefore it is not necessary
+for it to take ownership.
 
 So far, only the newline and tab sequences are supported.
 */
@@ -770,12 +800,14 @@ variable :: proc(p: ^Parser, can_assign: bool) {
 	named_variable(p, p.previous, can_assign)
 }
 
-/* Create a synthetic token. */
+/* Create a synthetic token i.e. a token that doesn't actually exist in the
+ * source code. Used for `super` and `this`, to create a variable out of them. */
 @(private = "file")
 synthetic_token :: proc(text: string) -> Token {
 	return Token{lexeme = text}
 }
 
+/* Parse the `super` keyword. */
 @(private = "file")
 super_ :: proc(p: ^Parser, can_assign: bool) {
 	if p.current_class == nil {
@@ -806,6 +838,7 @@ super_ :: proc(p: ^Parser, can_assign: bool) {
 	}
 }
 
+/* Parse the `this` keyword. */
 @(private = "file")
 this_ :: proc(p: ^Parser, can_assign: bool) {
 	if p.current_class == nil {
@@ -819,6 +852,7 @@ this_ :: proc(p: ^Parser, can_assign: bool) {
 	variable(p, can_assign = false)
 }
 
+/* Parse the `it` keyword, used in pipelines. */
 @(private = "file")
 it_ :: proc(p: ^Parser, can_assign: bool) {
 	if p.pipeline_state == .NONE {
@@ -880,12 +914,13 @@ rules: []ParseRule = {
 	TokenType.AND           = ParseRule{nil, and_, .AND},
 	TokenType.BREAK         = ParseRule{nil, nil, .NONE},
 	TokenType.ELSE          = ParseRule{nil, nil, .NONE},
+	TokenType.EXPORT        = ParseRule{nil, nil, .NONE},
 	TokenType.FALSE         = ParseRule{literal, nil, .NONE},
 	TokenType.VAL           = ParseRule{nil, nil, .NONE},
 	TokenType.FOR           = ParseRule{nil, nil, .NONE},
 	TokenType.FUNC          = ParseRule{lambda, nil, .NONE},
 	TokenType.IF            = ParseRule{nil, nil, .NONE},
-	TokenType.IMPORT        = ParseRule{nil, nil, .NONE},
+	TokenType.USE           = ParseRule{nil, nil, .NONE},
 	TokenType.IN            = ParseRule{nil, nil, .NONE},
 	TokenType.IT            = ParseRule{it_, nil, .NONE},
 	TokenType.VAR           = ParseRule{nil, nil, .NONE},
@@ -893,6 +928,7 @@ rules: []ParseRule = {
 	TokenType.NOT           = ParseRule{unary, nil, .NONE},
 	TokenType.OR            = ParseRule{nil, or_, .OR},
 	TokenType.PRINT         = ParseRule{nil, nil, .NONE},
+	TokenType.PUB           = ParseRule{nil, nil, .NONE},
 	TokenType.RETURN        = ParseRule{nil, nil, .NONE},
 	TokenType.SUPER         = ParseRule{super_, nil, .NONE},
 	TokenType.THIS          = ParseRule{this_, nil, .NONE},
@@ -935,6 +971,14 @@ identifier_constant :: proc(p: ^Parser, name: ^Token) -> u8 {
 	return make_constant(p, obj_val(copy_string(p.gc, name.lexeme)))
 }
 
+/* Similar to identifier_constant, but you can pass in just a string.
+ * Used to implement the modules, as module names are STRING tokens rather than
+ * IDENT tokens. */
+@(private = "file")
+string_constant :: proc(p: ^Parser, text: string) -> u8 {
+	return make_constant(p, obj_val(copy_string(p.gc, text)))
+}
+
 /* Check if two idents are equal. */
 @(private = "file")
 identifiers_equal :: proc(a: ^Token, b: ^Token) -> bool {
@@ -962,6 +1006,7 @@ resolve_local :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
 	return -1
 }
 
+/* Add an upvalue to the function. */
 @(private = "file")
 add_upvalue :: proc(p: ^Parser, compiler: ^Compiler, index: u8, is_local: bool) -> int {
 	upvalue_count := compiler.function.upvalue_count
@@ -986,6 +1031,8 @@ add_upvalue :: proc(p: ^Parser, compiler: ^Compiler, index: u8, is_local: bool) 
 	return compiler.function.upvalue_count
 }
 
+/* Find an upvalue in the function's local scope and scopes above it, and return
+ * the index to its name in the constant table. */
 @(private = "file")
 resolve_upvalue :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
 	/* Base case 1: We reached the end of the compiler stack, so the name is probably in the
@@ -1120,7 +1167,10 @@ define_variable :: proc(p: ^Parser, global: byte) {
 	emit_bytes(p, byte(OpCode.OP_DEFINE_GLOBAL), global)
 }
 
-/* Parse function arguments. */
+/* 
+Parse function arguments.
+TODO: Allow for more than 255 arguments.
+*/
 @(private = "file")
 argument_list :: proc(p: ^Parser) -> u8 {
 	arg_count: u8 = 0
@@ -1143,7 +1193,7 @@ argument_list :: proc(p: ^Parser) -> u8 {
 	return arg_count
 }
 
-/* Parse any expression. */
+/* Parse any expression. Also handles pipelines. */
 @(private = "file")
 expression :: proc(p: ^Parser) {
 	for i := 0;; i += 1 {
@@ -1177,8 +1227,9 @@ block :: proc(p: ^Parser) {
 	consume(p, .RSQUIRLY, "Expect '}' after block.")
 }
 
+/* Parse a function, either a named or anonymous, including arrow functions. */
 @(private = "file")
-function :: proc(p: ^Parser, type: FunctionType) {
+function :: proc(p: ^Parser, type: FunctionType, public: bool = false) {
 	compiler: Compiler
 	init_compiler(&compiler, p, type)
 
@@ -1221,6 +1272,10 @@ function :: proc(p: ^Parser, type: FunctionType) {
 
 	function := end_compiler(p)
 	emit_bytes(p, byte(OpCode.OP_CLOSURE), make_constant(p, obj_val(function)))
+
+	/* Emit a final byte indicating whether the function should be available to
+     * other files importing the file it is in. */
+	emit_byte(p, 1 if public else 0)
 
 	/* OP_CLOSURE has a variably sized encoding. For each upvalue captured by
 	the closure, there are two single-byte operands: a boolean indicating
@@ -1358,15 +1413,70 @@ class_declaration :: proc(p: ^Parser) {
 	p.current_class = p.current_class.enclosing
 }
 
+@(private = "file")
+module_declaration :: proc(p: ^Parser) {
+	mod_type: ModuleType
+	consume(p, .STRING, "Expect module path.")
+
+	path := strings.trim(p.previous.lexeme[1:len(p.previous.lexeme) - 1], " ")
+	abs_path := filepath.join([]string{config.__dirname, path})
+
+	// look for the path in the stdlib, if not present look for a file at the path
+	found := slice.contains(p.gc.std_modules[:], path)
+	if found {
+		mod_type = .BUILTIN
+	} else {
+		found := os.exists(abs_path)
+		if !found {
+			error(p, fmt.tprintf("Module '%s' not found.", abs_path))
+		}
+
+		mod_type = .USER
+	}
+
+	mod_name: string
+	switch mod_type {
+	case .BUILTIN:
+		{
+			mod_name = path
+		}
+	case .USER:
+		{
+			mod_name = filepath.short_stem(path)
+		}
+	}
+
+	name_constant := string_constant(p, mod_name)
+
+	/* Standard library modules and user modules are implemented differently, so
+       we need to emit the correct opcode. */
+	switch mod_type {
+	case .BUILTIN:
+		{
+			emit_opcode(p, .OP_MODULE_BUILTIN)
+			emit_byte(p, name_constant)
+		}
+	case .USER:
+		{
+			/* Provide the name of the module and the path as bytecode args. */
+			emit_opcode(p, .OP_MODULE_USER)
+			emit_byte(p, name_constant)
+			emit_byte(p, string_constant(p, abs_path))
+		}
+	}
+
+	define_variable(p, name_constant)
+}
+
 /* 
 Parse a function declaration. 
 Functions are first class, so they are parsed like variables.
 */
 @(private = "file")
-func_declaration :: proc(p: ^Parser) {
+func_declaration :: proc(p: ^Parser, public: bool = false) {
 	global := parse_variable(p, "Expect function name.", .VAR)
 	mark_initialized(p)
-	function(p, .FUNCTION)
+	function(p, .FUNCTION, public)
 	define_variable(p, global)
 }
 
@@ -1415,15 +1525,19 @@ expression_statement :: proc(p: ^Parser) {
 	if config.repl {
 		/* If in a repl session, print out the expression's value.
 		 * The print instruction also pops off the value at the top of the
-		 * stack, so no need to add another pop instruction in this case. */
-		emit_constant(p, obj_val(copy_string(p.gc, "=> ")))
-		emit_opcode(p, .OP_PRINT)
+		 * stack, so no need to add another pop instruction in this case.
+         * This is only done when the program is at the top level i.e. the value
+         * of current_compiler is SCRIPT. */
+		if p.current_compiler.type == .SCRIPT {
+			emit_constant(p, obj_val(copy_string(p.gc, "=> ")))
+			emit_opcode(p, .OP_PRINT)
 
-		emit_opcode(p, .OP_PRINT)
+			emit_opcode(p, .OP_PRINT)
 
-		/* Add a newline, since OP_PRINT does not append a newline. */
-		emit_constant(p, obj_val(copy_string(p.gc, "\n")))
-		emit_opcode(p, .OP_PRINT)
+			/* Add a newline, since OP_PRINT does not append a newline. */
+			emit_constant(p, obj_val(copy_string(p.gc, "\n")))
+			emit_opcode(p, .OP_PRINT)
+		}
 	} else {
 		emit_pop(p)
 	}
@@ -1602,7 +1716,7 @@ switch_statement :: proc(p: ^Parser) {
 
 	/* If there is no switch variable, the value to switch on is assumed to
        be the boolean value true. This is so that the switch statement can
-       be used like else if */
+       be used like else if. */
 	if match(p, .LSQUIRLY) {
 		emit_opcode(p, .OP_TRUE)
 	} else {
@@ -1692,6 +1806,7 @@ while_statement :: proc(p: ^Parser) {
 	end_loop(p)
 }
 
+/* Parse a for loop. */
 @(private = "file")
 for_statement :: proc(p: ^Parser) {
 	begin_scope(p)
@@ -1767,7 +1882,8 @@ synchronize :: proc(p: ^Parser) {
 	}
 }
 
-/* Parse a declaration. */
+/* Parse a declaration of some value. Includes variables, classes, functions
+ * and module imports. */
 @(private = "file")
 declaration :: proc(p: ^Parser) {
 	switch {
@@ -1775,8 +1891,17 @@ declaration :: proc(p: ^Parser) {
 		var_declaration(p)
 	case match(p, .CLASS):
 		class_declaration(p)
+	case match(p, .USE):
+		module_declaration(p)
 	case match(p, .FUNC):
 		func_declaration(p)
+	case match(p, .PUB):
+		{
+			if !match(p, .FUNC) {
+				error(p, "Only functions can be set as public.")
+			}
+			func_declaration(p, public = true)
+		}
 	case:
 		statement(p)
 	}
@@ -1817,6 +1942,7 @@ statement :: proc(p: ^Parser) {
 	}
 }
 
+/* Restore the GC to its previous state, i.e. change the roots. */
 restore_gc :: proc(p: ^Parser) {
 	p.gc.mark_roots_arg = p.prev_mark_roots
 }

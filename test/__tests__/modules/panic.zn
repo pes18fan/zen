@@ -1,0 +1,3 @@
+use "os"
+
+os.panic("when the") // ERR: when the

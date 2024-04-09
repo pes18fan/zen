@@ -1,3 +1,5 @@
-puts(sqrt(16)) // expect: 4
-puts(sqrt(9)) // expect: 3
-puts(sqrt(2.25)) // expect: 1.500
+use "math"
+
+puts(math.sqrt(16)) // expect: 4
+puts(math.sqrt(9)) // expect: 3
+puts(math.sqrt(2.25)) // expect: 1.500

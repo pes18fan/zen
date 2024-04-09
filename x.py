@@ -49,6 +49,7 @@ def clean():
     print("cleaned build artifacts.")
 
 def generate_docs():
+    os.makedirs("doc/", exist_ok=True)
     with open("doc/docs.txt", "w+") as doc_file:
         try:
             subprocess.run(f"{OC} doc src/".split(), stdout=doc_file, 

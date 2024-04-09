@@ -24,6 +24,10 @@
                     "match": "\\b(print)\\b"
                     "name": "support.function.builtin.zen",
                 },
+                {
+                    "match": "\\b(use)\\b",
+                    "name": "keyword.other.zen"
+                }
             ]
         },
         "comments": {
@@ -205,6 +209,14 @@
                 {
                     "name": "punctuation.terminator.zen",
                     "match": ";"
+                },
+                {
+                    "name": "punctuation.section.array.begin.zen",
+                    "match": "\\["
+                },
+                {
+                    "name": "punctuation.section.array.end.zen",
+                    "match": "\\]"
                 }
             ]
         },

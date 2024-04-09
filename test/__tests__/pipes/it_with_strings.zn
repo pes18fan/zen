@@ -1,3 +1,5 @@
+use "string"
+
 print "hello"
-    |> upcase()
+    |> string.upcase()
     |> it + ", world" // expect: HELLO, world

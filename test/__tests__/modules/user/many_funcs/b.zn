@@ -1,0 +1,11 @@
+pub func foo() {
+    puts("bar")
+}
+
+pub func bar() {
+    puts("baz")
+}
+
+pub func baz() {
+    puts("plop")
+}

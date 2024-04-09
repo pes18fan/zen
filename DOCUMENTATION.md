@@ -75,7 +75,9 @@ selected value and an assortment of cases, from top to bottom. If a case matches
 the code associated with it is executed and the statement exits. 
 
 ```
-var a = rand() * 10 |> floor()
+use "math"
+
+var a = math.rand() * 10 |> math.floor()
 
 switch a {
     0 => print "zero!"
@@ -210,8 +212,9 @@ of it.
 list[0] //=> 1
 ```
 
-The `push()` and `pop()` native functions can be used to add and remove items
-from a list, and the `len()` function can be used to get the length of the list.
+The `push()` and `pop()` native functions in the `list` module can be used to 
+add and remove items from a list, and the global `len()` native function can be used 
+to get the length of the list.
 
 ## Classes
 
@@ -286,16 +289,69 @@ val rover = Dog("Rover")
 rover.bark() // Rover says woof!
 ```
 
-## Standard library functions
+## Modules
 
-zen has several functions that are present for you to use in the standard library.
-These include the following:
+Modules can be imported using the `use` keyword followed by a string path. Modules
+are of two types, builtin and user-defined modules.
 
-### time
+### Builtin modules
+
+Builtin modules are a set of modules built into the language itself with various
+useful functions. A builtin module can be imported by simply using `use "mod"`
+where `mod` is the name of the module. Any function in the builtin module can be
+accessed and called using dot notation like with instances.
+
+```zen
+import "time"
+
+puts(time.clock())
+```
+
+Further information on what builtin modules are present is provided below.
+
+### User-defined modules
+
+User-defined modules basically mean a file of code that can be imported with
+`use`. It will run the file and package all of its functions prefixed with the
+`pub` keyword within the imported file's name.
+
+```zen
+// a.zn
+use "./b.zn"
+
+b.foo()
+```
+
+```zen
+// b.zn
+pub func foo() {
+    puts("bar")
+}
+```
+
+This will print out "bar".
+
+Functions without the `pub` keyword will NOT be imported when a file is `use`d.
+
+## Standard library
+
+zen's standard library contains various modules and some globally available functions
+for you to use.
+
+### Functions in the global scope
+
+- `puts(x)`: Print an expression to stdin and append a newline.
+- `gets()`: Read a line from stdin.
+- `len(s)`: Get the length of a string or list `s`.
+- `typeof(x)`: Get the type of any expression as a string.
+- `str(x)`: Convert any value into a string.
+- `parse(s)`: Attempt to parse a string `s` into a floating point number.
+
+### module `time`
 
 - `clock()`: Get the current UNIX time in seconds.
 
-### math
+### module `math`
 
 - `sqrt(x)`: Find the square root of a positive real number `x`.
 - `ln(x)`: Find the natural log of a positive real number `x`.
@@ -306,32 +362,19 @@ These include the following:
 - `abs(x)`: Find the absolute value of a real number.
 - `rand()`: Create a random double in the interval [0, 1).
 
-### errors
+### module `os`
 
 - `panic(s)`: Crash the program with a message `s`.
 
-### io
-
-- `puts(x)`: Print an expression to stdin and append a newline.
-- `gets()`: Read a line from stdin.
-
-### strings
+### module `string`
 
 - `chomp(s)`: Trim whitespace from both sides of a string `s`.
-- `len(s)`: Get the length of a string or list `s`.
 - `replace(s, o, n)`: Replace all instances of a substring `o` in a string `s` with the substring `n`.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
 
-### lists
+### module `list`
 
-- `len(l)`: Get the length of a list or string `l`.
 - `push(l, i)`: Add an item `i` to the end of the list `l`.
 - `pop(l)`: Get the last item of the list `l` after removing it from the list.
-
-### types and conversion
-
-- `typeof(x)`: Get the type of any expression.
-- `str(x)`: Convert any value into a string.
-- `parse(s)`: Attempt to parse a string `s` into a floating point number.
