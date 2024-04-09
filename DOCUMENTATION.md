@@ -308,7 +308,27 @@ Further information on what builtin modules are present is provided below.
 
 ### User-defined modules
 
-(TODO)
+User-defined modules basically mean a file of code that can be imported with
+`use`. It will run the file and package all of its functions prefixed with the
+`pub` keyword within the imported file's name.
+
+```zen
+// a.zn
+use "./b.zn"
+
+b.foo()
+```
+
+```zen
+// b.zn
+pub func foo() {
+    puts("bar")
+}
+```
+
+This will print out "bar".
+
+> NOTE: `pub` keyword hasn't been implemented yet
 
 ## Standard library
 
