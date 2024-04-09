@@ -1331,7 +1331,7 @@ arrow_function :: proc(p: ^Parser, anonymous: bool) {
 Parse a class declaration.
 */
 @(private = "file")
-class_declaration :: proc(p: ^Parser) {
+class_declaration :: proc(p: ^Parser, public: bool = false) {
 	consume(p, .IDENT, "Expect class name.")
 
 	/* The class name is captured to push it back on the stack later on while
@@ -1343,6 +1343,7 @@ class_declaration :: proc(p: ^Parser) {
 	declare_variable(p, .VAR) /* Classes are reassignable, subject to change. */
 
 	emit_opcode(p, .OP_CLASS)
+	emit_byte(p, 1 if public else 0)
 	emit_byte(p, name_constant)
 	define_variable(p, name_constant)
 
@@ -1897,10 +1898,13 @@ declaration :: proc(p: ^Parser) {
 		func_declaration(p)
 	case match(p, .PUB):
 		{
-			if !match(p, .FUNC) {
-				error(p, "Only functions can be set as public.")
+			if match(p, .FUNC) {
+				func_declaration(p, public = true)
+			} else if match(p, .CLASS) {
+				class_declaration(p, public = true)
+			} else {
+				error(p, "Only functions or classes can be set as public.")
 			}
-			func_declaration(p, public = true)
 		}
 	case:
 		statement(p)

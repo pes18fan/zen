@@ -36,6 +36,18 @@ constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	return offset + 2
 }
 
+@(private = "file")
+class_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
+	constant := c.code[offset + 1]
+	public := bool(c.code[offset + 1])
+	fmt.eprintf("%-16s %4d '", name, constant)
+	fmt.eprintf(stringify_value(c.constants.values[constant]))
+	fmt.eprintf("'")
+	fmt.eprintf(", %s", public ? "public" : "private")
+	fmt.eprintf("\n")
+	return offset + 3
+}
+
 /* Print debug info for a user-defined module import. */
 @(private = "file")
 user_module_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
@@ -177,7 +189,7 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_RETURN:
 		return simple_instruction("OP_RETURN", offset)
 	case .OP_CLASS:
-		return constant_instruction("OP_CLASS", c, offset)
+		return class_instruction("OP_CLASS", c, offset)
 	case .OP_INHERIT:
 		return simple_instruction("OP_INHERIT", offset)
 	case .OP_METHOD:

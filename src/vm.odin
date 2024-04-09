@@ -357,7 +357,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 						break /* Step out of the switch statement. */
 					} else {
 						panic_str := fmt.tprintf(
-							`Function '%s' does not exist on module '%s'.
+							`Value '%s' does not exist on module '%s'.
        If this module is a file, you may have forgotten the pub keyword.`,
 							name.chars,
 							module.name.chars,
@@ -642,7 +642,19 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_CLASS:
 			{
-				vm_push(vm, obj_val(new_class(vm.gc, read_string(frame))))
+				public := bool(read_byte(frame))
+				name := read_string(frame)
+
+				vm_push(vm, obj_val(new_class(vm.gc, name)))
+
+				/* If the current file is being imported AND the class being
+                 * compiled is set as public with the `pub` keyword, add the 
+                 * declared class into the module that's importing it. */
+				importing_module, ok := importer.(ImportingModuleStruct)
+				if public && ok {
+					module := importing_module.module
+					table_set(&module.values, name, vm_peek(vm, 0))
+				}
 			}
 		case .OP_INHERIT:
 			{
@@ -946,7 +958,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 			return call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count))
 		} else {
 			panic_str := fmt.tprintf(
-				`Function '%s' does not exist on module '%s'.
+				`Value '%s' does not exist on module '%s'.
        If this module is a file, you may have forgotten the pub keyword.`,
 				name.chars,
 				module.name.chars,

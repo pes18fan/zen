@@ -312,8 +312,8 @@ Further information on what builtin modules are present is provided below.
 ### User-defined modules
 
 User-defined modules basically mean a file of code that can be imported with
-`use`. It will run the file and package all of its functions prefixed with the
-`pub` keyword within the imported file's name.
+`use`. It will run the file and package all of its functions and classes prefixed
+with the `pub` keyword within the imported file's name.
 
 ```zen
 // a.zn
@@ -332,6 +332,24 @@ pub func foo() {
 This will print out "bar".
 
 Functions without the `pub` keyword will NOT be imported when a file is `use`d.
+
+Classes can similarly be shared between files:
+
+```zen
+// a.zn
+use "b.zn"
+
+b.Foo().bar()
+```
+
+```zen
+// b.zn
+pub class Foo {
+    bar() {
+        puts("baz")
+    }
+}
+```
 
 ## Standard library
 
