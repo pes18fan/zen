@@ -302,7 +302,7 @@ where `mod` is the name of the module. Any function in the builtin module can be
 accessed and called using dot notation like with instances.
 
 ```zen
-import "time"
+use "time"
 
 puts(time.clock())
 ```
