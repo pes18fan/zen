@@ -10,16 +10,15 @@ OC = "odin"
 ProcError = subprocess.CalledProcessError
 DEBUG_FLAGS = """-debug -o:none"""
 
-OUT = ""
-DBG_OUT = ""
+OUT = "zen"
+DBG_OUT = "dzen"
 
 match platform.system():
     case "Windows":
         OUT = "zen.exe"
         DBG_OUT = "dzen.exe"
     case "Linux":
-        OUT = "zen"
-        DBG_OUT = "dzen"
+        pass
 
 
 def create_debug_build():
