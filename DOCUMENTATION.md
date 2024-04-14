@@ -205,7 +205,7 @@ Lists can be created using a list literal:
 var list = [1, 2, 3]
 ```
 
-The list can be subscripted with a positive integer index to get an element out
+The list can be subscripted with a non-negative integer index to get an element out
 of it.
 
 ```zen
