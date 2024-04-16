@@ -1,7 +1,12 @@
 require "open3"
+require "./os"
 
 $bench_folder = "benchmark"
-$compiler = "../bin/rel/zen.exe"
+$compiler = if OS.windows?
+              "../bin/rel/zen.exe"
+            else
+              "../bin/rel/zen"
+            end
 
 $benchmarks = 0
 

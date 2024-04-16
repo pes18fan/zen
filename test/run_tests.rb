@@ -1,8 +1,11 @@
 require "open3"
 
 test_folder = "__tests__"
-$compiler = "../bin/rel/zen.exe"
-
+$compiler = if OS.windows?
+              "../bin/test/zen.exe"
+            else
+              "../bin/test/zen"
+            end
 $tests = 0
 $passed = 0
 $failed = 0

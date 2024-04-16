@@ -1,10 +1,11 @@
 // This benchmark stresses instance creation and initializer calling.
+use "time"
 
 class Foo {
   init() {}
 }
 
-var start = clock()
+var start = time.clock()
 var i = 0
 while (i < 500000) {
   Foo()
@@ -40,4 +41,4 @@ while (i < 500000) {
   i = i + 1
 }
 
-print clock() - start
+print time.clock() - start

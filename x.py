@@ -17,7 +17,7 @@ match platform.system():
     case "Windows":
         OUT = "zen.exe"
         DBG_OUT = "dzen.exe"
-    case "Linux":
+    case "Linux", "Darwin":
         pass
 
 
@@ -167,4 +167,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        exit(0)

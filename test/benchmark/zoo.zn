@@ -1,3 +1,5 @@
+use "time"
+
 class Zoo {
   init() {
     this.aarvark  = 1
@@ -17,7 +19,7 @@ class Zoo {
 
 var zoo = Zoo()
 var sum = 0
-var start = clock()
+var start = time.clock()
 while (sum < 10000000) {
   sum = sum + zoo.ant()
             + zoo.banana()
@@ -28,4 +30,4 @@ while (sum < 10000000) {
 }
 
 puts(sum)
-puts(clock() - start)
+puts(time.clock() - start)

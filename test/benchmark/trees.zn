@@ -1,5 +1,7 @@
 // DRAFT
 // NOTE: Doesn't work for unknown reason
+use "time"
+
 class Tree {
   init(depth) {
     this.depth = depth
@@ -26,10 +28,10 @@ class Tree {
 }
 
 var tree = Tree(8)
-var start = clock()
+var start = time.clock()
 for var i = 0; i < 100; i = i + 1 {
   if tree.walk() != 122068 {
     print "Error"
   }
 }
-print clock() - start
+print time.clock() - start

@@ -1,3 +1,5 @@
+use "time"
+
 class Toggle {
   init(startState) {
     this.state = startState
@@ -29,7 +31,7 @@ class NthToggle < Toggle {
   }
 }
 
-var start = clock()
+var start = time.clock()
 var n = 100000
 var value = true
 var toggle = Toggle(value)
@@ -66,4 +68,4 @@ for var i = 0; i < n; i = i + 1 {
 }
 
 puts(ntoggle.value())
-puts(clock() - start)
+puts(time.clock() - start)

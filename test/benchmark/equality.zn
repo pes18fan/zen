@@ -1,6 +1,8 @@
+use "time"
+
 var i = 0
 
-var loopStart = clock()
+var loopStart = time.clock()
 
 while i < 10000000 {
   i = i + 1
@@ -11,9 +13,9 @@ while i < 10000000 {
   "str"; "str"; "str"; "stru"; "str"; 1; "str"; nil; "str"; true;
 }
 
-var loopTime = clock() - loopStart
+var loopTime = time.clock() - loopStart
 
-var start = clock()
+var start = time.clock()
 
 i = 0
 while i < 10000000 {
@@ -25,7 +27,7 @@ while i < 10000000 {
   "str" == "str"; "str" == "stru"; "str" == 1; "str" == nil; "str" == true;
 }
 
-var elapsed = clock() - start
+var elapsed = time.clock() - start
 puts("loop:")
 puts(loopTime)
 puts("elapsed:")

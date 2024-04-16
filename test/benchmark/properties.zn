@@ -1,4 +1,5 @@
 // This benchmark stresses both field and method lookup.
+use "time"
 
 class Foo {
   init() {
@@ -67,7 +68,7 @@ class Foo {
 }
 
 var foo = Foo()
-var start = clock()
+var start = time.clock()
 var i = 0
 while (i < 500000) {
   foo.method0()
@@ -103,4 +104,4 @@ while (i < 500000) {
   i = i + 1
 }
 
-print clock() - start
+print time.clock() - start
