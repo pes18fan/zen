@@ -53,6 +53,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 		{
 			append(&module_functions, ModuleFunction{"panic", panic_native, 1})
 			append(&module_functions, ModuleFunction{"read", read_native, 1})
+			append(&module_functions, ModuleFunction{"write", write_native, 3})
 		}
 	case .LIST:
 		{
@@ -171,6 +172,61 @@ read_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	return obj_val(copy_string(vm.gc, string(data[:]))), true
+}
+
+/* Write to a file, either by overwriting it or appending to it. */
+write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) || !is_string(args[1]) || !is_string(args[2]) {
+		vm_panic(
+			vm,
+			"All arguments to 'write' must be strings, not %v, %v and %v.",
+			type_of_value(args[0]),
+			type_of_value(args[1]),
+			type_of_value(args[2]),
+		)
+		return nil_val(), false
+	}
+
+	path := as_string(args[0]).chars
+	abs_path := filepath.join([]string{config.__dirname, path})
+	defer delete(abs_path)
+
+	mode := as_string(args[1]).chars
+	data := as_string(args[2]).chars
+
+	if mode == "w" {
+		ok := os.write_entire_file(abs_path, transmute([]u8)data)
+		if !ok {
+			vm_panic(vm, "Failed to write to file '%s'.", path)
+			return nil_val(), false
+		}
+
+		return nil_val(), true
+	} else if mode == "a" {
+		/* Without the S_IRUSR and S_IWUSR, the user won't be able to read or
+         * write to the file at all. */
+		f, oerr := os.open(
+			abs_path,
+			os.O_APPEND | os.O_RDWR | os.O_CREATE,
+			os.S_IRUSR | os.S_IWUSR,
+		)
+		if oerr < 0 {
+			vm_panic(vm, "Failed to open file '%s' for appending.", path)
+			return nil_val(), false
+		}
+		defer os.close(f)
+
+		_, werr := os.write(f, transmute([]u8)data)
+		if werr < 0 {
+			vm_panic(vm, "Failed to write to file '%s'.", path)
+			return nil_val(), false
+		}
+
+		return nil_val(), true
+	} else {
+		vm_panic(vm, "Invalid write mode '%s'.", mode)
+		return nil_val(), false
+	}
 }
 
 /* 

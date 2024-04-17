@@ -383,7 +383,10 @@ for you to use.
 ### module `os`
 
 - `panic(s)`: Crash the program with a message `s`.
-- `read(s)`: Read a file at the path `s`.
+- `read(p)`: Read a file at the path `p` and return the contents as a string.
+- `write(p, m, s)`: Write the string `s` to a file `p` in the mode `m`. This function returns `nil`. If the file does not exist, it will be created. The mode is a string and may be one of the following:
+    - `"w"`: To overwrite the file's contents.
+    - `"a"`: To append to the file.
 
 > [!NOTE]
 > The path for `os.read` is relative to the running program. If in a REPL, the path is relative to wherever the REPL was invoked.
