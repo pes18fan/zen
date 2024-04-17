@@ -9,36 +9,40 @@ GC_HEAP_GROW_FACTOR :: 2
  * the GC (e.g. the table consisting of all the allocated strings). */
 GC :: struct {
 	/* All of the objects that have been allocated. */
-	objects:         ^Obj,
-	globals:         Table,
-	bytes_allocated: int, /* Total number of bytes allocated. */
-	next_gc:         int, /* Threshold for the next garbage collection. */
+	objects:           ^Obj,
+	globals:           Table,
+	bytes_allocated:   int, /* Total number of bytes allocated. */
+	next_gc:           int, /* Threshold for the next garbage collection. */
 
 	/* Stack of gray objects. */
-	gray_stack:      [dynamic]^Obj,
-	gray_count:      int,
+	gray_stack:        [dynamic]^Obj,
+	gray_count:        int,
 
 	/* Argument for mark_roots. */
-	mark_roots_arg:  RootSource,
+	mark_roots_arg:    RootSource,
 
 	/* All the strings that have been allocated. */
-	strings:         Table,
+	strings:           Table,
 
 	/* The "init" string. */
-	init_string:     ^ObjString,
+	init_string:       ^ObjString,
 
 	/* The list of standard modules built into the language.
      * Except for `typeof()`, `str()`, `parse()`, `puts()` and `gets()`, all
      * built-in functions are accessed via a standard module.
      * Not defined directly once the GC starts, but only when the native modules
      * are to be defined in init_builtin_modules() */
-	std_modules:     [dynamic]string,
+	std_modules:       [dynamic]string,
+
+	/* The names of the native functions that are available in the global scope.
+     * Used in the checks of variable existence in the compiler. */
+	global_native_fns: [dynamic]string,
 
 	/* The stack of modules that have been imported so far in the program,
      * represented by their paths. For instance, if you run "a.zn" which imports
      * "b.zn" which then imports "c.zn", the import stack would be something like
      * ["a.zn", "b.zn", "c.zn"] */
-	import_stack:    [dynamic]string,
+	import_stack:      [dynamic]string,
 }
 
 /* Source for the roots for the root marking step in the GC. */
@@ -82,6 +86,7 @@ init_gc :: proc() -> GC {
 			strings = init_table(),
 			init_string = nil,
 			std_modules = make([dynamic]string),
+			global_native_fns = make([dynamic]string),
 			import_stack = make([dynamic]string),
 			globals = init_table(),
 		} \
@@ -95,6 +100,7 @@ free_gc :: proc(gc: ^GC) {
 	gc.init_string = nil
 	free_objects(gc)
 	delete(gc.std_modules)
+	delete(gc.global_native_fns)
 	delete(gc.import_stack)
 	delete(gc.gray_stack)
 }

@@ -4,4 +4,4 @@ class Foo {
     }
 }
 
-print Foo().return_self() // expect: Foo
+print Foo().return_self() // expect: <class Foo>

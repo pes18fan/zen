@@ -414,7 +414,7 @@ stringify_object :: proc(obj: ^Obj) -> string {
 			 * since from the user's perspective they're just functions. */
 		return stringify_function(as_bound_method(obj_val(obj)).method.function)
 	case .CLASS:
-		return fmt.tprintf("%s", as_class(obj_val(obj)).name.chars)
+		return fmt.tprintf("<class %s>", as_class(obj_val(obj)).name.chars)
 	case .CLOSURE:
 		return stringify_function(as_closure(obj_val(obj)).function)
 	case .FUNCTION:
