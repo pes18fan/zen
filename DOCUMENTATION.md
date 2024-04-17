@@ -389,7 +389,8 @@ for you to use.
     - `"a"`: To append to the file.
 
 > [!NOTE]
-> The path for `os.read` is relative to the running program. If in a REPL, the path is relative to wherever the REPL was invoked.
+> The path for the read and write functions is relative to the running program. 
+> If in a REPL, the path is relative to wherever the REPL was invoked.
 
 ### module `string`
 
