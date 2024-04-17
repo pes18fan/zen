@@ -165,9 +165,9 @@ read_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	abs_path := filepath.join([]string{config.__dirname, path})
 	defer delete(abs_path)
 
-	data, ok := os.read_entire_file_from_filename(path)
+	data, ok := os.read_entire_file_from_filename(abs_path)
 	if !ok {
-		vm_panic(vm, "Failed to read file '%s'. Does it exist?", path)
+		vm_panic(vm, "Failed to read file '%s'. Does it exist?", abs_path)
 		return nil_val(), false
 	}
 
