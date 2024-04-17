@@ -120,6 +120,10 @@ define_native :: proc(gc: ^GC, name: string, function: NativeFn, arity: int) {
 	vm_pop(vm)
 }
 
+/*
+Defines a builtin module by fetching the specific functions present in
+the module and adding them to the module Obj.
+*/
 define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 	vm := as_vm(gc.mark_roots_arg)
 

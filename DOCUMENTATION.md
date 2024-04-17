@@ -383,6 +383,10 @@ for you to use.
 ### module `os`
 
 - `panic(s)`: Crash the program with a message `s`.
+- `read(s)`: Read a file at the path `s`.
+
+> [!NOTE]
+> The path for `os.read` is relative to the running program. If in a REPL, the path is relative to wherever the REPL was invoked.
 
 ### module `string`
 

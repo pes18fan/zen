@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "core:math/rand"
 import "core:os"
+import "core:path/filepath"
 import "core:strconv"
 import "core:strings"
 import "core:time"
@@ -51,6 +52,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 	case .OS:
 		{
 			append(&module_functions, ModuleFunction{"panic", panic_native, 1})
+			append(&module_functions, ModuleFunction{"read", read_native, 1})
 		}
 	case .LIST:
 		{
@@ -85,10 +87,6 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "typeof", typeof_native, arity = 1)
 }
 
-/* Get the current UNIX time in seconds. */
-clock_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return number_val(f64(time.to_unix_nanoseconds(time.now())) / 1e9), true
-}
 
 /* Print a line of text to stdout followed by a newline. */
 puts_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
@@ -96,6 +94,21 @@ puts_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	fmt.print("\n")
 	return nil_val(), true
 }
+
+/* Get the length of a string or a list. */
+len_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) && !is_list(args[0]) {
+		vm_panic(vm, "Cannot get length of a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	if is_string(args[0]) {
+		return number_val(f64(as_string(args[0]).len)), true
+	} else {
+		return number_val(f64(as_list(args[0]).items.count)), true
+	}
+}
+
 
 /* Read a line from stdin. */
 gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
@@ -109,6 +122,26 @@ gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return obj_val(copy_string(vm.gc, string(buf[:n]))), true
 }
 
+
+/* Convert any value to a string. */
+str_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return obj_val(copy_string(vm.gc, stringify_value(args[0]))), true
+}
+
+/* Return the type of any value, represented as a string. */
+typeof_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return obj_val(copy_string(vm.gc, type_of_value(args[0]))), true
+}
+
+/* ---------- TIME ---------- */
+
+/* Get the current UNIX time in seconds. */
+clock_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return number_val(f64(time.to_unix_nanoseconds(time.now())) / 1e9), true
+}
+
+/* ---------- OS ---------- */
+
 /* Panic the VM with a custom message. */
 panic_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
@@ -118,6 +151,26 @@ panic_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	vm_panic(vm, "%s", as_cstring(args[0]))
 	return nil_val(), false
+}
+
+/* Read a file and return its data. */
+read_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "The given path %v must be a string.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	path := as_string(args[0]).chars
+	abs_path := filepath.join([]string{config.__dirname, path})
+	defer delete(abs_path)
+
+	data, ok := os.read_entire_file_from_filename(path)
+	if !ok {
+		vm_panic(vm, "Failed to read file '%s'. Does it exist?", path)
+		return nil_val(), false
+	}
+
+	return obj_val(copy_string(vm.gc, string(data[:]))), true
 }
 
 /* 
@@ -138,6 +191,8 @@ parse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	return number_val(n), true
 }
+
+/* ---------- MATH ---------- */
 
 /* Find the square root of a number. */
 sqrt_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
@@ -231,29 +286,7 @@ rand_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return number_val(rand.float64()), true
 }
 
-/* Trim whitespace from both sides of a string. */
-chomp_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_string(args[0]) {
-		vm_panic(vm, "Cannot chomp a %v.", type_of_value(args[0]))
-		return nil_val(), false
-	}
-
-	return obj_val(copy_string(vm.gc, strings.trim_space(as_string(args[0]).chars))), true
-}
-
-/* Get the length of a string or a list. */
-len_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_string(args[0]) && !is_list(args[0]) {
-		vm_panic(vm, "Cannot get length of a %v.", type_of_value(args[0]))
-		return nil_val(), false
-	}
-
-	if is_string(args[0]) {
-		return number_val(f64(as_string(args[0]).len)), true
-	} else {
-		return number_val(f64(as_list(args[0]).items.count)), true
-	}
-}
+/* ---------- STRING ---------- */
 
 /* 
 Substitute all instances of a substring in a string with another substring.
@@ -281,6 +314,16 @@ replace_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 	}
 
 	return obj_val(copy_string(vm.gc, str)), true
+}
+
+/* Trim whitespace from both sides of a string. */
+chomp_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "Cannot chomp a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	return obj_val(copy_string(vm.gc, strings.trim_space(as_string(args[0]).chars))), true
 }
 
 /* Turn all the characters of a string into uppercase. */
@@ -331,15 +374,7 @@ reverse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 	return obj_val(take_string(vm.gc, str)), true
 }
 
-/* Convert any value to a string. */
-str_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return obj_val(copy_string(vm.gc, stringify_value(args[0]))), true
-}
-
-/* Return the type of any value, represented as a string. */
-typeof_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return obj_val(copy_string(vm.gc, type_of_value(args[0]))), true
-}
+/* ---------- LIST ---------- */
 
 /* Push a value to a list. */
 push_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
