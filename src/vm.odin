@@ -313,11 +313,10 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 		case .OP_GET_GLOBAL:
 			{
 				name := read_string(frame)
-				value: Value;ok: bool
-				if value, ok = table_get(&vm.gc.globals, name); !ok {
-					vm_panic(vm, "Undefined variable '%s'.", name.chars)
-					return .INTERPRET_RUNTIME_ERROR
-				}
+
+				/* No runtime check is done for variable existence since that is
+                 * done at compile time. */
+				value, _ := table_get(&vm.gc.globals, name)
 				vm_push(vm, value)
 			}
 		case .OP_DEFINE_GLOBAL:
@@ -328,11 +327,9 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			{
 				name := read_string(frame)
 
-				if table_set(&vm.gc.globals, name, vm_peek(vm, 0)) {
-					table_delete(&vm.gc.globals, name)
-					vm_panic(vm, "Undefined variable '%s'.", name.chars)
-					return .INTERPRET_RUNTIME_ERROR
-				}
+				/* No runtime check is done for variable existence since that is
+                 * done at compile time. */
+				table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			}
 		case .OP_GET_UPVALUE:
 			{

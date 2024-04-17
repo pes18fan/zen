@@ -544,7 +544,6 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 	name := identifier_constant(p, &p.previous)
 
 	if can_assign && match(p, .EQUAL) {
-		// TODO: Make this work for upvalues as well
 		if set_op == .OP_SET_LOCAL {
 			for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
 				local := &p.current_compiler.locals[i]
@@ -764,19 +763,25 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 		get_op = byte(OpCode.OP_GET_UPVALUE)
 		set_op = byte(OpCode.OP_SET_UPVALUE)
 	} else {
+		/* The assumption at this point is that the variable is global, since
+         * it wasn't found as an upvalue or local variable. In the original
+         * clox by Bob Nystrom, there was no way to resolve globals at compile
+         * time, however zen allows that so we can check if the variable exists
+         * right at compile time. */
+		global_o_str := copy_string(p.gc, name.lexeme)
+		if _, ok := table_get(p.current_compiler.globals, global_o_str); !ok {
+			error(p, fmt.tprintf("Undefined variable '%s'.", name.lexeme))
+		}
+
 		arg = identifier_constant(p, &name)
 		get_op = byte(OpCode.OP_GET_GLOBAL)
 		set_op = byte(OpCode.OP_SET_GLOBAL)
 	}
 
 	if can_assign && match(p, .EQUAL) {
-		// TODO: Make this work for upvalues as well
 		if set_op == byte(OpCode.OP_SET_LOCAL) {
-			for i := p.current_compiler.local_count - 1; i >= 0; i -= 1 {
-				local := &p.current_compiler.locals[i]
-				if identifiers_equal(&name, &local.name) && local.final == .FINAL {
-					error(p, "Can only set a final variable once.")
-				}
+			if p.current_compiler.locals[arg].final == .FINAL {
+				error(p, "Can only set a final variable once.")
 			}
 		}
 
@@ -784,6 +789,8 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 			global_o_str := copy_string(p.gc, name.lexeme)
 			value: Value;ok: bool
 
+			/* PERF: This hash table lookup is already done when figuring out if
+             * the variable exists earlier in this function, so this is redundant */
 			if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
 				if values_equal(value, bool_val(true)) {
 					error(p, "Can only set a final variable once.")
@@ -794,8 +801,6 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 		}
 
 		if set_op == byte(OpCode.OP_SET_UPVALUE) {
-			/* How would I go about finding if an upvalue is declared with `val`? */
-			/* This should only error if  the upvalue is declared with `val`. */
 			if upvalue_final == .FINAL {
 				error(p, "Can only set a final variable once.")
 			}
@@ -1363,6 +1368,13 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 
 	declare_variable(p, .VAR) /* Classes are reassignable, subject to change. */
 
+	global_o_str := copy_string(p.gc, p.previous.lexeme)
+	value: Value;ok: bool
+
+	/* Add the value onto the globals table. We don't check if it already exists
+     * because classes are, as of now, reassignable. */
+	table_set(p.current_compiler.globals, global_o_str, bool_val(false))
+
 	emit_opcode(p, .OP_CLASS)
 	emit_byte(p, 1 if public else 0)
 	emit_byte(p, name_constant)
@@ -1488,6 +1500,10 @@ module_declaration :: proc(p: ^Parser) {
 	}
 
 	define_variable(p, name_constant)
+
+	/* Set the module as a global variable for variable existence checks.
+     * The `true` is to ensure that the variable cannot be reassigned to. */
+	table_set(p.current_compiler.globals, copy_string(p.gc, mod_name), bool_val(true))
 }
 
 /* 
@@ -1974,8 +1990,10 @@ restore_gc :: proc(p: ^Parser) {
 
 /* 
 Compile the provided slice of tokens into a bytecode chunk. 
-The compile function also takes in a pointer to a globals table. The main 
-reason behind this is to keep track of any final variables declared. This is 
+The compile function also takes in a pointer to a globals table with each key
+being the name of every global declared so far and the value being whether it
+is declared with `var` or `val`. The main reason behind this is to keep track of
+any final variables declared as well as to check if a variable exists. This is 
 useful in the REPL but not so much in a file, since in the REPL the compiler
 recompiles every line but that's not necessary in a file.
 
@@ -1983,6 +2001,12 @@ TODO: Find a better way to store global variables so that this whole
 table-passing thing isn't necessary.
 */
 compile :: proc(gc: ^GC, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
+	/* Add all the native function names to the global table, for variable
+     * existence checks. */
+	for fn_name in gc.global_native_fns {
+		table_set(globals, copy_string(gc, fn_name), bool_val(true))
+	}
+
 	c: Compiler
 	p := Parser {
 		tokens           = tokens,

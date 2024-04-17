@@ -73,9 +73,12 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 	return module_functions[:]
 }
 
-/* These are the functions available in the global scope. Only five functions
- * are available as such. The rest are in their corresponding modules. */
+/* These are the functions available in the global scope. Only five very commonly used
+ * functions are available as such. The rest are in their corresponding modules. */
 init_natives :: proc(gc: ^GC) {
+	/* Add all the names of the globally present native functions to the name list. */
+	append(&gc.global_native_fns, "puts", "gets", "len", "str", "parse", "typeof")
+
 	// io
 	define_native(gc, "puts", puts_native, arity = 1)
 	define_native(gc, "gets", gets_native, arity = 0)
