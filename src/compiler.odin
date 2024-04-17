@@ -529,7 +529,7 @@ subscript :: proc(p: ^Parser, can_assign: bool) {
 dot :: proc(p: ^Parser, can_assign: bool) {
 	receiver := p.tokens[p.curr_idx - 3]
 	possible_local := resolve_local(p, p.current_compiler, &receiver)
-	possible_upvalue := resolve_upvalue(p, p.current_compiler, &receiver)
+	possible_upvalue, upvalue_final := resolve_upvalue(p, p.current_compiler, &receiver)
 	set_op: OpCode
 
 	if possible_local != -1 {
@@ -564,6 +564,12 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 				}
 			} else {
 				table_set(p.current_compiler.globals, global_o_str, bool_val(false))
+			}
+		}
+
+		if set_op == .OP_SET_UPVALUE {
+			if upvalue_final == .FINAL {
+				error(p, "Can only set a final variable once.")
 			}
 		}
 
@@ -738,7 +744,7 @@ zstring :: proc(p: ^Parser, can_assign: bool) {
 
 /*
 Parse a previously declared variable. This is used for both reading and
-assigning to variables, and for reading constants declared with `final`.
+assigning to variables, and for reading constants declared with `val`.
 This function will error if there is an attempt to assign to a constant.
 */
 @(private = "file")
@@ -747,7 +753,7 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 	get_op, set_op: u8
 	arg: u8
 	possible_local := resolve_local(p, p.current_compiler, &name)
-	possible_upvalue := resolve_upvalue(p, p.current_compiler, &name)
+	possible_upvalue, upvalue_final := resolve_upvalue(p, p.current_compiler, &name)
 
 	if possible_local != -1 {
 		arg = u8(possible_local)
@@ -784,6 +790,14 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 				}
 			} else {
 				table_set(p.current_compiler.globals, global_o_str, bool_val(false))
+			}
+		}
+
+		if set_op == byte(OpCode.OP_SET_UPVALUE) {
+			/* How would I go about finding if an upvalue is declared with `val`? */
+			/* This should only error if  the upvalue is declared with `val`. */
+			if upvalue_final == .FINAL {
+				error(p, "Can only set a final variable once.")
 			}
 		}
 
@@ -1006,7 +1020,7 @@ resolve_local :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
 	return -1
 }
 
-/* Add an upvalue to the function. */
+/* Add an upvalue to the function or return it if it already exists. */
 @(private = "file")
 add_upvalue :: proc(p: ^Parser, compiler: ^Compiler, index: u8, is_local: bool) -> int {
 	upvalue_count := compiler.function.upvalue_count
@@ -1031,27 +1045,33 @@ add_upvalue :: proc(p: ^Parser, compiler: ^Compiler, index: u8, is_local: bool) 
 	return compiler.function.upvalue_count
 }
 
-/* Find an upvalue in the function's local scope and scopes above it, and return
- * the index to its name in the constant table. */
+/*
+Find an upvalue in the function's local scope and scopes above it, and return
+the index to its name in the constant table. Also return whether the upvalue was
+initially declared with `val` or `var`.
+*/
 @(private = "file")
-resolve_upvalue :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
+resolve_upvalue :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> (int, Variability) {
 	/* Base case 1: We reached the end of the compiler stack, so the name is probably in the
-	global scope. */
-	if compiler.enclosing == nil {return -1}
+	global scope. The .VAR is just a dummy value. */
+	if compiler.enclosing == nil {
+		return -1, .VAR
+	}
 
 	/* Look for the name in the enclosing function's local scope. 
 	Base case 2: If we find the name there, return it. */
 	local := resolve_local(p, compiler.enclosing, name)
 	if local != -1 {
-		// Mark the local as captured.
+		// Mark the local as captured and see if its a `var` or `val`.
 		compiler.enclosing.locals[local].is_captured = true
+		final := compiler.enclosing.locals[local].final
 		/* is_local is true since we're capturing a local variable from the
 		immediately enclosing function. */
-		return add_upvalue(p, compiler, u8(local), true)
+		return add_upvalue(p, compiler, u8(local), is_local = true), final
 	}
 
 	/* Recursively look for an upvalue in the enclosing function. */
-	upvalue := resolve_upvalue(p, compiler.enclosing, name)
+	upvalue, final := resolve_upvalue(p, compiler.enclosing, name)
 	if upvalue != -1 {
 		/* Once the local variable is found in the most deeply nested recursive call, 
 		which is the outermost function, capture it as an upvalue, add it to the 
@@ -1063,11 +1083,12 @@ resolve_upvalue :: proc(p: ^Parser, compiler: ^Compiler, name: ^Token) -> int {
 		/* The boolean is_local flag is false since here, we're capturing an
 		upvalue which captures either a local variable of its surrounding
 		function or another upvalue. */
-		return add_upvalue(p, compiler, u8(upvalue), false)
+		return add_upvalue(p, compiler, u8(upvalue), is_local = false), final
 	}
 
 	// Nope, didn't find anything.
-	return -1
+	// The .VAR is just a dummy value.
+	return -1, .VAR
 }
 
 /* 
