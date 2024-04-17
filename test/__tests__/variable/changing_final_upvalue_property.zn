@@ -1,0 +1,19 @@
+class Foo {
+    init() {
+        this.bar = "baz"
+    }
+}
+
+func outer() {
+    val a = Foo()
+
+    func inner() {
+        a.bar = "plop" // ERR: Can only set a final variable once.
+    }
+
+    return inner
+}
+
+// The program shouldn't actually reach this point, I'll just keep it here
+// for completeness's sake.
+outer()() 

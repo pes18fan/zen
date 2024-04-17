@@ -1,4 +1,5 @@
 require "open3"
+require "./os"
 
 test_folder = "__tests__"
 $compiler = if OS.windows?
