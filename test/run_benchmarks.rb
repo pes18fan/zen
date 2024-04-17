@@ -83,7 +83,12 @@ def capture_output(command)
   [time, error, exit_status]
 end
 
-bench($bench_folder)
+begin
+  bench($bench_folder)
+rescue Interrupt
+  exit 0
+end
+
 puts ""
 
 puts "Succesfully benchmarked #{$benchmarks} files."

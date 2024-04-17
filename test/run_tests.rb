@@ -129,7 +129,12 @@ def capture_output(command)
   [output, error, exit_status]
 end
 
-test(test_folder)
+begin
+  test(test_folder)
+rescue Interrupt
+  exit 0
+end
+
 puts "\n"
 
 puts "Total tests: #{$tests}"
