@@ -1,0 +1,108 @@
+%YAML 1.2
+---
+
+name: zen
+file_extensions:
+    - zn
+scope: source.zen
+variables:
+  identifier: '\b[A-Za-z_][A-Za-z0-9_\?!]*\b'
+
+contexts:
+  main:
+    - include: global
+
+  global:
+    - include: comments
+    - include: keywords
+    - include: functions-and-declarations
+    - include: strings
+    - include: string-escaped-char
+    - include: operators
+    - include: numerics
+    - include: punctuation
+    - include: variables
+
+  comments:
+    - match: //.*
+      scope: comment.line.zen
+      push:
+        - meta_scope: comment.line.double-slash.zen
+        - match: \n
+          pop: true
+
+  functions-and-declarations:
+    - match: \b(func)\s*({{identifier}})\b
+      captures:
+        1: storage.type.zen
+        2: meta.function.zen entity.name.function.zen
+    - match: \b(puts|gets|len|typeof|str|parse)\b\s*(\()
+      captures:
+        1: support.function.builtin.zen
+        2: punctuation.zen
+    - match: (func)\s*([\(])
+      captures:
+        1: storage.type.zen
+        2: punctuation.zen
+    - match: ({{identifier}})\s*[!]?\s*(\()
+      captures:
+        1: support.function.zen
+        2: punctuation.zen
+    - match: \b(class)\s*({{identifier}})
+      captures:
+        1: storage.type.zen
+        2: entity.name.class.zen
+
+  keywords:
+    - match: \b(use|pub)\b
+      scope: keyword.control.zen
+    - match: \b(if|else|while|for|return|break|continue|switch)\b
+      scope: keyword.control.zen
+    - match: \b(var|val)\b
+      scope: storage.type.zen
+    - match: \b(print)\b
+      scope: support.function.builtin.zen
+    - match: \b(true|false)\b
+      scope: constant.language.boolean.zen
+    - match: \b(nil)\b
+      scope: constant.language.null.zen
+    - match: \b(this|super|it)\b
+      scope: variable.language.zen
+    - match: \b[0-9]+(?:.[0-9]+)?\b
+      scope: constant.numeric.zen
+
+  operators:
+    - scope: keyword.operator.arithmetic.zen
+      match: \+|-|\*|\/|\mod
+    - scope: keyword.operator.comparison.zen
+      match: ==|\!=
+    - scope: keyword.operator.relational.zen
+      match: \<\=|\>\=|\<|\>
+    - scope: keyword.operator.logical.zen
+      match: \b(and|or|not)\b
+    - scope: keyword.operator.assignment.zen
+      match: \=
+    - scope: keyword.operator.pipe.zen
+      match: \|>
+    - scope: keyword.operator.arrow.zen
+      match: \=>
+
+  punctuation:
+    - match: \(|\)|\{|\}|;|\[|\]|\.|,
+      scope: punctuation.zen
+
+  strings:
+    - match: '"'
+      scope: punctuation.definition.string.begin.zen
+      push:
+        - meta_scope: string.quoted.double.zen
+        - match: '"'
+          scope: punctuation.definition.string.end.zen
+          pop: true
+        - include: string-escaped-char
+
+  string-escaped-char:
+    - match: \\(\\|[abfnrutv''"]|x\h{2}|u\h{4}|U\h{8}|[0-7]{3})
+      scope: constant.character.escape.zen
+    - match: \\.
+      scope: invalid.illegal.unknown-escape.zen
