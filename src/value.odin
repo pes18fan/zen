@@ -6,16 +6,20 @@ import "core:mem"
 import "core:slice"
 import "core:strings"
 
-/* Whether to use NaN boxing to represent values. Set to false to use a tagged
- * union representation instead. */
+/* 
+Whether to use NaN boxing to represent values. Set to false to use a tagged 
+union representation instead.
+*/
 NAN_BOXING :: true
 
 when NAN_BOXING {
 	/* A u64 with only the highest bit (the sign bit) set. */
 	SIGN_BIT :: cast(u64)0x8000000000000000
 
-	/* A NaN value with the highest mantissa bit as well as the second highest
-     * mantissa bit (the Intel QNaN bit) set. */
+	/*
+	A NaN value with the highest mantissa bit as well as the second highest 
+	mantissa bit (the Intel QNaN bit) set.
+	*/
 	QNAN :: cast(u64)0x7ffc000000000000
 
 	TAG_NIL :: 1 // 01.
@@ -25,20 +29,24 @@ when NAN_BOXING {
 	/* Every value can be represented by a unsigned 64-bit integer. */
 	Value :: u64
 
-	/* Converting a f64 to a NaN-boxed value is as simple as transmuting it.
-     * For every other type, the Value is a quiet NaN, i.e. its 11 exponent bits
-     * are all 1 and its highest mantissa bit is also 1. That leaves us with 51
-     * mantissa bits and 1 sign bit. We don't use one of 51 mantissa bits which
-     * is a special "QNaN Floating-Point Indefinite" value, leaving us a total 
-     * of 51 bits we can use any way we want. We can set aside some bit 
-     * patterns there to represent nil, true, false et cetera, and even though 
-     * pointers techically need 64 bits, most widely used chips today only use 
-     * 48 bits for pointers, so we can stuff the pointer with three bytes to 
-     * spare. Those remaining three bytes can be used as type tags to 
-     * distinguish between the types. This is what NaN boxing is all about. */
+	/* 
+	Converting a f64 to a NaN-boxed value is as simple as transmuting it.
+    For every other type, the Value is a quiet NaN, i.e. its 11 exponent bits
+    are all 1 and its highest mantissa bit is also 1. That leaves us with 51
+    mantissa bits and 1 sign bit. We don't use one of 51 mantissa bits which
+    is a special "QNaN Floating-Point Indefinite" value, leaving us a total 
+    of 51 bits we can use any way we want. We can set aside some bit 
+    patterns there to represent nil, true, false et cetera, and even though 
+    pointers techically need 64 bits, most widely used chips today only use 
+    48 bits for pointers, so we can stuff the pointer with three bytes to 
+    spare. Those remaining three bytes can be used as type tags to 
+    distinguish between the types. This is what NaN boxing is all about.
+	*/
 
-	/* ORing FALSE_VAL (10 in binary) with 1 siply gives 11 in binary, which
-     * equals TRUE_VAL, and ORing TRUE_VAL gives itself. */
+	/*
+	ORing FALSE_VAL (10 in binary) with 1 siply gives 11 in binary, which
+    equals TRUE_VAL, and ORing TRUE_VAL gives itself.
+	*/
 	is_bool :: #force_inline proc(value: Value) -> bool {
 		return (value | 1) == TRUE_VAL
 	}
@@ -46,14 +54,18 @@ when NAN_BOXING {
 		return value == nil_val()
 	}
 
-	/* In case of a number, ANDing it with the QNAN constant must not produce
-     * QNAN itself since well, that's a NaN. */
+	/*
+	In case of a number, ANDing it with the QNAN constant must not produce
+    QNAN itself since well, that's a NaN.
+	*/
 	is_number :: #force_inline proc(value: Value) -> bool {
 		return (value & QNAN) != QNAN
 	}
 
-	/* A quiet NaN with its sign bit set is said to be an object pointer in
-     * zen's NaN boxing convention. */
+	/*
+	A quiet NaN with its sign bit set is said to be an object pointer in
+    zen's NaN boxing convention.
+	*/
 	is_obj :: #force_inline proc(value: Value) -> bool {
 		return (value & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT)
 	}
@@ -65,8 +77,10 @@ when NAN_BOXING {
 		return value == TRUE_VAL
 	}
 
-	/* This simply involves extracting the address from the last 48 bits of
-     * the value and casting it twice to turn it into an object pointer. */
+	/*
+	This simply involves extracting the address from the last 48 bits of
+    the value and casting it twice to turn it into an object pointer.
+	*/
 	as_obj :: #force_inline proc(value: Value) -> ^Obj {
 		return cast(^Obj)(cast(uintptr)(value &~ (SIGN_BIT | QNAN)))
 	}
@@ -85,9 +99,11 @@ when NAN_BOXING {
 		return transmute(Value)num
 	}
 
-	/* If the sign bit is set in a Value and that value is a quiet NaN, it is 
-     * an object pointer. So, we just jam the sign bit, the qNaN bits and the
-     * pointer address together into the 64 bits. */
+	/*
+	If the sign bit is set in a Value and that value is a quiet NaN, it is 
+    an object pointer. So, we just jam the sign bit, the qNaN bits and the
+    pointer address together into the 64 bits.
+	*/
 	obj_val :: #force_inline proc(obj: ^Obj) -> Value {
 		return (Value)(SIGN_BIT | QNAN | cast(u64)(cast(uintptr)obj))
 	}

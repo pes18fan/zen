@@ -8,7 +8,7 @@ import platform
 
 OC = "odin"
 ProcError = subprocess.CalledProcessError
-DEBUG_FLAGS = """-debug -o:none"""
+DEBUG_FLAGS = "-debug -o:none"
 
 OUT = "zen"
 DBG_OUT = "dzen"

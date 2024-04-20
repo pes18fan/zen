@@ -192,8 +192,6 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 			config.trace_exec = true
 		case "--time":
 			config.record_time = true
-		case "--check-leaks":
-			config.check_leaks = true
 		case "--log-gc":
 			config.log_gc = true
 		case "--stress-gc":
@@ -224,8 +222,6 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 							config.dump_disassembly = true
 						case 't':
 							config.record_time = true
-						case 'c':
-							config.check_leaks = true
 						case 'T':
 							config.trace_exec = true
 						case 'L':
@@ -283,7 +279,7 @@ main :: proc() {
 	defer os.exit(status)
 
 	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
-	if config.check_leaks {
+	when ODIN_DEBUG {
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
 		context.allocator = mem.tracking_allocator(&track)
