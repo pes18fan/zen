@@ -103,8 +103,8 @@ This is not private to the file as it is used in the VM for importing modules.
 */
 run_file :: proc(vm: ^VM, path: string, importer: ImportingModule = nil) -> InterpretResult {
 	source, ok := read_file(path)
-	defer delete(source)
 	if !ok {return .INTERPRET_READ_ERROR}
+	defer delete(source)
 
 	vm.path = path
 
