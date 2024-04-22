@@ -404,3 +404,30 @@ for you to use.
 
 - `push(l, i)`: Add an item `i` to the end of the list `l`.
 - `pop(l)`: Get the last item of the list `l` after removing it from the list.
+
+## The chaotic stuff
+
+You can get these additional cursed features by compiling `zen` while defining
+`CHAOTIC` as `true` in the Odin compiler. The easiest way to make a chaotic build
+is to simply run `./x.py chaotic` in the root directory and you'll get your build
+at `./bin/chaotic/zen`.
+
+These features will **NOT** be tested or given much thought to, since they're just
+funny little things rather than anything serious.
+
+### ifn't and whilen't
+
+The opposite of `if` and `while`.
+
+Just as brain-spinning as `unless` and `until` in Ruby.
+
+```zen
+ifn't true {
+    puts("this will never run")
+}
+
+whilen't i == 11 {
+    puts(i)
+    i = i + 1
+}
+```

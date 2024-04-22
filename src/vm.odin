@@ -489,6 +489,13 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					frame.ip = mem.ptr_offset(frame.ip, offset)
 				}
 			}
+		case .OP_JUMP_IF_TRUE:
+			{
+				offset := read_short(frame)
+				if !is_falsey(vm_peek(vm, 0)) {
+					frame.ip = mem.ptr_offset(frame.ip, offset)
+				}
+			}
 		case .OP_LOOP:
 			{
 				offset := read_short(frame)
