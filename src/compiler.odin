@@ -2000,7 +2000,6 @@ statement :: proc(p: ^Parser) {
 	case match(p, .WHILE):
 		while_statement(p)
 	case match(p, .SEMI): // Do nothing. This is equivalent to `pass`.
-	/* TODO: Errorenous statement checking */
 	case match(p, .ELSE):
 		error(p, "You can't have an `else` without an `if`.")
 	case:
