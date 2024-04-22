@@ -98,9 +98,9 @@ is `true`.
 
 ```zen
 switch {
-    0 == 0 => puts("zero is zero!")
-    0 == 1 => puts("zero is on- wait what?")
-    else => puts("ok I don't even know anymore")
+    0 == 0 => puts "zero is zero!"
+    0 == 1 => puts "zero is on- wait what?"
+    else => puts "ok I don't even know anymore"
 }
 ```
 
@@ -189,9 +189,11 @@ pipes. Pipes allow one to pass expressions to other expressions, or pass values
 to functions.
 
 ```zen
+use "string"
+
 // These two are equivalent:
-print upcase("hello")
-print "hello" |> upcase()
+print string.upcase("hello")
+print "hello" |> string.upcase()
 ```
 
 The last expression in a pipe sequence can be accessed using the `it` keyword.
