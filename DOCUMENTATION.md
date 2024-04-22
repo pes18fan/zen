@@ -9,7 +9,7 @@ print "Hello, world!\n" //=> Hello, world!
 ```
 
 Note that the `print` statement does not append a newline. You can use the
-puts() function if you want that.
+`puts()` function if you want that.
 
 Statements are seperated by semicolons. They are automatically inserted
 only at newlines, following [certain rules](https://github.com/pes18fan/zen/blob/0b72dd5fa5d59a5fc42685c19ca82d48fb72cb93/src/lexer.odin#L170C1-L170C1).
@@ -173,6 +173,13 @@ The above example can be made simpler using the convenient arrow notation:
 
 ```
 print apply(2, func(n) => n * 2) //=> 4
+```
+
+Additionally, if a function has a single argument which is a string, you can omit
+the parentheses.
+
+```zen
+puts "hey, no parens!"
 ```
 
 ## Pipes
@@ -399,6 +406,7 @@ for you to use.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
+- `trim(s)`: Trim whitespace from both sides of a string `s`.
 
 ### module `list`
 

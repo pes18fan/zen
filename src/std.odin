@@ -67,6 +67,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 			append(&module_functions, ModuleFunction{"upcase", upcase_native, 1})
 			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
 			append(&module_functions, ModuleFunction{"reverse", reverse_native, 1})
+			append(&module_functions, ModuleFunction{"trim", trim_native, 1})
 		}
 	}
 
@@ -129,7 +130,11 @@ gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 /* Convert any value to a string. */
 str_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return obj_val(copy_string(vm.gc, stringify_value(args[0]))), true
+	str, was_allocation := stringify_value(args[0])
+	defer if was_allocation {
+		delete(str)
+	}
+	return obj_val(copy_string(vm.gc, str)), true
 }
 
 /* Return the type of any value, represented as a string. */
@@ -432,6 +437,16 @@ reverse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 	}
 
 	return obj_val(take_string(vm.gc, str)), true
+}
+
+/* Trim leading and trailing whitespace from a string. */
+trim_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "Cannot trim a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	return obj_val(copy_string(vm.gc, strings.trim_space(as_string(args[0]).chars))), true
 }
 
 /* ---------- LIST ---------- */

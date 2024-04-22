@@ -809,7 +809,29 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 		expression(p)
 		emit_bytes(p, set_op, arg)
 	} else {
-		emit_bytes(p, get_op, arg)
+		/* Lua-like feature to allow function calls without parens if the
+         * function has a singular string. */
+		/* For a moment I thought of allowing lists here as well, but then
+         * remembered that that would break subscripting. */
+		if match(p, .STRING) {
+			/* Grab the (supposed) function */
+			emit_bytes(p, get_op, arg)
+
+			arg_count: u8 = 1
+
+			/* Grab the string. */
+			zstring(p, can_assign)
+
+			/* This might be removed. */
+			if p.pipeline_state == .ACTIVE {
+				emit_opcode(p, .OP_GET_IT)
+				arg_count += 1
+			}
+
+			emit_bytes(p, byte(OpCode.OP_CALL), arg_count)
+		} else {
+			emit_bytes(p, get_op, arg)
+		}
 	}
 }
 

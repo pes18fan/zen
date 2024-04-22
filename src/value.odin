@@ -201,35 +201,43 @@ type_of_value :: proc(value: Value) -> string {
 	unreachable()
 }
 
-stringify_value :: proc(value: Value) -> string {
+stringify_value :: proc(value: Value) -> (res: string, was_allocation: bool) {
 	when NAN_BOXING {
 		if is_nil(value) {
-			return "nil"
+			return "nil", false
 		} else if is_bool(value) {
-			return as_bool(value) ? "true" : "false"
+			return (as_bool(value) ? "true" : "false"), false
 		} else if is_number(value) {
 			if is_integer(as_number(value)) {
-				return fmt.tprintf("%d", int(as_number(value)))
+				return (fmt.tprintf("%d", int(as_number(value)))), false
 			} else {
-				return fmt.tprintf("%.3f", as_number(value))
+				return (fmt.tprintf("%.3f", as_number(value))), false
 			}
 		} else if is_obj(value) {
-			return stringify_object(as_obj(value))
+			str, was_allocation := stringify_object(as_obj(value))
+			if was_allocation {
+				return str, true
+			}
+			return str, false
 		}
 	} else {
 		switch v in value {
 		case bool:
-			return v ? "true" : "false"
+			return (v ? "true" : "false"), false
 		case f64:
 			if is_integer(v) {
-				return fmt.tprintf("%d", int(v))
+				return (fmt.tprintf("%d", int(v))), false
 			} else {
-				return fmt.tprintf("%.3f", v)
+				return (fmt.tprintf("%.3f", v)), false
 			}
 		case ^Obj:
-			return stringify_object(v)
+			str, was_allocation := stringify_object(v)
+			if was_allocation {
+				return str, true
+			}
+			return str, false
 		case:
-			return "nil"
+			return "nil", false
 		}
 	}
 
@@ -238,7 +246,11 @@ stringify_value :: proc(value: Value) -> string {
 
 /* Print out `value` in a human-readable format. */
 print_value :: proc(value: Value) {
-	fmt.print(stringify_value(value))
+	str, was_allocation := stringify_value(value)
+	defer if was_allocation {
+		delete(str)
+	}
+	fmt.print(str)
 }
 
 /* Determine if two `Value`s are equal. */

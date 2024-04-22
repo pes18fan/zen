@@ -31,7 +31,9 @@ jump_instruction :: proc(name: string, sign: int, c: ^Chunk, offset: int) -> int
 constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
 	fmt.eprintf("%-16s %4d '", name, constant)
-	fmt.eprintf(stringify_value(c.constants.values[constant]))
+	str, was_allocation := stringify_value(c.constants.values[constant])
+	defer if was_allocation {delete(str)}
+	fmt.eprintf(str)
 	fmt.eprintf("'\n")
 	return offset + 2
 }
@@ -41,7 +43,11 @@ class_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
 	public := bool(c.code[offset + 1])
 	fmt.eprintf("%-16s %4d '", name, constant)
-	fmt.eprintf(stringify_value(c.constants.values[constant]))
+
+	str, was_allocation := stringify_value(c.constants.values[constant])
+	defer if was_allocation {delete(str)}
+
+	fmt.eprintf(str)
 	fmt.eprintf("'")
 	fmt.eprintf(", %s", public ? "public" : "private")
 	fmt.eprintf("\n")
@@ -51,8 +57,12 @@ class_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 /* Print debug info for a user-defined module import. */
 @(private = "file")
 user_module_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
-	module_name := stringify_value(c.constants.values[c.code[offset + 1]])
-	module_path := stringify_value(c.constants.values[c.code[offset + 2]])
+	module_name, mn_was_allocation := stringify_value(c.constants.values[c.code[offset + 1]])
+	module_path, mp_was_allocation := stringify_value(c.constants.values[c.code[offset + 2]])
+
+	defer if mn_was_allocation {delete(module_name)}
+	defer if mp_was_allocation {delete(module_path)}
+
 	fmt.eprintf("%-16s (module '%s', path '%s')\n", name, module_name, module_path)
 	return offset + 3
 }
@@ -63,7 +73,10 @@ invoke_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
 	arg_count := c.code[offset + 2]
 	fmt.eprintf("%-16s (%d args) %4d '", name, arg_count, constant)
-	fmt.eprintf(stringify_value(c.constants.values[constant]))
+
+	str, was_allocation := stringify_value(c.constants.values[constant])
+	defer if was_allocation {delete(str)}
+	fmt.eprintf(str)
 	fmt.eprintf("'\n")
 	return offset + 3
 }
@@ -162,7 +175,11 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 			offset += 1
 			constant := c.code[offset]
 			fmt.eprintf("%-16s %4d ", "OP_CLOSURE", constant)
-			fmt.eprintf(stringify_value(c.constants.values[constant]))
+			str, was_allocation := stringify_value(c.constants.values[constant])
+			defer if was_allocation {
+				delete(str)
+			}
+			fmt.eprintf(str)
 			offset += 1
 			public := bool(c.code[offset])
 			fmt.eprintf(", %s", public ? "public" : "private")
