@@ -8,6 +8,9 @@ import "core:strings"
 
 VERSION :: "0.0.1-beta"
 
+/* Chaotic mode is obviously false by default */
+CHAOTIC :: #config(CHAOTIC, false)
+
 /* Config values set on start, mostly for debugging. */
 Config :: struct {
 	compile_only:     bool,
@@ -47,7 +50,13 @@ repl :: proc(vm: ^VM) -> int {
 	vm.name = "REPL"
 	vm.path = "REPL"
 
-	fmt.println("Welcome to zen!")
+	when CHAOTIC {
+		fmt.print("Welcome to zen!")
+		color_red(os.stdout, " (chaotic mode)\n")
+	} else {
+		fmt.println("Welcome to zen!")
+	}
+
 	fmt.println("Press 'Ctrl-D' to exit.")
 	buf: [1024]byte
 

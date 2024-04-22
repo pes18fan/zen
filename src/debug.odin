@@ -142,6 +142,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return jump_instruction("OP_JUMP", 1, c, offset)
 	case .OP_JUMP_IF_FALSE:
 		return jump_instruction("OP_JUMP_IF_FALSE", 1, c, offset)
+	case .OP_JUMP_IF_TRUE:
+		return jump_instruction("OP_JUMP_IF_TRUE", 1, c, offset)
 	case .OP_LOOP:
 		return jump_instruction("OP_LOOP", -1, c, offset)
 	case .OP_CALL:

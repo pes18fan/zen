@@ -1584,11 +1584,16 @@ expression_statement :: proc(p: ^Parser) {
 
 /* Parse an if statement. */
 @(private = "file")
-if_statement :: proc(p: ^Parser) {
+if_statement :: proc(p: ^Parser, ifnt: bool = false) {
 	expression(p)
 	consume(p, .LSQUIRLY, "Expect '{' after if condition.")
 
-	then_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+	when CHAOTIC {
+		then_jump := emit_jump(p, .OP_JUMP_IF_TRUE)
+	} else {
+		then_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+	}
+
 	emit_pop(p)
 
 	begin_scope(p)
@@ -1823,7 +1828,7 @@ switch_statement :: proc(p: ^Parser) {
 
 /* Parse a while statment. */
 @(private = "file")
-while_statement :: proc(p: ^Parser) {
+while_statement :: proc(p: ^Parser, whilent: bool = false) {
 	loop_start := len(current_chunk(p).code)
 
 	begin_scope(p)
@@ -1831,7 +1836,12 @@ while_statement :: proc(p: ^Parser) {
 	expression(p)
 	consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
 
-	exit_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+	when CHAOTIC {
+		exit_jump := emit_jump(p, .OP_JUMP_IF_TRUE)
+	} else {
+		exit_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+	}
+
 	emit_pop(p)
 
 	block(p)
@@ -1912,7 +1922,7 @@ synchronize :: proc(p: ^Parser) {
 		}
 
 		#partial switch p.current.type {
-		case .BREAK, .CONTINUE, .FUNC, .FOR, .IF, .VAR, .VAL, .PRINT, .SWITCH, .RETURN, .WHILE:
+		case .BREAK, .CONTINUE, .FUNC, .FOR, .IF, .IFNT, .VAR, .VAL, .PRINT, .SWITCH, .RETURN, .WHILE, .WHILENT, .USE:
 			return
 		case: // Do nothing.
 		}
@@ -1956,6 +1966,19 @@ declaration :: proc(p: ^Parser) {
 /* Parse a statement. */
 @(private = "file")
 statement :: proc(p: ^Parser) {
+	when CHAOTIC {
+		switch {
+		case match(p, .IFNT):
+			{
+				if_statement(p, ifnt = true)
+			}
+		case match(p, .WHILENT):
+			{
+				while_statement(p, whilent = true)
+			}
+		}
+	}
+
 	switch {
 	case match(p, .BREAK):
 		break_statement(p)
@@ -1977,12 +2000,13 @@ statement :: proc(p: ^Parser) {
 		switch_statement(p)
 	case match(p, .WHILE):
 		while_statement(p)
-	case match(p, .SEMI):
-	// Do nothing. This is equivalent to `pass`.
+	case match(p, .SEMI): // Do nothing. This is equivalent to `pass`.
+	/* TODO: Errorenous statement checking */
+	case match(p, .ELSE):
+		error(p, "You can't have an `else` without an `if`.")
 	case:
 		expression_statement(p)
-	}
-}
+	}}
 
 /* Restore the GC to its previous state, i.e. change the roots. */
 restore_gc :: proc(p: ^Parser) {

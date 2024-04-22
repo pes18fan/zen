@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:os"
 import "core:unicode/utf8"
 
+
 /* The type of a token. */
 TokenType :: enum {
 	// single characters
@@ -50,6 +51,7 @@ TokenType :: enum {
 	FOR,
 	FUNC,
 	IF,
+	IFNT,
 	IN,
 	IT,
 	NIL,
@@ -64,6 +66,7 @@ TokenType :: enum {
 	TRUE,
 	USE,
 	WHILE,
+	WHILENT,
 	VAR,
 	VAL,
 	EOF,
@@ -102,10 +105,10 @@ syntax_error :: proc(l: ^Lexer, message: string) {
 	l.had_error = true
 }
 
-/* Returns true if `c` is alphanumeric, or a question mark. */
+/* Returns true if `c` is alphanumeric, a question mark or an exclamation mark. */
 @(private = "file")
-is_alphanumeric_or_qn :: proc(c: rune) -> bool {
-	return is_alpha(c) || is_digit(c) || c == '?'
+is_alphanumeric_or_qn_or_ex :: proc(c: rune) -> bool {
+	return is_alpha(c) || is_digit(c) || c == '?' || c == '!'
 }
 
 /* Returns true if `c` is a letter or underscore. */
@@ -331,7 +334,11 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 			if l.current - l.start > 1 {
 				switch utf8.rune_at(l.source, l.start + 1) {
 				case 'f':
-					return check_keyword(l, 2, 0, "", .IF)
+					if check_keyword(l, 2, 0, "", .IF) == .IF {
+						return .IF
+					} else {
+						return check_keyword(l, 2, 3, "n't", .IFNT)
+					}
 				case 'n':
 					return check_keyword(l, 2, 0, "", .IN)
 				case 't':
@@ -390,7 +397,11 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 	case 'u':
 		return check_keyword(l, 1, 2, "se", .USE)
 	case 'w':
-		return check_keyword(l, 1, 4, "hile", .WHILE)
+		if check_keyword(l, 1, 4, "hile", .WHILE) == .WHILE {
+			return .WHILE
+		} else {
+			return check_keyword(l, 1, 7, "hilen't", .WHILENT)
+		}
 	case 'v':
 		{
 			if l.current - l.start > 1 {
@@ -412,12 +423,28 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 	return .IDENT
 }
 
+when CHAOTIC {
+	/* Consume letters, underscores, question marks, exclamation marks and 
+       apostrophes. For the ifn't and whilen't tokens. */
+	@(private = "file")
+	is_alphanumeric_or_qn_or_ex_or_apostrophe :: proc(c: rune) -> bool {
+		return is_alpha(c) || is_digit(c) || c == '?' || c == '!' || c == '\''
+	}
+}
+
 /* Consume an identifier. */
 @(private = "file")
 tok_ident :: proc(l: ^Lexer) -> Token {
-	// Consume letters, underscores and question marks.
-	for is_alphanumeric_or_qn(peek(l)) {
-		advance(l)
+	when CHAOTIC {
+		// Consume letters, underscores, question marks and apostrophes.
+		for is_alphanumeric_or_qn_or_ex_or_apostrophe(peek(l)) {
+			advance(l)
+		}
+	} else {
+		// Consume letters, underscores and question marks.
+		for is_alphanumeric_or_qn_or_ex(peek(l)) {
+			advance(l)
+		}
 	}
 
 	return make_token(l, ident_type(l))

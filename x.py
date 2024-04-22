@@ -9,6 +9,8 @@ import platform
 OC = "odin"
 ProcError = subprocess.CalledProcessError
 DEBUG_FLAGS = "-debug -o:none"
+RELEASE_FLAGS = "-o:speed"
+CHAOTIC_FLAGS = f"{RELEASE_FLAGS} -define:CHAOTIC=true"
 
 OUT = "zen"
 DBG_OUT = "dzen"
@@ -41,11 +43,25 @@ def create_release_build():
         os.makedirs("bin/rel", exist_ok=True)
         os.makedirs("bin/test", exist_ok=True)
         subprocess.run(
-            f"{OC} build src/ -out:bin/rel/{OUT} -o:speed".split(), check=True
+            f"{OC} build src/ -out:bin/rel/{OUT} {RELEASE_FLAGS}".split(), check=True
         )
         shutil.copy(f"bin/rel/{OUT}", "bin/test/")
     except ProcError as e:
         print(f"Error while creating release build: {e}", file=sys.stderr)
+        exit(1)
+
+
+def create_chaotic_build():
+    try:
+        print("Compiling in chaotic mode..")
+
+        os.makedirs("bin/chaotic", exist_ok=True)
+        subprocess.run(
+            f"{OC} build src/ -out:bin/chaotic/{OUT} {RELEASE_FLAGS} -define:CHAOTIC=true".split(),
+            check=True,
+        )
+    except ProcError as e:
+        print(f"Error when creating chaotic build: {e}", file=sys.stderr)
         exit(1)
 
 
@@ -129,6 +145,12 @@ def main():
     # release build
     rel_parser = subparsers.add_parser("rel", help="create a release build")
     rel_parser.set_defaults(func=create_release_build)
+
+    # chaotic build
+    chaotic_parser = subparsers.add_parser(
+        "chaotic", help="create a chaotic build (a build with weird extra features)"
+    )
+    chaotic_parser.set_defaults(func=create_chaotic_build)
 
     # benchmark
     bench_parser = subparsers.add_parser("bench", help="run benchmarks")
