@@ -194,7 +194,7 @@ mark_compiler_roots :: proc(gc: ^GC, compiler: ^Compiler) {
 	cmp := compiler
 	/* Mark each ObjFunction the compiler is compiling into. */
 	for cmp != nil {
-		mark_object(gc, (^Obj)(compiler.function))
+		mark_object(gc, (^Obj)(cmp.function))
 		cmp = cmp.enclosing
 	}
 }
