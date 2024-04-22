@@ -933,7 +933,6 @@ rules: []ParseRule = {
 	TokenType.AND           = ParseRule{nil, and_, .AND},
 	TokenType.BREAK         = ParseRule{nil, nil, .NONE},
 	TokenType.ELSE          = ParseRule{nil, nil, .NONE},
-	TokenType.EXPORT        = ParseRule{nil, nil, .NONE},
 	TokenType.FALSE         = ParseRule{literal, nil, .NONE},
 	TokenType.VAL           = ParseRule{nil, nil, .NONE},
 	TokenType.FOR           = ParseRule{nil, nil, .NONE},
