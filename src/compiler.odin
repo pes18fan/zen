@@ -1454,6 +1454,7 @@ module_declaration :: proc(p: ^Parser) {
 
 	path := strings.trim(p.previous.lexeme[1:len(p.previous.lexeme) - 1], " ")
 	abs_path := filepath.join([]string{config.__dirname, path})
+	defer delete(abs_path)
 
 	// look for the path in the stdlib, if not present look for a file at the path
 	found := slice.contains(p.gc.std_modules[:], path)

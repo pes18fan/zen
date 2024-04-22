@@ -680,12 +680,16 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 		case .OP_MODULE_BUILTIN:
 			{
 				module_str := strings.to_upper(read_string(frame).chars)
+				defer delete(module_str)
+
 				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
 				if !ok {
 					vm_panic(vm, "Unknown builtin module %s.", module_str)
 				}
 
-				define_builtin_module(vm.gc, strings.to_lower(module_str), module)
+				module_str_lower := strings.to_lower(module_str)
+				defer delete(module_str_lower)
+				define_builtin_module(vm.gc, module_str_lower, module)
 			}
 		case .OP_MODULE_USER:
 			{

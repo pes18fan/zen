@@ -250,7 +250,10 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		config.repl = true
 		return repl(vm)
 	} else {
-		config.__path = filepath.join([]string{os.get_current_directory(), script})
+		current_dir := os.get_current_directory()
+		defer delete(current_dir)
+
+		config.__path = filepath.join([]string{current_dir, script})
 		config.__dirname, _ = filepath.split(config.__path)
 		defer delete(config.__path)
 
