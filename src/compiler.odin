@@ -129,6 +129,9 @@ FunctionType :: enum {
 	SCRIPT,
 }
 
+/*
+The type of a module imported with `use`, may be a built-in module or one defined
+by the user i.e. an imported file. */
 ModuleType :: enum {
 	BUILTIN,
 	USER,
@@ -212,7 +215,8 @@ advance :: proc(p: ^Parser) #no_bounds_check {
 
 /*
 Advance to the next token if it matches the provided type, else
-report an error at that token. */
+report an error at that token.
+*/
 @(private = "file")
 consume :: proc(p: ^Parser, type: TokenType, message: string) {
 	if p.current.type == type {
@@ -322,7 +326,6 @@ emit_return :: proc(p: ^Parser) {
 /* 
 Add a constant to the current chunk's constant pool. Reports an error if
 there are too many constants.
-TODO: Increase the limit of the constant pool from 255 to 65535.
 */
 @(private = "file")
 make_constant :: proc(p: ^Parser, value: Value) -> byte {
@@ -361,8 +364,6 @@ patch_jump :: proc(p: ^Parser, offset: int) {
 
 /*
 Free the dynamic array of break jump offsets. 
-TODO: Nothing else really needs to be freed, so this stands out. Find a
-better way to do this.
 */
 @(private = "file")
 free_loops :: proc(p: ^Parser) {
@@ -373,8 +374,10 @@ free_loops :: proc(p: ^Parser) {
 
 /*
 Return a new Compiler struct.
+
 The globals table is inherited from previous runs of the compiler so that
 final variables' "finality" can be preserved in the global scope.
+
 Also makes sure that the current_compiler is set to the new compiler.
 */
 init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
@@ -435,14 +438,14 @@ end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
 	return fn
 }
 
-/* Begin a new scope. */
+/* Begin a new scope when compiling. */
 @(private = "file")
 begin_scope :: proc(p: ^Parser) {
 	p.current_compiler.scope_depth += 1
 }
 
 /* 
-End the current scope. 
+End the current scope when compiling.
 This also pops off any local variables that were declared in the scope.
 */
 @(private = "file")
@@ -682,7 +685,15 @@ or_ :: proc(p: ^Parser, can_assign: bool) {
 
 /* 
 Add a single byte character to a string.
+
 This function allocates memory.
+
+Input:
+- a: String to concatenate to
+- b: The byte to concatenate
+
+Output:
+- The concatenated string
 */
 @(private = "file")
 concatenate_byte :: proc(a: string, b: byte) -> string {
@@ -698,11 +709,13 @@ concatenate_byte :: proc(a: string, b: byte) -> string {
 
 /*
 Translate escape sequences in a string literal.
+
 This function allocates a string, but doesn't take ownership of the input; therefore
-the input will still need to be freed if necessary. In this compiler, it is used
-to create an escape-sequenced string out of a slice of the program input itself,
-which should NOT be freed until the program ends; therefore it is not necessary
-for it to take ownership.
+the input will still need to be freed if necessary. 
+
+In this compiler, it is used to create an escape-sequenced string out of a slice 
+of the program input itself, which should **NOT** be freed until the program ends; 
+therefore it is not necessary for it to take ownership.
 
 So far, only the newline and tab sequences are supported.
 */

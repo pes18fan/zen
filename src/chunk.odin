@@ -6,7 +6,9 @@ import "core:os"
 /*
 Each operation in bytecode has a one-byte operation code or opcode. These
 control the instruction we're dealing with.
-Note that the operation code is a byte, but the operation itself may be more.
+
+Note that the operation code is a byte, but the operation itself may consist of 
+more than just one byte.
 */
 OpCode :: enum {
 	OP_NOOP,
