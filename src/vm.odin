@@ -64,6 +64,9 @@ VM :: struct {
 	/* Linked list of all open upvalues. */
 	open_upvalues:    ^ObjUpvalue,
 	gc:               ^GC,
+
+	/* Arguments passed to the program. */
+	args:             ^ObjList,
 }
 
 /* The result of the interpreting. */

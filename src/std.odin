@@ -54,6 +54,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 			append(&module_functions, ModuleFunction{"panic", panic_native, 1})
 			append(&module_functions, ModuleFunction{"read", read_native, 1})
 			append(&module_functions, ModuleFunction{"write", write_native, 3})
+			append(&module_functions, ModuleFunction{"args", args_native, 0})
 		}
 	case .LIST:
 		{
@@ -236,6 +237,11 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		vm_panic(vm, "Invalid write mode '%s'.", mode)
 		return nil_val(), false
 	}
+}
+
+/* Get the arguments passed to the program. */
+args_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return obj_val(vm.args), true
 }
 
 /* 

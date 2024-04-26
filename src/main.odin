@@ -170,15 +170,16 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 	argc := len(os.args)
 	argv := os.args
 	argv_i := 0
-	argv_0 := argv[0]
 	script := ""
+	args_passed := false
 
 	outer: for len(argv) > 1 {
 		switch argv[1] {
 		case "--":
 			{
-				argv = argv[1:]
+				argv = argv[2:] /* Skip both the current arg and the "--" */
 				argc -= 1
+				args_passed = true
 				break outer
 			}
 		case "--version":
@@ -253,7 +254,17 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		argc -= 1
 	}
 
-	argv_0 = argv[0]
+	/* Create a ObjList for the args */
+	args_list := new_list(vm.gc)
+	defer free_object(vm.gc, args_list)
+
+	for i in 0 ..< len(argv) {
+		if args_passed {
+			write_value_array(&args_list.items, obj_val(copy_string(vm.gc, argv[i])))
+		}
+	}
+
+	vm.args = args_list
 
 	if script == "" {
 		config.repl = true
