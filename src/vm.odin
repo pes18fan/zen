@@ -8,6 +8,7 @@ import "core:reflect"
 import "core:slice"
 import "core:strings"
 import "core:time"
+import "core:unicode/utf8"
 
 FRAMES_MAX :: 64
 
@@ -558,8 +559,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				b := vm_pop(vm)
 				a := vm_pop(vm)
 
-				if !is_list(a) {
-					vm_panic(vm, "Can only subscript lists.")
+				if !is_list(a) && !is_string(a) {
+					vm_panic(vm, "Can only subscript lists and strings.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
@@ -569,19 +570,38 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				}
 
 				index := as_number(b)
-				list := as_list(a)
 
 				if math.floor(index) != index || index < 0 {
 					vm_panic(vm, "List index must be a non-negative integer.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
-				if int(index) >= list.items.count {
-					vm_panic(vm, "Index out of bounds.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
+				if is_list(a) {
+					list := as_list(a)
 
-				vm_push(vm, list.items.values[int(index)])
+					if int(index) >= list.items.count {
+						vm_panic(vm, "Index out of bounds.")
+						return .INTERPRET_RUNTIME_ERROR
+					}
+
+					vm_push(vm, list.items.values[int(index)])
+				} else {
+					string := as_string(a)
+
+					if int(index) >= len(string.chars) {
+						vm_panic(vm, "Index out of bounds.")
+						return .INTERPRET_RUNTIME_ERROR
+					}
+
+					for char, idx in string.chars {
+						if int(index) == idx {
+							res := utf8.runes_to_string([]rune{char})
+							defer delete(res)
+							vm_push(vm, obj_val(copy_string(vm.gc, res)))
+							break
+						}
+					}
+				}
 			}
 		case .OP_CLOSURE:
 			{
