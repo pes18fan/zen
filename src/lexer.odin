@@ -464,13 +464,22 @@ tok_number :: proc(l: ^Lexer) -> Token {
 
 /* Consume a string. */
 @(private = "file")
-tok_string :: proc(l: ^Lexer) -> Maybe(Token) {
+tok_string :: proc(l: ^Lexer, starts_with: rune) -> Maybe(Token) {
 	// Consume characters until the closing quote.
-	for peek(l) != '"' && !is_at_end(l) {
-		if peek(l) == '\n' {
-			l.line += 1
+	if starts_with == '"' {
+		for peek(l) != '"' && !is_at_end(l) {
+			if peek(l) == '\n' {
+				l.line += 1
+			}
+			advance(l)
 		}
-		advance(l)
+	} else {
+		for peek(l) != '\'' && !is_at_end(l) {
+			if peek(l) == '\n' {
+				l.line += 1
+			}
+			advance(l)
+		}
 	}
 
 	if is_at_end(l) {
@@ -544,7 +553,9 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case '>':
 		return make_token(l, match(l, '=') ? .GREATER_EQUAL : .GREATER)
 	case '"':
-		return tok_string(l)
+		return tok_string(l, starts_with = '"')
+	case '\'':
+		return tok_string(l, starts_with = '\'')
 	case '\n':
 		/* Line increment deferred, because otherwise the newline will be 
 		 * counted as being on the next line. */
