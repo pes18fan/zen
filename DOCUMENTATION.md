@@ -22,7 +22,7 @@ zen has the following datatypes:
 
 - `number`: A real number represented as a 64-bit floating point.
 - `bool`: A boolean value i.e. true or false.
-- `string`: A sequence of text.
+- `string`: A sequence of text, enclosed by either double or single quotes.
 
 You can create your own datatypes via classes.
 
@@ -225,6 +225,10 @@ The `push()` and `pop()` native functions in the `list` module can be used to
 add and remove items from a list, and the global `len()` native function can be used 
 to get the length of the list.
 
+> [!NOTE]
+> You can also use the subscripting syntax on strings to get a character at the
+> provided index.
+
 ## Classes
 
 Classes can be used to create your own datatypes.
@@ -400,6 +404,8 @@ for you to use.
 > [!NOTE]
 > The path for the read and write functions is relative to the running program. 
 > If in a REPL, the path is relative to wherever the REPL was invoked.
+
+- `args()`: Get the arguments passed to the program as a list.
 
 ### module `string`
 
