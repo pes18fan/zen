@@ -246,7 +246,8 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 					}
 				} else {
 					script = argv[1]
-					break outer
+					argv = argv[1:]
+					continue outer
 				}
 			}
 		}
