@@ -68,7 +68,7 @@ def create_chaotic_build():
 def benchmark():
     print("Starting up the benchmark runner..")
     try:
-        subprocess.run(f"ruby ./run_benchmarks.rb".split(), cwd="test/", check=True)
+        subprocess.run("ruby ./run_benchmarks.rb".split(), cwd="test/", check=True)
     except FileNotFoundError:
         print("Ruby needed to run benchmarks!", file=sys.stderr)
         exit(1)
@@ -88,7 +88,7 @@ def generate_docs():
         try:
             subprocess.run(f"{OC} doc src/".split(), stdout=doc_file, check=True)
         except ProcError as e:
-            print(f"Error when generating docs: {e}", file=system)
+            print(f"Error when generating docs: {e}", file=sys.stderr)
             exit(1)
 
     print("docs generated at doc/docs.txt")
@@ -106,7 +106,7 @@ def test():
 
     print("Running end-to-end tests:")
     try:
-        subprocess.run(f"ruby ./run_tests.rb".split(), cwd="test/", check=True)
+        subprocess.run("ruby ./run_tests.rb".split(), cwd="test/", check=True)
     except FileNotFoundError:
         print("Ruby needed to run the tests!", file=sys.stderr)
         exit(1)
@@ -132,7 +132,7 @@ def main():
             check=True,
         )
     except ProcError:
-        print(f"You need Odin to build!")
+        print("You need Odin to build!")
         exit(1)
 
     parser = argparse.ArgumentParser(description="zen build system")
