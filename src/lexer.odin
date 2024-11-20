@@ -248,7 +248,7 @@ fall in this category, they are handled separately, as they are used for
 automatic semicolon insertion.
 */
 @(private = "file")
-@(optimization_mode = "speed")
+@(optimization_mode = "favor_size")
 skip_whitespace :: proc(l: ^Lexer) {
 	for {
 		c := peek(l)
