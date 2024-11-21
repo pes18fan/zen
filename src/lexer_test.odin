@@ -111,7 +111,7 @@ func test() {
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
 	if !are_equal {
-		tt.errorf(t, "want %s, got %s", wanted, recieved)
+		tt.fail_now(t, fmt.tprintf("want %s, got %s", wanted, recieved))
 	}
 }
 
@@ -144,6 +144,6 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
 	if !are_equal {
-		tt.errorf(t, "want %s, got %s", wanted, recieved)
+		tt.fail_now(t, fmt.tprintf("want %s, got %s", wanted, recieved))
 	}
 }

@@ -67,11 +67,17 @@ test_chunk_write_lines :: proc(t: ^tt.T) {
 	}
 
 	if len(got) != len(want) {
-		tt.errorf(t, "encode_lines(%v) = \ngot %v, \nwant %v", chunk.lines, got, want)
+		tt.fail_now(
+			t,
+			fmt.tprintf("encode_lines(%v) = \ngot %v, \nwant %v", chunk.lines, got, want),
+		)
 	}
 
 	if !slice.equal(got, want) {
-		tt.errorf(t, "encode_lines(%v) = \ngot %v, \nwant %v", chunk.lines, got, want)
+		tt.fail_now(
+			t,
+			fmt.tprintf("encode_lines(%v) = \ngot %v, \nwant %v", chunk.lines, got, want),
+		)
 	}
 }
 
