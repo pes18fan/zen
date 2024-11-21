@@ -120,7 +120,7 @@ len_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	buf: [1024]byte
 	n, err := os.read(os.stdin, buf[:])
-	if err < 0 {
+	if err != nil{ 
 		vm_panic(vm, "Failed to read input.")
 		return nil_val(), false
 	}
@@ -215,19 +215,26 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	} else if mode == "a" {
 		/* Without the S_IRUSR and S_IWUSR, the user won't be able to read or
          * write to the file at all. */
+
+         flags : int
+         flags = os.O_APPEND | os.O_RDWR | os.O_CREATE
+
+         when ODIN_OS != .Windows{
+         	flags |= os.S_IRUSR | os.S_IWUSR
+         }
+
 		f, oerr := os.open(
-			abs_path,
-			os.O_APPEND | os.O_RDWR | os.O_CREATE,
-			os.S_IRUSR | os.S_IWUSR,
+			abs_path, flags
+
 		)
-		if oerr < 0 {
+		if oerr != nil {
 			vm_panic(vm, "Failed to open file '%s' for appending.", path)
 			return nil_val(), false
 		}
 		defer os.close(f)
 
 		_, werr := os.write(f, transmute([]u8)data)
-		if werr < 0 {
+		if werr != nil {
 			vm_panic(vm, "Failed to write to file '%s'.", path)
 			return nil_val(), false
 		}

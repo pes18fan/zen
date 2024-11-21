@@ -63,7 +63,7 @@ repl :: proc(vm: ^VM) -> int {
 	for i := 1;; i += 1 {
 		fmt.printf("zen:%d> ", i)
 		n, err := os.read(os.stdin, buf[:])
-		if err < 0 {
+		if err != nil {
 			fmt.eprintln("Failed to read input")
 			return 74
 		}
