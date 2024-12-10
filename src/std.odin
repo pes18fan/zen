@@ -69,6 +69,8 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
 			append(&module_functions, ModuleFunction{"reverse", reverse_native, 1})
 			append(&module_functions, ModuleFunction{"trim", trim_native, 1})
+			append(&module_functions, ModuleFunction{"asciichar", asciichar_native, 1})
+			append(&module_functions, ModuleFunction{"asciinum", asciinum_native, 1})
 		}
 	}
 
@@ -120,7 +122,7 @@ len_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	buf: [1024]byte
 	n, err := os.read(os.stdin, buf[:])
-	if err != nil{ 
+	if err != nil {
 		vm_panic(vm, "Failed to read input.")
 		return nil_val(), false
 	}
@@ -141,6 +143,30 @@ str_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 /* Return the type of any value, represented as a string. */
 typeof_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return obj_val(copy_string(vm.gc, type_of_value(args[0]))), true
+}
+
+/* Get the ASCII character out of a number. */
+asciichar_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot turn a %v into an ASCII character.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	rn := cast(rune)(as_number(args[0]))
+	str := fmt.tprintf("%c", rn)
+	return obj_val(copy_string(vm.gc, str)), true
+}
+
+/* Get the ASCII number out of a character. */
+asciinum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "Cannot turn a %v into an ASCII character.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	rn := as_string(args[0]).chars[0]
+	num := cast(f64)(cast(i32)(rn))
+	return number_val(num), true
 }
 
 /* ---------- TIME ---------- */
@@ -216,17 +242,14 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		/* Without the S_IRUSR and S_IWUSR, the user won't be able to read or
          * write to the file at all. */
 
-         flags : int
-         flags = os.O_APPEND | os.O_RDWR | os.O_CREATE
+		flags: int
+		flags = os.O_APPEND | os.O_RDWR | os.O_CREATE
 
-         when ODIN_OS != .Windows{
-         	flags |= os.S_IRUSR | os.S_IWUSR
-         }
+		when ODIN_OS != .Windows {
+			flags |= os.S_IRUSR | os.S_IWUSR
+		}
 
-		f, oerr := os.open(
-			abs_path, flags
-
-		)
+		f, oerr := os.open(abs_path, flags)
 		if oerr != nil {
 			vm_panic(vm, "Failed to open file '%s' for appending.", path)
 			return nil_val(), false

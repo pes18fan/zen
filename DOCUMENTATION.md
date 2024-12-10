@@ -415,6 +415,8 @@ for you to use.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
 - `trim(s)`: Trim whitespace from both sides of a string `s`.
+- `asciichar(x)`: Convert a number to its corresponding ASCII character.
+- `asciinum(s)`: Convert an ASCII character to its corresponding number.
 
 ### module `list`
 
