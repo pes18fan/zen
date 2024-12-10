@@ -195,8 +195,18 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 	defer delete(tokens)
 	length := len(tokens)
 	result := make([dynamic]Token)
+	in_list := false
 
 	for token, idx in tokens {
+		/* A flag to check if currently in a list; this affects semicolon insertion. */
+		if token.type == .LSQUARE {
+			in_list = true
+		}
+
+		if token.type == .RSQUARE {
+			in_list = false
+		}
+
 		/* Insert a semi after a line's final token. */
 		if token.type == .NEWLINE {
 			semi := Token {
@@ -224,11 +234,54 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 			  * token IS one of some particular types and if the next token IS 
 			  * NOT one of some particular types. */
 			#partial switch tokens[idx - 1].type {
-			case .IDENT, .STRING, .NUMBER, .TRUE, .THIS, .FALSE, .NIL, .BREAK, .CONTINUE, .RETURN, .RPAREN, .RSQUIRLY, .RSQUARE, .IT:
+			case .IDENT,
+			     .STRING,
+			     .NUMBER,
+			     .TRUE,
+			     .THIS,
+			     .FALSE,
+			     .NIL,
+			     .BREAK,
+			     .CONTINUE,
+			     .RETURN,
+			     .RPAREN,
+			     .RSQUIRLY,
+			     .RSQUARE,
+			     .IT:
 				#partial switch tokens[idx + 1].type {
-				case .IN, .OR, .AND, .DOT, .PLUS, .MINUS, .STAR, .SLASH, .EQUAL, .EQUAL_EQUAL, .BANG_EQUAL, .LESS, .LESS_EQUAL, .GREATER, .GREATER_EQUAL, .BAR_GREATER, .COMMA, .FAT_ARROW:
+				case .IN,
+				     .OR,
+				     .AND,
+				     .DOT,
+				     .PLUS,
+				     .MINUS,
+				     .STAR,
+				     .SLASH,
+				     .EQUAL,
+				     .EQUAL_EQUAL,
+				     .BANG_EQUAL,
+				     .LESS,
+				     .LESS_EQUAL,
+				     .GREATER,
+				     .GREATER_EQUAL,
+				     .BAR_GREATER,
+				     .COMMA,
+				     .FAT_ARROW:
 					continue
 				case:
+					/* Don't add a semicolon when just before the end of a list.
+                     * This prevents a semicolon from being added after "b"
+                     * element in a situation like this:
+                     *
+                     * var lst = [
+                     * "a",
+                     * "b"
+                     * ]
+                     */
+					if tokens[idx + 1].type == .RSQUARE {
+						continue
+					}
+
 					append(&result, semi)
 				}
 			}
