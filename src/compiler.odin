@@ -721,10 +721,9 @@ So far, only the newline and tab sequences are supported.
 */
 @(private = "file")
 add_escape_sequences :: proc(str: string) -> string {
-	sequences := map[byte]byte {
-		'n' = '\n',
-		't' = '\t',
-	}
+	sequences := make(map[byte]byte)
+	sequences['n'] = '\n'
+	sequences['t'] = '\t'
 	defer delete(sequences)
 
 	escaped := false
@@ -1956,7 +1955,20 @@ synchronize :: proc(p: ^Parser) {
 		}
 
 		#partial switch p.current.type {
-		case .BREAK, .CONTINUE, .FUNC, .FOR, .IF, .IFNT, .VAR, .VAL, .PRINT, .SWITCH, .RETURN, .WHILE, .WHILENT, .USE:
+		case .BREAK,
+		     .CONTINUE,
+		     .FUNC,
+		     .FOR,
+		     .IF,
+		     .IFNT,
+		     .VAR,
+		     .VAL,
+		     .PRINT,
+		     .SWITCH,
+		     .RETURN,
+		     .WHILE,
+		     .WHILENT,
+		     .USE:
 			return
 		case: // Do nothing.
 		}
