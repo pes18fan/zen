@@ -2,11 +2,9 @@
 
 A lightweight dynamically typed programming language written in Odin.
 
-Get started with a hello world!
-
-```zen
-puts "Hello, world!"
-```
+<p align="center">
+    <img src="../etc/zen.png" alt="zen code example" />
+</p>
 
 # documentation
 
