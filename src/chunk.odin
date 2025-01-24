@@ -49,6 +49,7 @@ OpCode :: enum {
 	OP_SUPER_INVOKE,
 	OP_LIST,
 	OP_SUBSCRIPT,
+	OP_SUBSCRIPT_SET,
 	OP_CLOSURE,
 	OP_CLOSE_UPVALUE,
 	OP_RETURN,
@@ -116,13 +117,11 @@ get_line :: proc(lines: [dynamic]int, offset: int) -> int {
 
 /* Initializes a chunk. */
 init_chunk :: proc() -> Chunk {
-	return(
-		Chunk {
-			code = make([dynamic]byte, 0, 0),
-			constants = init_value_array(),
-			lines = make([dynamic]int, 0, 0),
-		} \
-	)
+	return (Chunk {
+				code = make([dynamic]byte, 0, 0),
+				constants = init_value_array(),
+				lines = make([dynamic]int, 0, 0),
+			})
 }
 
 /* Writes a byte to a chunk. */

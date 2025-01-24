@@ -524,7 +524,14 @@ subscript :: proc(p: ^Parser, can_assign: bool) {
 	expression(p)
 	consume(p, .RSQUARE, "Expect ']' after index.")
 
-	emit_opcode(p, .OP_SUBSCRIPT)
+	if match(p, .EQUAL) {
+		// Parse right hand side of equals
+		expression(p)
+
+		emit_opcode(p, .OP_SUBSCRIPT_SET)
+	} else {
+		emit_opcode(p, .OP_SUBSCRIPT)
+	}
 }
 
 /* Access or set a instance's property, or access a value from a module. */
