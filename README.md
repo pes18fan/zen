@@ -37,10 +37,7 @@ build, run:
 
 ## testing
 
-### requirements
-
-- Odin
-- Ruby
+The requirements are the same as for building.
 
 ### steps
 
