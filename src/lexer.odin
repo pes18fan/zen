@@ -258,6 +258,7 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 				     .MINUS,
 				     .STAR,
 				     .SLASH,
+				     .PERCENT,
 				     .EQUAL,
 				     .EQUAL_EQUAL,
 				     .BANG_EQUAL,
