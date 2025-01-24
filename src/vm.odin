@@ -665,10 +665,10 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					defer strings.builder_destroy(&sb)
 
 					for char, idx in zstring.chars {
-						strings.write_rune(&sb, char)
-
 						if int(index) == idx {
 							strings.write_string(&sb, assigned.chars)
+						} else {
+							strings.write_rune(&sb, char)
 						}
 					}
 
