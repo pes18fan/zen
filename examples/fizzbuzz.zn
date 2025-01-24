@@ -1,0 +1,15 @@
+func fizz_buzz(n) {
+    val fizz = n % 3 == 0
+    val buzz = n % 5 == 0
+
+    switch {
+        fizz and buzz => return "fizzbuzz"
+        fizz          => return "fizz"
+        buzz          => return "buzz"
+        else          => return str(n)
+    }
+}
+
+for var i = 1; i <= 15; i = i + 1 {
+    puts(fizz_buzz(i))
+}
