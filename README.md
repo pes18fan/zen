@@ -2,6 +2,17 @@
 
 A lightweight dynamically typed programming language written in Odin.
 
+Get started with a hello world!
+
+```zen
+puts "Hello, world!"
+```
+
+# documentation
+
+All the documentation about the language is in the markdown file `DOCUMENTATION.md`
+in the root of this repository.
+
 # development
 
 ## building
@@ -43,4 +54,5 @@ To test everything at once, run:
 
 # contributing
 
-zen may have a lot of bugs and problems lying around, feel free to open an issue or create a pull request if you find any!
+zen may have a lot of bugs and problems lying around, feel free to open an issue
+or create a pull request if you find any!

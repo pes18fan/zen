@@ -169,6 +169,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return byte_instruction("OP_LIST", c, offset)
 	case .OP_SUBSCRIPT:
 		return simple_instruction("OP_SUBSCRIPT", offset)
+	case .OP_SUBSCRIPT_SET:
+		return simple_instruction("OP_SUBSCRIPT_SET", offset)
 	case .OP_CLOSURE:
 		{
 			offset := offset

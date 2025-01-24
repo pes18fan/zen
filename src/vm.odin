@@ -580,20 +580,22 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					list := as_list(a)
 
 					if int(index) >= list.items.count {
-						vm_panic(vm, "Index out of bounds.")
+						vm_panic(vm,
+							fmt.tprintf("Index out of bounds, attempted indexing %d in a %d list.", 
+								int(index), list.items.count))
 						return .INTERPRET_RUNTIME_ERROR
 					}
 
 					vm_push(vm, list.items.values[int(index)])
 				} else {
-					string := as_string(a)
+					zstring := as_string(a)
 
-					if int(index) >= len(string.chars) {
-						vm_panic(vm, "Index out of bounds.")
+					if int(index) >= zstring.len {
+						vm_panic(vm, fmt.tprintf("Index out of bounds, attempted indexing %d in a %d string.", int(index), zstring.len))
 						return .INTERPRET_RUNTIME_ERROR
 					}
 
-					for char, idx in string.chars {
+					for char, idx in zstring.chars {
 						if int(index) == idx {
 							res := utf8.runes_to_string([]rune{char})
 							defer delete(res)
@@ -601,6 +603,77 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 							break
 						}
 					}
+				}
+			}
+		case .OP_SUBSCRIPT_SET:
+			{
+				c := vm_pop(vm)
+				b := vm_pop(vm)
+				a := vm_pop(vm)
+
+				if !is_list(a) && !is_string(a) {
+					vm_panic(vm, "Can only subscript lists and strings.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				if !is_number(b) {
+					vm_panic(vm, "List index must be a positive integer.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				index := as_number(b)
+
+				if math.floor(index) != index || index < 0 {
+					vm_panic(vm, "List index must be a non-negative integer.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				if is_list(a) {
+					list := as_list(a)
+
+					if int(index) >= list.items.count {
+						vm_panic(vm, fmt.tprintf("Index out of bounds, attempted indexing %d in a %d list.", int(index), list.items.count))
+						return .INTERPRET_RUNTIME_ERROR
+					}
+
+					// Update the list and push it back
+					list.items.values[int(index)] = c
+					vm_push(vm, obj_val(list))
+				} else {
+					if (!is_string(c)) {
+						vm_panic(vm, "Can only set a character in a string.")
+						return .INTERPRET_RUNTIME_ERROR
+					}
+
+					zstring := as_string(a)
+					assigned := as_string(c)
+
+					if (assigned.len != 1) {
+						vm_panic(vm, "Can't reassign a string character to multiple characters.")
+						return .INTERPRET_RUNTIME_ERROR
+					}
+
+					if int(index) >= zstring.len {
+						vm_panic(vm, fmt.tprintf("Index out of bounds, attempted indexing %d in a %d string.", int(index), zstring.len))
+						return .INTERPRET_RUNTIME_ERROR
+					}
+
+					/* Build a new string with the specified index updated.
+					 * I tried to just directly update the existing string but
+					 * that wasn't possible for some reason */
+					sb := strings.builder_make()
+					defer strings.builder_destroy(&sb)
+
+					for char, idx in zstring.chars {
+						if int(index) == idx {
+							strings.write_string(&sb, assigned.chars)
+						} else {
+							strings.write_rune(&sb, char)
+						}
+					}
+
+					res := strings.to_string(sb)
+					vm_push(vm, obj_val(copy_string(vm.gc, res)))
 				}
 			}
 		case .OP_CLOSURE:

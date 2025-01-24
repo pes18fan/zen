@@ -1,0 +1,39 @@
+func partition(arr, lo, hi) {
+    val pivot = arr[hi]
+    var idx = lo - 1
+
+    for var i = lo; i < hi; i = i + 1 {
+        if arr[i] <= pivot {
+            idx = idx + 1
+            val tmp = arr[i]
+            arr[i] = arr[idx]
+            arr[idx] = tmp
+        }
+    }
+
+    idx = idx + 1
+    arr[hi] = arr[idx]
+    arr[idx] = pivot
+
+    return idx
+}
+
+func sort(arr, lo, hi) {
+    if lo >= hi {
+        return
+    }
+
+    var pivot_index = partition(arr, lo, hi)
+
+    sort(arr, lo, pivot_index - 1)
+    sort(arr, pivot_index + 1, hi)
+}
+
+pub func quick_sort(arr) {
+    sort(arr, 0, len(arr) - 1)
+}
+
+var array = [2, 1, -5, 123, 95, 16, -81]
+puts(array)
+quick_sort(array)
+puts(array)
