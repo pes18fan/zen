@@ -1,3 +1,5 @@
+// DRAFT
+// Doesn't run for unknown reason
 // This benchmark stresses instance creation and initializer calling.
 use "time"
 

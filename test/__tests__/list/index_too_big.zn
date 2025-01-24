@@ -1,2 +1,2 @@
 var l = [1, 2, 3]
-puts(l[69]) // ERR: Index out of bounds.
+puts(l[69]) // ERR: Index out of bounds, attempted indexing 69 in a 3 list.

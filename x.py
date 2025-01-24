@@ -68,10 +68,7 @@ def create_chaotic_build():
 def benchmark():
     print("Starting up the benchmark runner..")
     try:
-        subprocess.run("ruby ./run_benchmarks.rb".split(), cwd="test/", check=True)
-    except FileNotFoundError:
-        print("Ruby needed to run benchmarks!", file=sys.stderr)
-        exit(1)
+        subprocess.run("python ./run_benchmarks.py".split(), cwd="test/", check=True)
     except ProcError as e:
         print(f"Error while benchmarking: {e}", file=sys.stderr)
         exit(1)
@@ -106,10 +103,7 @@ def test():
 
     print("Running end-to-end tests:")
     try:
-        subprocess.run("ruby ./run_tests.rb".split(), cwd="test/", check=True)
-    except FileNotFoundError:
-        print("Ruby needed to run the tests!", file=sys.stderr)
-        exit(1)
+        subprocess.run("python ./run_tests.py".split(), cwd="test/", check=True)
     except ProcError as e:
         print(f"Error during e2e tests: {e}", file=sys.stderr)
         exit(1)

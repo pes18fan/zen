@@ -84,7 +84,8 @@ test_chunk_write_lines :: proc(t: ^tt.T) {
 /* Test if the RLE encoded line numbers are properly decoded. */
 @(test)
 test_chunk_get_line :: proc(t: ^tt.T) {
-	lines := [dynamic]int{3, 1, 2, 2, 3, 3, 2, 4}
+	lines := make([dynamic]int)
+	append(&lines, 3, 1, 2, 2, 3, 3, 2, 4)
 
 	tt.expect_value(t, get_line(lines, 0), 1)
 	tt.expect_value(t, get_line(lines, 1), 1)
