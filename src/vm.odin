@@ -246,6 +246,20 @@ binary_op :: proc(v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
 				}
 				vm_push(v, number_val(a / b))
 			}
+		case "%":
+			{
+				if b == 0 {
+					vm_panic(v, "Cannot modulo by zero.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				if a != math.floor(a) || b != math.floor(b) {
+					vm_panic(v, "Operator '%' can only be used with integers.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				vm_push(v, number_val(cast(f64)(cast(int)a % cast(int)b)))
+			}
 		}
 	case bool:
 		{
@@ -468,6 +482,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			binary_op(vm, f64, "*") or_return
 		case .OP_DIVIDE:
 			binary_op(vm, f64, "/") or_return
+		case .OP_MODULO:
+			binary_op(vm, f64, "%") or_return
 		case .OP_NOT:
 			vm_push(vm, bool_val(is_falsey(vm_pop(vm))))
 		case .OP_NEGATE:
@@ -580,9 +596,14 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					list := as_list(a)
 
 					if int(index) >= list.items.count {
-						vm_panic(vm,
-							fmt.tprintf("Index out of bounds, attempted indexing %d in a %d list.", 
-								int(index), list.items.count))
+						vm_panic(
+							vm,
+							fmt.tprintf(
+								"Index out of bounds, attempted indexing %d in a %d list.",
+								int(index),
+								list.items.count,
+							),
+						)
 						return .INTERPRET_RUNTIME_ERROR
 					}
 
@@ -591,7 +612,14 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					zstring := as_string(a)
 
 					if int(index) >= zstring.len {
-						vm_panic(vm, fmt.tprintf("Index out of bounds, attempted indexing %d in a %d string.", int(index), zstring.len))
+						vm_panic(
+							vm,
+							fmt.tprintf(
+								"Index out of bounds, attempted indexing %d in a %d string.",
+								int(index),
+								zstring.len,
+							),
+						)
 						return .INTERPRET_RUNTIME_ERROR
 					}
 
@@ -632,7 +660,14 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					list := as_list(a)
 
 					if int(index) >= list.items.count {
-						vm_panic(vm, fmt.tprintf("Index out of bounds, attempted indexing %d in a %d list.", int(index), list.items.count))
+						vm_panic(
+							vm,
+							fmt.tprintf(
+								"Index out of bounds, attempted indexing %d in a %d list.",
+								int(index),
+								list.items.count,
+							),
+						)
 						return .INTERPRET_RUNTIME_ERROR
 					}
 
@@ -654,7 +689,14 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					}
 
 					if int(index) >= zstring.len {
-						vm_panic(vm, fmt.tprintf("Index out of bounds, attempted indexing %d in a %d string.", int(index), zstring.len))
+						vm_panic(
+							vm,
+							fmt.tprintf(
+								"Index out of bounds, attempted indexing %d in a %d string.",
+								int(index),
+								zstring.len,
+							),
+						)
 						return .INTERPRET_RUNTIME_ERROR
 					}
 

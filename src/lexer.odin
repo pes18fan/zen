@@ -22,6 +22,7 @@ TokenType :: enum {
 	SEMI,
 	SLASH,
 	STAR,
+	PERCENT,
 	NEWLINE,
 
 	// one or two character tokens
@@ -586,6 +587,8 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 		return make_token(l, .BACKSLASH)
 	case '/':
 		return make_token(l, .SLASH)
+	case '%':
+		return make_token(l, .PERCENT)
 	case '*':
 		return make_token(l, .STAR)
 	case '|':

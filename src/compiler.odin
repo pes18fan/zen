@@ -498,6 +498,8 @@ binary :: proc(p: ^Parser, can_assign: bool) {
 		emit_opcode(p, .OP_ADD)
 	case .SLASH:
 		emit_opcode(p, .OP_DIVIDE)
+	case .PERCENT:
+		emit_opcode(p, .OP_MODULO)
 	case .STAR:
 		emit_opcode(p, .OP_MULTIPLY)
 	case:
@@ -959,6 +961,7 @@ rules: []ParseRule = {
 	TokenType.PLUS          = ParseRule{nil, binary, .TERM},
 	TokenType.SEMI          = ParseRule{nil, nil, .NONE},
 	TokenType.SLASH         = ParseRule{nil, binary, .FACTOR},
+	TokenType.PERCENT       = ParseRule{nil, binary, .FACTOR},
 	TokenType.STAR          = ParseRule{nil, binary, .FACTOR},
 	TokenType.BANG_EQUAL    = ParseRule{nil, binary, .EQUALITY},
 	TokenType.BAR_GREATER   = ParseRule{nil, nil, .NONE},
