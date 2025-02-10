@@ -41,6 +41,29 @@ val nice = 69
 nice = 68 // ERROR!
 ```
 
+> [!NOTE]
+> Like in Python, zen uses aliasing. Basically, what that means is that doing
+> something like `b = a` causes `b` and `a` to both refer to the same object in
+> memory, rather than creating a new copy. So, any changes to `a` will also be
+> reflected in `b`. To avoid this, use the `copy()` global function described around
+> the end of this documentation.
+
+## Exiting early
+
+You can use the `return` statement, normally used to return from functions, to
+exit a program early, similar to `exit()` functions in other languages. This takes
+inspiration from Lua.
+
+```
+puts "hello"
+return
+puts "world"
+```
+
+This will print "hello" and exit.
+
+You can add a number after `return` to exit with that status code.
+
 ## Conditionals
 
 ### if-else
@@ -377,6 +400,7 @@ for you to use.
 - `typeof(x)`: Get the type of any expression as a string.
 - `str(x)`: Convert any value into a string.
 - `parse(s)`: Attempt to parse a string `s` into a floating point number.
+- `copy(x)`: Return a copy of `x`.
 
 ### module `time`
 
@@ -414,7 +438,6 @@ for you to use.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
-- `trim(s)`: Trim whitespace from both sides of a string `s`.
 - `asciichar(x)`: Convert a number to its corresponding ASCII character.
 - `asciinum(s)`: Convert an ASCII character to its corresponding number.
 

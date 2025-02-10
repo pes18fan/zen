@@ -221,6 +221,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return constant_instruction("OP_MODULE_BUILTIN", c, offset)
 	case .OP_MODULE_USER:
 		return user_module_instruction("OP_MODULE_USER", c, offset)
+	case .OP_TOP_LEVEL_RETURN:
+		return simple_instruction("OP_TOP_LEVEL_RETURN", offset)
 	case:
 		fmt.eprintf("Unknown opcode %d\n", instruction)
 		return offset + 1

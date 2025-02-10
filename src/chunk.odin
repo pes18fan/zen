@@ -59,6 +59,7 @@ OpCode :: enum {
 	OP_METHOD,
 	OP_MODULE_BUILTIN,
 	OP_MODULE_USER,
+	OP_TOP_LEVEL_RETURN,
 }
 
 /*

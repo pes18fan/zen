@@ -73,6 +73,7 @@ VM :: struct {
 /* The result of the interpreting. */
 InterpretResult :: enum {
 	INTERPRET_OK,
+	INTERPRET_VOLUNTARY_EXIT,
 	INTERPRET_LEX_ERROR,
 	INTERPRET_COMPILE_ERROR,
 	INTERPRET_READ_ERROR,
@@ -871,6 +872,18 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				pop(&vm.gc.import_stack) /* Remove the path from the import stack. */
 
 				vm_push(vm, obj_val(module))
+			}
+		case .OP_TOP_LEVEL_RETURN:
+			{
+				top := vm_pop(vm) /* Grab the exit code */
+
+				if !is_number(top) {
+					vm_panic(vm, "Exit code must be a number, not %v.", type_of_value(top))
+				}
+
+				code := cast(int)as_number(top)
+				config.__exit_code = code
+				return .INTERPRET_VOLUNTARY_EXIT
 			}
 		}
 	}

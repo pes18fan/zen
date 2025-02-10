@@ -60,6 +60,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 		{
 			append(&module_functions, ModuleFunction{"push", push_native, 2})
 			append(&module_functions, ModuleFunction{"pop", pop_native, 1})
+			append(&module_functions, ModuleFunction{"sort", sort_native, 1})
 		}
 	case .STRING:
 		{
@@ -68,7 +69,6 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 			append(&module_functions, ModuleFunction{"upcase", upcase_native, 1})
 			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
 			append(&module_functions, ModuleFunction{"reverse", reverse_native, 1})
-			append(&module_functions, ModuleFunction{"trim", trim_native, 1})
 			append(&module_functions, ModuleFunction{"asciichar", asciichar_native, 1})
 			append(&module_functions, ModuleFunction{"asciinum", asciinum_native, 1})
 		}
@@ -81,7 +81,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
  * functions are available as such. The rest are in their corresponding modules. */
 init_natives :: proc(gc: ^GC) {
 	/* Add all the names of the globally present native functions to the name list. */
-	append(&gc.global_native_fns, "puts", "gets", "len", "str", "parse", "typeof")
+	append(&gc.global_native_fns, "puts", "gets", "len", "str", "parse", "typeof", "copy")
 
 	// io
 	define_native(gc, "puts", puts_native, arity = 1)
@@ -93,6 +93,9 @@ init_natives :: proc(gc: ^GC) {
 	define_native(gc, "str", str_native, arity = 1)
 	define_native(gc, "parse", parse_native, arity = 1)
 	define_native(gc, "typeof", typeof_native, arity = 1)
+
+	// mem
+	define_native(gc, "copy", copy_native, arity = 1)
 }
 
 
@@ -145,28 +148,47 @@ typeof_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return obj_val(copy_string(vm.gc, type_of_value(args[0]))), true
 }
 
-/* Get the ASCII character out of a number. */
-asciichar_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_number(args[0]) {
-		vm_panic(vm, "Cannot turn a %v into an ASCII character.", type_of_value(args[0]))
-		return nil_val(), false
+_copy_item :: proc(vm: ^VM, value: Value) -> Value {
+	if !is_obj(value) {
+		return value
 	}
 
-	rn := cast(rune)(as_number(args[0]))
-	str := fmt.tprintf("%c", rn)
-	return obj_val(copy_string(vm.gc, str)), true
+	obj := as_obj(value)
+
+	#partial switch obj.type {
+	case .INSTANCE:
+		{
+			instance := as_instance(obj_val(obj))
+			new := new_instance(vm.gc, instance.klass)
+
+			/* Deep copy the fields */
+			table_add_all(from = &instance.fields, to = &new.fields)
+			return obj_val(new)
+		}
+	case .LIST:
+		{
+			list := as_list(obj_val(obj))
+			new := new_list(vm.gc)
+
+			/* Copy all the list's items over. */
+			for i := 0; i < list.items.count; i += 1 {
+				/* _copy_item may be called recursively if we're deep copying a
+                 * list within a list. */
+				write_value_array(&new.items, _copy_item(vm, list.items.values[i]))
+			}
+
+			return obj_val(new)
+		}
+	case:
+		return value
+	}
+
+	return nil_val()
 }
 
-/* Get the ASCII number out of a character. */
-asciinum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_string(args[0]) {
-		vm_panic(vm, "Cannot turn a %v into an ASCII character.", type_of_value(args[0]))
-		return nil_val(), false
-	}
-
-	rn := as_string(args[0]).chars[0]
-	num := cast(f64)(cast(i32)(rn))
-	return number_val(num), true
+/* Copy an object. */
+copy_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return _copy_item(vm, args[0]), true
 }
 
 /* ---------- TIME ---------- */
@@ -475,15 +497,30 @@ reverse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 	return obj_val(take_string(vm.gc, str)), true
 }
 
-/* Trim leading and trailing whitespace from a string. */
-trim_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_string(args[0]) {
-		vm_panic(vm, "Cannot trim a %v.", type_of_value(args[0]))
+/* Get the ASCII character out of a number. */
+asciichar_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot turn a %v into an ASCII character.", type_of_value(args[0]))
 		return nil_val(), false
 	}
 
-	return obj_val(copy_string(vm.gc, strings.trim_space(as_string(args[0]).chars))), true
+	rn := cast(rune)(as_number(args[0]))
+	str := fmt.tprintf("%c", rn)
+	return obj_val(copy_string(vm.gc, str)), true
 }
+
+/* Get the ASCII number out of a character. */
+asciinum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "Cannot turn a %v into an ASCII character.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	rn := as_string(args[0]).chars[0]
+	num := cast(f64)(cast(i32)(rn))
+	return number_val(num), true
+}
+
 
 /* ---------- LIST ---------- */
 
@@ -516,4 +553,55 @@ pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	return pop_value_array(&list.items), true
+}
+
+_partition :: proc(list: ^[dynamic]Value, lo, hi: int) -> int {
+	random_pivot_idx := cast(int)rand.int31() % (hi + 1)
+
+	tmp := list[random_pivot_idx]
+	list[random_pivot_idx] = list[hi]
+	list[hi] = tmp
+
+	pivot := list[hi]
+	idx := lo - 1
+
+	for i := lo; i < hi; i += 1 {
+		if list[i] < pivot {
+			idx += 1
+			tmp := list[i]
+			list[i] = list[idx]
+			list[idx] = tmp
+		}
+	}
+
+	idx += 1
+	list[hi] = list[idx]
+	list[idx] = pivot
+
+	return idx
+}
+
+_sort :: proc(list: ^[dynamic]Value, lo, hi: int) {
+	if lo >= hi {
+		return
+	}
+
+	pivot_idx := _partition(list, lo, hi)
+
+	_sort(list, lo, pivot_idx - 1)
+	_sort(list, pivot_idx + 1, hi)
+}
+
+/* Sort a list using the quicksort algorithm. */
+sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_list(args[0]) {
+		vm_panic(vm, "Cannot sort a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	list := as_list(args[0])
+
+	_sort(&list.items.values, 0, list.items.count - 1)
+
+	return nil_val(), true
 }

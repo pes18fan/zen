@@ -1667,9 +1667,19 @@ print_statement :: proc(p: ^Parser) {
 @(private = "file")
 return_statement :: proc(p: ^Parser) {
 	if p.current_compiler.type == .SCRIPT {
-		// I may allow returning from top-level in the future, since it's a
-		// useful way to exit early.
-		error(p, "Cannot return from top-level code.")
+		/* If you invoke `return` outside a function, it is interpreted as an
+         * exit statement. A bare return will exit the program successfully,
+         * and you can add a number after it to make it return with a certain
+         * status code. */
+		if match(p, .SEMI) {
+			emit_constant(p, 0)
+		} else {
+			expression(p)
+			consume_semi(p, "exit code")
+		}
+
+		emit_opcode(p, .OP_TOP_LEVEL_RETURN)
+		return
 	}
 
 	if match(p, .SEMI) {

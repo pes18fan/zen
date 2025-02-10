@@ -23,6 +23,9 @@ Config :: struct {
 	record_time:      bool,
 	repl:             bool,
 
+	/* Value that a program exits with on a top-level return. */
+	__exit_code:      int,
+
 	/* Path to the running file. */
 	__path:           string,
 
@@ -40,6 +43,7 @@ config := Config {
 	log_gc           = false,
 	record_time      = false,
 	repl             = false,
+	__exit_code      = 0,
 	__path           = "",
 	__dirname        = "",
 }
@@ -120,9 +124,7 @@ run_file :: proc(vm: ^VM, path: string, importer: ImportingModule = nil) -> Inte
 	/* Get the name of the file from the path */
 	vm.name = filepath.short_stem(path)
 
-	result := interpret(vm, vm.gc, source, importer)
-
-	return result
+	return interpret(vm, vm.gc, source, importer)
 }
 
 /* Print a help string in `stream`. */
@@ -283,6 +285,8 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		switch result {
 		case .INTERPRET_LEX_ERROR:
 			return 65
+		case .INTERPRET_VOLUNTARY_EXIT:
+			return config.__exit_code
 		case .INTERPRET_COMPILE_ERROR:
 			return 65
 		case .INTERPRET_RUNTIME_ERROR:
