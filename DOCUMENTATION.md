@@ -401,6 +401,8 @@ for you to use.
 - `str(x)`: Convert any value into a string.
 - `parse(s)`: Attempt to parse a string `s` into a floating point number.
 - `copy(x)`: Return a copy of `x`.
+- `dirname()`: Return the directory containing the running program, or an empty string if running a REPL.
+- `filename()`: Return the name of the running program, or an empty string if running a REPL.
 
 ### module `time`
 

@@ -81,7 +81,18 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
  * functions are available as such. The rest are in their corresponding modules. */
 init_natives :: proc(gc: ^GC) {
 	/* Add all the names of the globally present native functions to the name list. */
-	append(&gc.global_native_fns, "puts", "gets", "len", "str", "parse", "typeof", "copy")
+	append(
+		&gc.global_native_fns,
+		"puts",
+		"gets",
+		"len",
+		"str",
+		"parse",
+		"typeof",
+		"copy",
+		"dirname",
+		"filename",
+	)
 
 	// io
 	define_native(gc, "puts", puts_native, arity = 1)
@@ -96,6 +107,10 @@ init_natives :: proc(gc: ^GC) {
 
 	// mem
 	define_native(gc, "copy", copy_native, arity = 1)
+
+	// others
+	define_native(gc, "dirname", dirname_native, arity = 0)
+	define_native(gc, "filename", filename_native, arity = 0)
 }
 
 
@@ -191,11 +206,22 @@ copy_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return _copy_item(vm, args[0]), true
 }
 
+/* Return the directory containing the running program. Returns an empty string
+ * if in a REPL. */
+dirname_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return obj_val(copy_string(vm.gc, config.__dirname)), true
+}
+
+/* Return the name of the running program. Returns an empty string if in a REPL. */
+filename_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return obj_val(copy_string(vm.gc, config.__path)), true
+}
+
 /* ---------- TIME ---------- */
 
 /* Get the current UNIX time in seconds. */
 clock_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return number_val(f64(time.to_unix_nanoseconds(time.now())) / 1e9), true
+	return number_val(f64(time.to_unix_seconds(time.now()))), true
 }
 
 /* ---------- OS ---------- */
