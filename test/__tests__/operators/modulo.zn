@@ -1,0 +1,2 @@
+puts(3 % 2) // expect: 1
+puts(6 % 3) // expect: 0

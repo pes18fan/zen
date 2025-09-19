@@ -1,5 +1,7 @@
 // DRAFT
 // NOTE: Doesn't run for unknown reason
+use "time"
+
 class Tree {
   init(item, depth) {
     this.item = item
@@ -28,7 +30,7 @@ val minDepth = 4
 val maxDepth = 14
 val stretchDepth = maxDepth + 1
 
-val start = clock()
+val start = time.clock()
 
 puts("stretch tree of depth:")
 puts(stretchDepth)
@@ -70,4 +72,4 @@ puts(maxDepth)
 puts("check:")
 puts(longLivedTree.check())
 puts("elapsed:")
-puts(clock() - start)
+puts(time.clock() - start)
