@@ -1,0 +1,10 @@
+use "list"
+
+var a = [5, 4, 3, 2, 1]
+var b = [6, 1, 99, -31, 0, -3, 94, 45]
+
+list.sort(a)
+list.sort(b)
+
+puts(a) // expect: [1, 2, 3, 4, 5]
+puts(b) // expect: [-31, -3, 0, 1, 6, 45, 94, 99]

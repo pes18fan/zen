@@ -447,6 +447,7 @@ for you to use.
 
 - `push(l, i)`: Add an item `i` to the end of the list `l`.
 - `pop(l)`: Get the last item of the list `l` after removing it from the list.
+- `sort(l)`: Sort the list `l`. Note that this sorts in-place rather than returning a new list.
 
 ## The chaotic stuff
 
