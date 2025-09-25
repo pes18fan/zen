@@ -1,5 +1,3 @@
-use "math"
-
 func partition(arr, lo, hi) {
     val pivot = arr[hi]
     var idx = lo - 1
