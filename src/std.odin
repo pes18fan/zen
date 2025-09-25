@@ -582,12 +582,11 @@ pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 }
 
 _partition :: proc(list: ^[dynamic]Value, lo, hi: int) -> int {
-	// TODO: Find out why using a random pivot doesn't work
-	// random_pivot_idx := cast(int)rand.int31() % (hi + 1)
-	//
-	// tmp := list[random_pivot_idx]
-	// list[random_pivot_idx] = list[hi]
-	// list[hi] = tmp
+	random_pivot_idx := lo + cast(int)rand.int31() % (hi - lo + 1)
+
+	tmp := list[random_pivot_idx]
+	list[random_pivot_idx] = list[hi]
+	list[hi] = tmp
 
 	pivot := list[hi]
 	idx := lo - 1
