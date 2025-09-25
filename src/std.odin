@@ -582,17 +582,19 @@ pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 }
 
 _partition :: proc(list: ^[dynamic]Value, lo, hi: int) -> int {
-	random_pivot_idx := cast(int)rand.int31() % (hi + 1)
-
-	tmp := list[random_pivot_idx]
-	list[random_pivot_idx] = list[hi]
-	list[hi] = tmp
+	// TODO: Find out why using a random pivot doesn't work
+	// random_pivot_idx := cast(int)rand.int31() % (hi + 1)
+	//
+	// tmp := list[random_pivot_idx]
+	// list[random_pivot_idx] = list[hi]
+	// list[hi] = tmp
 
 	pivot := list[hi]
 	idx := lo - 1
+	pivot_as_num := as_number(pivot)
 
 	for i := lo; i < hi; i += 1 {
-		if list[i] < pivot {
+		if as_number(list[i]) <= pivot_as_num {
 			idx += 1
 			tmp := list[i]
 			list[i] = list[idx]
@@ -624,6 +626,7 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		vm_panic(vm, "Cannot sort a %v.", type_of_value(args[0]))
 		return nil_val(), false
 	}
+
 
 	list := as_list(args[0])
 
