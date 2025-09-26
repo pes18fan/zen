@@ -280,6 +280,17 @@ binary_op :: proc(v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
 	return nil
 }
 
+@(private = "file")
+print_stack :: proc(vm: ^VM) {
+	fmt.printf("          ")
+	for value in vm.stack {
+		fmt.printf("[ ")
+		print_value(value)
+		fmt.printf(" ]")
+	}
+	fmt.printf("\n")
+}
+
 /*
 Run the VM, going through the bytecode and interpreting each instruction
 one by one.
@@ -294,13 +305,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 
 	for {
 		if config.trace_exec {
-			fmt.printf("          ")
-			for value in vm.stack {
-				fmt.printf("[ ")
-				print_value(value)
-				fmt.printf(" ]")
-			}
-			fmt.printf("\n")
+			print_stack(vm)
 			offset := mem.ptr_sub(frame.ip, &frame.closure.function.chunk.code[0])
 			disassemble_instruction(&frame.closure.function.chunk, offset)
 		}
@@ -370,7 +375,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					name := read_string(frame)
 
 					/* Look for the value in the module. */
-					value: Value;ok: bool
+					value: Value; ok: bool
 					if value, ok = table_get(&module.values, name); ok {
 						vm_pop(vm) /* Module. */
 						vm_push(vm, value)
@@ -390,7 +395,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					name := read_string(frame)
 
 					/* Look for a field. */
-					value: Value;ok: bool
+					value: Value; ok: bool
 					if value, ok = table_get(&instance.fields, name); ok {
 						vm_pop(vm) /* Instance. */
 						vm_push(vm, value)
@@ -463,6 +468,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			binary_op(vm, bool, "<") or_return
 		case .OP_ADD:
 			if is_string(vm_peek(vm, 0)) && is_string(vm_peek(vm, 1)) {
+				// TODO: remove pls
+				print_stack(vm)
 				concatenate(vm)
 			} else if is_number(vm_peek(vm, 0)) && is_number(vm_peek(vm, 1)) {
 				b := as_number(vm_pop(vm))
@@ -782,6 +789,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					}
 					vm_pop(vm)
 				}
+				assert(len(vm.stack) > 0) // There should be at least the function left here
 				vm_pop(vm) // Pop the function itself.
 
 				vm_push(vm, result) // Push the return value back to the stack.
@@ -1036,7 +1044,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 				vm.stack[len(vm.stack) - arg_count - 1] = obj_val(new_instance(vm.gc, klass))
 
 				/* Look for an initializer. */
-				initializer: Value;ok: bool
+				initializer: Value; ok: bool
 				if initializer, ok = table_get(&klass.methods, vm.gc.init_string); ok {
 					return call(vm, as_closure(initializer), arg_count)
 				} else if arg_count != 0 {
@@ -1084,7 +1092,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 
 @(private = "file")
 invoke_from_class :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString, arg_count: int) -> bool {
-	method: Value;ok: bool
+	method: Value; ok: bool
 	if method, ok = table_get(&klass.methods, name); !ok {
 		vm_panic(vm, "Undefined property '%s'.", name.chars)
 		return false
@@ -1101,7 +1109,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 	if is_module(receiver) {
 		module := as_module(receiver)
 
-		value: Value;ok: bool
+		value: Value; ok: bool
 
 		if value, ok = table_get(&module.values, name); ok {
 			args := make([dynamic]Value)
@@ -1144,7 +1152,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 	 * call of the function stored in that field. To handle this corner case,
 	 * we need to look for a field of the same name in that instance first.
 	 * This is necessary but unfortunately sacrifices a bit of performance. */
-	value: Value;ok: bool
+	value: Value; ok: bool
 	if value, ok = table_get(&instance.fields, name); ok {
 		/* Replace the receiver under the arguments with the value of the
 		 * field, since the function itself is always the first value in
@@ -1159,7 +1167,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 @(private = "file")
 bind_method :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString) -> bool {
 	/* Look for the method in the method table. */
-	method: Value;ok: bool
+	method: Value; ok: bool
 	if method, ok = table_get(&klass.methods, name); !ok {
 		vm_panic(vm, "Undefined property '%s'.", name.chars)
 		return false
@@ -1236,12 +1244,37 @@ concatenate :: proc(vm: ^VM) {
 	a := as_string(vm_peek(vm, 1))
 
 	length := a.len + b.len
-	chars := make([]byte, length)
-	i := 0
-	i = +copy(chars, a.chars)
-	copy(chars[i:], b.chars)
+	fmt.eprintln("frame slots: ", vm.frames[vm.frame_count - 1].slots^)
+	fmt.eprintln()
 
-	result := take_string(vm.gc, string(chars))
+	/* FIX: The test at /test/__tests__/super/constructor.zn fails and that
+     * failure seemingly originates here; the start of the topmost callframe
+     * suddenly has its value turned to zero after the string concatenation here.
+     * Not at any concatenation either, but at a very specific concatenation;
+     * that causes the program to crash later on because the VM's stack
+     * prematurely gets emptied. It seems to not matter how the concatenation
+     * is implemented; the error happens after this at the exact point regardless.
+     * That indicates the concatenation may not be the actual origin of the issue.
+     */
+	// chars := make([]byte, length)
+	strs := [?]string{a.chars, b.chars}
+	concat, err := strings.concatenate(strs[:])
+	if err != nil {
+		// TODO: make a better error message
+		vm_panic(vm, "allocator error")
+	}
+
+	fmt.eprintln("frame slots: ", vm.frames[vm.frame_count - 1].slots^)
+	fmt.eprintf("frame slots addr: %p\n", vm.frames[vm.frame_count - 1].slots)
+	addr := &vm.stack
+	fmt.eprintf("stack address: %p\n", addr)
+	fmt.eprintln("frame count: ", vm.frame_count)
+
+	// i := 0
+	// i = +copy(chars, a.chars)
+	// copy(chars[i:], b.chars)
+
+	result := take_string(vm.gc, concat)
 	/* Pop off the two original strings. */
 	vm_pop(vm)
 	vm_pop(vm)
