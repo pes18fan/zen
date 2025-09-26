@@ -9,7 +9,7 @@ import platform
 OC = "odin"
 ProcError = subprocess.CalledProcessError
 DEBUG_FLAGS = "-debug -o:none"
-RELEASE_FLAGS = ""  # empty for now
+RELEASE_FLAGS = "-o:speed"
 CHAOTIC_FLAGS = f"{RELEASE_FLAGS} -define:CHAOTIC=true"
 
 OUT = "zen"
@@ -68,7 +68,8 @@ def create_chaotic_build():
 def benchmark():
     print("Starting up the benchmark runner..")
     try:
-        subprocess.run("python ./run_benchmarks.py".split(), cwd="test/", check=True)
+        subprocess.run("python ./run_benchmarks.py".split(),
+                       cwd="test/", check=True)
     except ProcError as e:
         print(f"Error while benchmarking: {e}", file=sys.stderr)
         exit(1)
@@ -83,7 +84,8 @@ def generate_docs():
     os.makedirs("doc/", exist_ok=True)
     with open("doc/docs.txt", "w+") as doc_file:
         try:
-            subprocess.run(f"{OC} doc src/".split(), stdout=doc_file, check=True)
+            subprocess.run(f"{OC} doc src/".split(),
+                           stdout=doc_file, check=True)
         except ProcError as e:
             print(f"Error when generating docs: {e}", file=sys.stderr)
             exit(1)
@@ -94,7 +96,8 @@ def generate_docs():
 def test():
     print("Running unit tests:")
     try:
-        subprocess.run(f"{OC} test ../../src/".split(), cwd="bin/test/", check=True)
+        subprocess.run(f"{OC} test ../../src/".split(),
+                       cwd="bin/test/", check=True)
     except ProcError as e:
         print(f"Error when running unit tests: {e}", file=sys.stderr)
         exit(1)
@@ -103,7 +106,8 @@ def test():
 
     print("Running end-to-end tests:")
     try:
-        subprocess.run("python ./run_tests.py".split(), cwd="test/", check=True)
+        subprocess.run("python ./run_tests.py".split(),
+                       cwd="test/", check=True)
     except ProcError as e:
         print(f"Error during e2e tests: {e}", file=sys.stderr)
         exit(1)
