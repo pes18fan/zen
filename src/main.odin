@@ -89,7 +89,7 @@ repl :: proc(vm: ^VM) -> int {
 /* Read a file and return it as a string. */
 @(private = "file")
 read_file :: proc(path: string) -> (string, bool) {
-	data, ok := os.read_entire_file_from_filename(path)
+	data, ok := os.read_entire_file(path)
 	if !ok {
 		fmt.printf("Could not open file \"%s\". Does it exist?", path)
 		return "", false
@@ -143,6 +143,7 @@ print_help :: proc(stream: os.Handle) {
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation
     -c, --check-leaks   Report memory leaks on exit`
+
 
 	color_green(stream, "zen ")
 	fmt.fprintfln(stream, "%s", VERSION)
