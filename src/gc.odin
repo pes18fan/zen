@@ -75,22 +75,20 @@ as_parser :: #force_inline proc(source: RootSource) -> ^Parser {
 
 /* Initialize the GC and all its values. */
 init_gc :: proc() -> GC {
-	return(
-		GC {
-			objects = nil,
-			bytes_allocated = 0,
-			next_gc = 1024 * 1024,
-			gray_stack = make([dynamic]^Obj, 0, 0),
-			gray_count = 0,
-			mark_roots_arg = nil,
-			strings = init_table(),
-			init_string = nil,
-			std_modules = make([dynamic]string),
-			global_native_fns = make([dynamic]string),
-			import_stack = make([dynamic]string),
-			globals = init_table(),
-		} \
-	)
+	return (GC {
+				objects = nil,
+				bytes_allocated = 0,
+				next_gc = 1024 * 1024,
+				gray_stack = make([dynamic]^Obj, 0, 0),
+				gray_count = 0,
+				mark_roots_arg = nil,
+				strings = init_table(),
+				init_string = nil,
+				std_modules = make([dynamic]string),
+				global_native_fns = make([dynamic]string),
+				import_stack = make([dynamic]string),
+				globals = init_table(),
+			})
 }
 
 /* Free the GC's memory; also frees all allocated objects. */
