@@ -3,9 +3,15 @@ package zen
 import "core:fmt"
 import "core:os"
 import "core:sys/windows"
+import "core:terminal"
 
 /* Print text in red in the specific `stream`. */
 color_red :: proc(stream: os.Handle, text: string) {
+	if !terminal.color_enabled {
+		fmt.fprint(stream, text)
+		return
+	}
+
 	when ODIN_OS == .Windows {
 		switch stream {
 		case os.stdout:
@@ -30,6 +36,11 @@ color_red :: proc(stream: os.Handle, text: string) {
 
 /* Print text in green in the specific `stream`. */
 color_green :: proc(stream: os.Handle, text: string) {
+	if !terminal.color_enabled {
+		fmt.fprint(stream, text)
+		return
+	}
+
 	when ODIN_OS == .Windows {
 		switch stream {
 		case os.stdout:
@@ -54,6 +65,11 @@ color_green :: proc(stream: os.Handle, text: string) {
 
 /* Print text in yellow in the specific `stream`. */
 color_yellow :: proc(stream: os.Handle, text: string) {
+	if !terminal.color_enabled {
+		fmt.fprint(stream, text)
+		return
+	}
+
 	when ODIN_OS == .Windows {
 		switch stream {
 		case os.stdout:
@@ -81,6 +97,7 @@ Reset the text color in the terminal.
 This does not need to be called manually, all the coloring functions call it in
 the end.
 */
+@(private = "file")
 color_reset :: proc(stream: os.Handle) {
 	when ODIN_OS == .Windows {
 		switch stream {

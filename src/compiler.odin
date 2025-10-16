@@ -148,7 +148,7 @@ Compiler :: struct {
 	function:    ^ObjFunction, // The function being compiled.
 	type:        FunctionType, // The type of function being compiled.
 	globals:     ^Table, // Hash table storing global variables.
-	locals:      [U8_COUNT]Local, // Array of local variables. 
+	locals:      [U8_COUNT]Local, // Array of local variables.
 	local_count: int, // Number of local variables.
 	upvalues:    [U8_COUNT]Upvalue, // Array of upvalues.
 	loops:       [U8_COUNT]Loop, // Array of loops.
@@ -567,7 +567,7 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 
 		if set_op == .OP_SET_GLOBAL {
 			global_o_str := copy_string(p.gc, receiver.lexeme)
-			value: Value;ok: bool
+			value: Value; ok: bool
 
 			if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
 				if values_equal(value, bool_val(true)) {
@@ -808,7 +808,7 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 
 		if set_op == byte(OpCode.OP_SET_GLOBAL) {
 			global_o_str := copy_string(p.gc, name.lexeme)
-			value: Value;ok: bool
+			value: Value; ok: bool
 
 			/* PERF: This hash table lookup is already done when figuring out if
              * the variable exists earlier in this function, so this is redundant */
@@ -1197,15 +1197,13 @@ parse_variable :: proc(
 	if p.current_compiler.scope_depth > 0 {return 0}
 
 	global_o_str := copy_string(p.gc, p.previous.lexeme)
-	value: Value;ok: bool
+	value: Value; ok: bool
 
 	if value, ok := table_get(p.current_compiler.globals, global_o_str); ok {
 		if values_equal(value, bool_val(true)) {
 			error(
 				p,
-				final == .FINAL \
-				? "Cannot redefine a final variable." \
-				: "Cannot redefine a final variable as normal variable.",
+				final == .FINAL ? "Cannot redefine a final variable." : "Cannot redefine a final variable as normal variable.",
 			)
 		} else if final == .FINAL {
 			error(p, "Cannot redefine a variable as final variable.")
@@ -1412,7 +1410,7 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 	declare_variable(p, .VAR) /* Classes are reassignable, subject to change. */
 
 	global_o_str := copy_string(p.gc, p.previous.lexeme)
-	value: Value;ok: bool
+	value: Value; ok: bool
 
 	/* Add the value onto the globals table. We don't check if it already exists
      * because classes are, as of now, reassignable. */
