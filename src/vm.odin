@@ -160,7 +160,10 @@ define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 reset_stack :: proc(vm: ^VM) {
 	defer {
 		delete(vm.stack)
-		vm.stack = make([dynamic]Value, 0, 0)
+		/* Pre-allocate with STACK_MAX capacity to prevent reallocations.
+		 * This is important because CallFrame.slots stores a pointer into
+		 * the stack, and reallocations would invalidate that pointer. */
+		vm.stack = make([dynamic]Value, 0, STACK_MAX)
 	}
 	vm.frame_count = 0
 	vm.open_upvalues = nil
@@ -172,7 +175,10 @@ init_VM :: proc() -> VM {
 		name             = "",
 		path             = "",
 		chunk            = nil,
-		stack            = make([dynamic]Value, 0, 0),
+		/* Pre-allocate with STACK_MAX capacity to prevent reallocations.
+		 * This is important because CallFrame.slots stores a pointer into
+		 * the stack, and reallocations would invalidate that pointer. */
+		stack            = make([dynamic]Value, 0, STACK_MAX),
 		open_upvalues    = nil,
 		compiler_globals = init_table(),
 		frame_count      = 0,
