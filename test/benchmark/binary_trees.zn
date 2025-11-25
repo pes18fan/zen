@@ -1,5 +1,3 @@
-// DRAFT
-// NOTE: Doesn't run for unknown reason
 use "time"
 
 class Tree {
