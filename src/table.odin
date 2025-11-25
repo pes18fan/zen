@@ -1,7 +1,6 @@
 package zen
 
 import "core:fmt"
-import "core:mem"
 import "core:strings"
 
 @(private = "file")

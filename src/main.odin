@@ -4,7 +4,6 @@ import "core:fmt"
 import "core:mem"
 import "core:os"
 import "core:path/filepath"
-import "core:strings"
 
 VERSION :: "0.0.1-beta"
 

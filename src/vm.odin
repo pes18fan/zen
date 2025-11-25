@@ -53,7 +53,8 @@ VM :: struct {
 	chunk:            ^Chunk,
 
 	/* The stack of values. */
-	stack:            [dynamic]Value,
+	stack:            [STACK_MAX]Value,
+	stack_top:        int,
 
 	/* Call frames present in the chunk. */
 	frames:           [FRAMES_MAX]CallFrame,
@@ -158,10 +159,6 @@ define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 
 /* Resets the stack. */
 reset_stack :: proc(vm: ^VM) {
-	defer {
-		delete(vm.stack)
-		vm.stack = make([dynamic]Value, 0, 0)
-	}
 	vm.frame_count = 0
 	vm.open_upvalues = nil
 }
@@ -172,9 +169,9 @@ init_VM :: proc() -> VM {
 		name             = "",
 		path             = "",
 		chunk            = nil,
-		stack            = make([dynamic]Value, 0, 0),
 		open_upvalues    = nil,
 		compiler_globals = init_table(),
+		stack_top        = -1,
 		frame_count      = 0,
 	}
 
@@ -184,7 +181,6 @@ init_VM :: proc() -> VM {
 /* Free's the VM's memory. */
 free_VM :: proc(vm: ^VM) {
 	free_table(&vm.compiler_globals)
-	delete(vm.stack)
 }
 
 /* Reads a byte from the chunk and increments the instruction pointer. */
@@ -280,6 +276,18 @@ binary_op :: proc(v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
 	return nil
 }
 
+@(private = "file")
+print_stack :: proc(vm: ^VM) {
+	fmt.printf("          ")
+	for i := 0; i <= vm.stack_top; i += 1 {
+		value := vm.stack[i]
+		fmt.printf("[ ")
+		print_value(value)
+		fmt.printf(" ]")
+	}
+	fmt.printf("\n")
+}
+
 /*
 Run the VM, going through the bytecode and interpreting each instruction
 one by one.
@@ -294,13 +302,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 
 	for {
 		if config.trace_exec {
-			fmt.printf("          ")
-			for value in vm.stack {
-				fmt.printf("[ ")
-				print_value(value)
-				fmt.printf(" ]")
-			}
-			fmt.printf("\n")
+			print_stack(vm)
 			offset := mem.ptr_sub(frame.ip, &frame.closure.function.chunk.code[0])
 			disassemble_instruction(&frame.closure.function.chunk, offset)
 		}
@@ -758,7 +760,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_CLOSE_UPVALUE:
 			{
-				close_upvalues(vm, &vm.stack[len(vm.stack) - 1])
+				close_upvalues(vm, &vm.stack[vm.stack_top])
 				vm_pop(vm)
 			}
 		case .OP_RETURN:
@@ -776,12 +778,14 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 
 				/* Pop off all of the local variables and arguments of the
 				 * function. */
-				#reverse for value in vm.stack {
+				for i := vm.stack_top; i >= 0; i -= 1 {
+					value := vm.stack[i]
 					if values_equal(value, frame.slots^) {
 						break
 					}
 					vm_pop(vm)
 				}
+				assert(vm.stack_top >= 0) // There should be at least the function left here
 				vm_pop(vm) // Pop the function itself.
 
 				vm_push(vm, result) // Push the return value back to the stack.
@@ -968,18 +972,20 @@ interpret :: proc(
 
 /* Push a value onto the stack. */
 vm_push :: #force_inline proc(vm: ^VM, value: Value) #no_bounds_check {
-	append(&vm.stack, value)
+	vm.stack_top += 1
+	vm.stack[vm.stack_top] = value
 }
 
 /* Pop a value out of the stack. */
 vm_pop :: #force_inline proc(vm: ^VM) -> Value #no_bounds_check {
-	assert(len(vm.stack) > 0)
-	return pop(&vm.stack)
+	assert(vm.stack_top >= 0)
+	defer vm.stack_top -= 1
+	return vm.stack[vm.stack_top]
 }
 
 /* Peek at a certain distance from the top of the stack. */
 vm_peek :: #force_inline proc(vm: ^VM, distance: int) -> Value #no_bounds_check {
-	return vm.stack[len(vm.stack) - 1 - distance]
+	return vm.stack[vm.stack_top - distance]
 }
 
 /* Returns true if provided value is falsey. */
@@ -1009,9 +1015,9 @@ call :: proc(vm: ^VM, closure: ^ObjClosure, arg_count: int) -> bool {
 	frame.closure = closure
 	frame.ip = &closure.function.chunk.code[0]
 
-	// Subtract the length of the stack by the number of args, and by 1 for the
-	// function itself, to get the beginning of the frame.
-	frame.slots = &vm.stack[len(vm.stack) - arg_count - 1]
+	// Subtract the stack top index by the number of args to get the beginning
+	// of the frame.
+	frame.slots = &vm.stack[vm.stack_top - arg_count]
 	return true
 }
 
@@ -1025,7 +1031,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 				bound := as_bound_method(callee)
 
 				/* The receiver must be stored at stack slot zero. */
-				vm.stack[len(vm.stack) - arg_count - 1] = bound.receiver
+				vm.stack[vm.stack_top - arg_count] = bound.receiver
 
 				/* Pull the raw closure out of the ObjBoundMethod and call it. */
 				return call(vm, bound.method, arg_count)
@@ -1033,7 +1039,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 		case .CLASS:
 			{
 				klass := as_class(callee)
-				vm.stack[len(vm.stack) - arg_count - 1] = obj_val(new_instance(vm.gc, klass))
+				vm.stack[vm.stack_top - arg_count] = obj_val(new_instance(vm.gc, klass))
 
 				/* Look for an initializer. */
 				initializer: Value; ok: bool
@@ -1064,7 +1070,8 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 			}
 			native := as_native(callee)
 
-			result, ok := native(vm, arg_count, vm.stack[len(vm.stack) - arg_count:])
+			// Add a 1 to the stack indexing to exclude the native function itself
+			result, ok := native(vm, arg_count, vm.stack[vm.stack_top - arg_count + 1:])
 
 			if !ok {
 				return false
@@ -1149,7 +1156,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 		/* Replace the receiver under the arguments with the value of the
 		 * field, since the function itself is always the first value in
 		 * its callframe. */
-		vm.stack[len(vm.stack) - arg_count - 1] = value
+		vm.stack[vm.stack_top - arg_count] = value
 		return call_value(vm, value, arg_count)
 	}
 
