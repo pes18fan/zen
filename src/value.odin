@@ -2,9 +2,6 @@ package zen
 
 import "core:fmt"
 import "core:math"
-import "core:mem"
-import "core:slice"
-import "core:strings"
 
 /* 
 Whether to use NaN boxing to represent values. Set to false to use a tagged 
