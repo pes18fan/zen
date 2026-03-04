@@ -67,15 +67,16 @@ repl :: proc(vm: ^VM) -> int {
 		fmt.printf("zen:%d> ", i)
 		n, err := os.read(os.stdin, buf[:])
 		if err != nil {
-			fmt.eprintln("Failed to read input")
+			if err == .EOF {
+				fmt.println("\n")
+				break
+			}
+
+			fmt.eprintln("Failed to read input.")
 			return 74
 		}
 
 		if n == 1 {continue}
-		if n <= 0 {
-			fmt.println("\n")
-			break
-		}
 
 		line := string(buf[:n])
 
@@ -88,8 +89,9 @@ repl :: proc(vm: ^VM) -> int {
 /* Read a file and return it as a string. */
 @(private = "file")
 read_file :: proc(path: string) -> (string, bool) {
-	data, ok := os.read_entire_file(path)
-	if !ok {
+	data, err := os.read_entire_file(path, context.allocator)
+	defer delete(data)
+	if err != nil {
 		fmt.printf("Could not open file \"%s\". Does it exist?", path)
 		return "", false
 	}
@@ -128,7 +130,7 @@ run_file :: proc(vm: ^VM, path: string, importer: ImportingModule = nil) -> Inte
 
 /* Print a help string in `stream`. */
 @(private = "file")
-print_help :: proc(stream: os.Handle) {
+print_help :: proc(stream: ^os.File) {
 	usage :: `zen <options> <path>`
 	options :: `
     -h, -?, --help      Print this help message and exit
@@ -160,7 +162,7 @@ print_help :: proc(stream: os.Handle) {
 
 /* Print the version message in `stream`. */
 @(private = "file")
-print_version_message :: proc(stream: os.Handle) {
+print_version_message :: proc(stream: ^os.File) {
 	color_green(stream, "zen ")
 	fmt.fprintln(stream, VERSION)
 	fmt.fprintln(stream, "written with <3 by pes18fan")
@@ -273,10 +275,19 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		config.repl = true
 		return repl(vm)
 	} else {
-		current_dir := os.get_current_directory()
+		current_dir, err := os.get_executable_directory(context.allocator)
+		if err != nil {
+			fmt.eprintf("Failed to allocate current directory name")
+			return 1
+		}
+
 		defer delete(current_dir)
 
-		config.__path = filepath.join([]string{current_dir, script})
+		config.__path, err = filepath.join([]string{current_dir, script}, context.allocator)
+		if err != nil {
+			fmt.eprintf("Failed to allocate path to executable")
+		}
+
 		config.__dirname, _ = filepath.split(config.__path)
 		defer delete(config.__path)
 

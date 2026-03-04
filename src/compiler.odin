@@ -1494,7 +1494,12 @@ module_declaration :: proc(p: ^Parser) {
 	consume(p, .STRING, "Expect module path.")
 
 	path := strings.trim(p.previous.lexeme[1:len(p.previous.lexeme) - 1], " ")
-	abs_path := filepath.join([]string{config.__dirname, path})
+	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
+	if err != nil {
+		error(p, fmt.tprintf("Allocator error when declaring module"))
+		return
+	}
+
 	defer delete(abs_path)
 
 	// look for the path in the stdlib, if not present look for a file at the path

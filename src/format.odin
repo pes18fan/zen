@@ -6,7 +6,7 @@ import "core:sys/windows"
 import "core:terminal"
 
 /* Print text in red in the specific `stream`. */
-color_red :: proc(stream: os.Handle, text: string) {
+color_red :: proc(stream: ^os.File, text: string) {
 	if !terminal.color_enabled {
 		fmt.fprint(stream, text)
 		return
@@ -35,7 +35,7 @@ color_red :: proc(stream: os.Handle, text: string) {
 }
 
 /* Print text in green in the specific `stream`. */
-color_green :: proc(stream: os.Handle, text: string) {
+color_green :: proc(stream: ^os.File, text: string) {
 	if !terminal.color_enabled {
 		fmt.fprint(stream, text)
 		return
@@ -64,7 +64,7 @@ color_green :: proc(stream: os.Handle, text: string) {
 }
 
 /* Print text in yellow in the specific `stream`. */
-color_yellow :: proc(stream: os.Handle, text: string) {
+color_yellow :: proc(stream: ^os.File, text: string) {
 	if !terminal.color_enabled {
 		fmt.fprint(stream, text)
 		return
@@ -98,7 +98,7 @@ This does not need to be called manually, all the coloring functions call it in
 the end.
 */
 @(private = "file")
-color_reset :: proc(stream: os.Handle) {
+color_reset :: proc(stream: ^os.File) {
 	when ODIN_OS == .Windows {
 		switch stream {
 		case os.stdout:

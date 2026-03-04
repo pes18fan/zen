@@ -245,12 +245,17 @@ read_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	path := as_string(args[0]).chars
-	abs_path := filepath.join([]string{config.__dirname, path})
+	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
+	if err != nil {
+		vm_panic(vm, "Failed to allocate filename for read operation")
+		return nil_val(), false
+	}
+
 	defer delete(abs_path)
 
-	data, ok := os.read_entire_file_from_filename(abs_path)
+	data, rerr := os.read_entire_file(abs_path, context.allocator)
 	defer delete(data)
-	if !ok {
+	if err != nil {
 		vm_panic(vm, "Failed to read file '%s'. Does it exist?", abs_path)
 		return nil_val(), false
 	}
@@ -272,15 +277,20 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	path := as_string(args[0]).chars
-	abs_path := filepath.join([]string{config.__dirname, path})
+	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
+	if err != nil {
+		vm_panic(vm, "Failed to allocate filename for write operation")
+		return nil_val(), false
+	}
+
 	defer delete(abs_path)
 
 	mode := as_string(args[1]).chars
 	data := as_string(args[2]).chars
 
 	if mode == "w" {
-		ok := os.write_entire_file(abs_path, transmute([]u8)data)
-		if !ok {
+		err := os.write_entire_file(abs_path, transmute([]u8)data)
+		if err != nil {
 			vm_panic(vm, "Failed to write to file '%s'.", path)
 			return nil_val(), false
 		}
@@ -290,12 +300,8 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		/* Without the S_IRUSR and S_IWUSR, the user won't be able to read or
          * write to the file at all. */
 
-		flags: int
-		flags = os.O_APPEND | os.O_RDWR | os.O_CREATE
-
-		when ODIN_OS != .Windows {
-			flags |= os.S_IRUSR | os.S_IWUSR
-		}
+		flags: os.File_Flags
+		flags = os.File_Flags{.Read, .Write, .Create, .Append}
 
 		f, oerr := os.open(abs_path, flags)
 		if oerr != nil {
