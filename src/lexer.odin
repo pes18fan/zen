@@ -4,7 +4,6 @@ import "core:fmt"
 import "core:os"
 import "core:unicode/utf8"
 
-
 /* The type of a token. */
 TokenType :: enum {
 	// single characters
