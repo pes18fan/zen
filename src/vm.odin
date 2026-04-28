@@ -251,7 +251,7 @@ binary_op :: proc(v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
 				}
 
 				if a != math.floor(a) || b != math.floor(b) {
-					vm_panic(v, "Operator '%' can only be used with integers.")
+					vm_panic(v, "Operator '%s' can only be used with integers.", "%")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
