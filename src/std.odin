@@ -141,7 +141,7 @@ gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	buf: [1024]byte
 	n, err := os.read(os.stdin, buf[:])
 	if err != nil {
-		vm_panic(vm, "Failed to read input.")
+		vm_panic(vm, "Failed to read input: %s", os.error_string(err))
 		return nil_val(), false
 	}
 
@@ -250,13 +250,12 @@ read_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		vm_panic(vm, "Failed to allocate filename for read operation")
 		return nil_val(), false
 	}
-
 	defer delete(abs_path)
 
 	data, rerr := os.read_entire_file(abs_path, context.allocator)
 	defer delete(data)
 	if err != nil {
-		vm_panic(vm, "Failed to read file '%s'. Does it exist?", abs_path)
+		vm_panic(vm, "Failed to read file '%s': %s", abs_path, os.error_string(rerr))
 		return nil_val(), false
 	}
 
@@ -291,7 +290,7 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if mode == "w" {
 		err := os.write_entire_file(abs_path, transmute([]u8)data)
 		if err != nil {
-			vm_panic(vm, "Failed to write to file '%s'.", path)
+			vm_panic(vm, "Failed to write to file '%s': %s.", path, os.error_string(err))
 			return nil_val(), false
 		}
 
@@ -299,20 +298,24 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	} else if mode == "a" {
 		/* Without the S_IRUSR and S_IWUSR, the user won't be able to read or
          * write to the file at all. */
-
 		flags: os.File_Flags
 		flags = os.File_Flags{.Read, .Write, .Create, .Append}
 
 		f, oerr := os.open(abs_path, flags)
 		if oerr != nil {
-			vm_panic(vm, "Failed to open file '%s' for appending.", path)
+			vm_panic(
+				vm,
+				"Failed to open file '%s' for appending: %s.",
+				path,
+				os.error_string(oerr),
+			)
 			return nil_val(), false
 		}
 		defer os.close(f)
 
 		_, werr := os.write(f, transmute([]u8)data)
 		if werr != nil {
-			vm_panic(vm, "Failed to write to file '%s'.", path)
+			vm_panic(vm, "Failed to write to file '%s': %s.", path, os.error_string(werr))
 			return nil_val(), false
 		}
 

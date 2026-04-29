@@ -240,3 +240,28 @@ disassemble :: proc(c: ^Chunk, name: string) {
 		i = disassemble_instruction(c, i)
 	}
 }
+
+/* Some debug print functions to avoid printing debug info in prod code */
+dbg_print :: proc(data: string) {
+	when ODIN_DEBUG {
+		fmt.print(data)
+	}
+}
+
+dbg_println :: proc(data: string) {
+	when ODIN_DEBUG {
+		fmt.println(data)
+	}
+}
+
+dbg_printf :: proc(format: string, args: ..any) {
+	when ODIN_DEBUG {
+		fmt.printf(data, args)
+	}
+}
+
+dbg_printfln :: proc(format: string, args: ..any) {
+	when ODIN_DEBUG {
+		fmt.printfln(data, args)
+	}
+}

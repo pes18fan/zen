@@ -627,7 +627,7 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 Lex the tokens. If an ILLEGAL token is found, it is returned as the error.
 */
 lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
-	toks := make([dynamic]Token, 0, 0)
+	toks := make([dynamic]Token)
 
 	for {
 		token, ok := lex_token(l).?
