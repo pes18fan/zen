@@ -254,7 +254,7 @@ read_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	data, rerr := os.read_entire_file(abs_path, context.allocator)
 	defer delete(data)
-	if err != nil {
+	if rerr != nil {
 		vm_panic(vm, "Failed to read file '%s': %s", abs_path, os.error_string(rerr))
 		return nil_val(), false
 	}
