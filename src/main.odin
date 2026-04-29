@@ -90,7 +90,6 @@ repl :: proc(vm: ^VM) -> int {
 @(private = "file")
 read_file :: proc(path: string) -> (string, bool) {
 	data, err := os.read_entire_file(path, context.allocator)
-	defer delete(data)
 	if err != nil {
 		fmt.printf("Could not open file \"%s\". Does it exist?", path)
 		return "", false
@@ -275,12 +274,11 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		config.repl = true
 		return repl(vm)
 	} else {
-		current_dir, err := os.get_executable_directory(context.allocator)
+		current_dir, err := os.get_working_directory(context.allocator)
 		if err != nil {
 			fmt.eprintf("Failed to allocate current directory name")
 			return 1
 		}
-
 		defer delete(current_dir)
 
 		config.__path, err = filepath.join([]string{current_dir, script}, context.allocator)
