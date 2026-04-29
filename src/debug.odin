@@ -256,12 +256,12 @@ dbg_println :: proc(data: string) {
 
 dbg_printf :: proc(format: string, args: ..any) {
 	when ODIN_DEBUG {
-		fmt.printf(data, args)
+		fmt.printf(format, ..args)
 	}
 }
 
 dbg_printfln :: proc(format: string, args: ..any) {
 	when ODIN_DEBUG {
-		fmt.printfln(data, args)
+		fmt.printfln(format, ..args)
 	}
 }
