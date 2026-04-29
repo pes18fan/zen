@@ -51,7 +51,8 @@ def test(folder):
             print("\n")
             test(file_path)
         elif file_path.endswith(".zn"):
-            expect, expected_err, wants_err, is_draft = read_expected_output(file_path)
+            expect, expected_err, wants_err, is_draft = read_expected_output(
+                file_path)
 
             if is_draft:
                 continue
