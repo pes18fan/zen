@@ -1245,7 +1245,7 @@ concatenate :: proc(vm: ^VM) {
 	length := a.len + b.len
 	chars := make([]byte, length)
 	i := 0
-	i = +copy(chars, a.chars)
+	i = copy(chars, a.chars)
 	copy(chars[i:], b.chars)
 
 	result := take_string(vm.gc, string(chars))
