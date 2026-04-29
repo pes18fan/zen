@@ -735,22 +735,23 @@ add_escape_sequences :: proc(str: string) -> string {
 	sequences['t'] = '\t'
 	defer delete(sequences)
 
+	sb := strings.builder_make()
+	defer strings.builder_destroy(&sb)
+
 	escaped := false
-	res := ""
-	for i, idx in str {
-		if i == '\\' && idx + 1 < len(str) && str[idx + 1] in sequences {
-			res = concatenate_byte(res, sequences[str[idx + 1]])
-			escaped = true
-			continue
+	for i := 0; i < len(str); i += 1 {
+		c := str[i]
+		if !escaped && c == '\\' && i + 1 < len(str) {
+			if replacement, ok := sequences[str[i + 1]]; ok {
+				strings.write_byte(&sb, replacement)
+				i += 1
+				continue
+			}
 		}
-		if escaped {
-			escaped = false
-			continue
-		}
-		res = concatenate_byte(res, byte(i))
+		strings.write_byte(&sb, c)
 	}
 
-	return res
+	return strings.clone(strings.to_string(sb))
 }
 
 /* Parse a string and emit that constant to the chunk. */
