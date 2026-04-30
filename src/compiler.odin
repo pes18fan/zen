@@ -328,21 +328,56 @@ Add a constant to the current chunk's constant pool. Reports an error if
 there are too many constants.
 */
 @(private = "file")
-make_constant :: proc(p: ^Parser, value: Value) -> byte {
+make_constant :: proc(p: ^Parser, value: Value) -> int {
 	constant := add_constant(current_chunk(p), p.gc, value)
-	if constant > U8_MAX {
+	if constant > U16_MAX {
 		error(p, "Too many constants in one chunk.")
 		return 0
 	}
 
-	return byte(constant)
+	return constant
 }
 
-/* Write a OP_CONSTANT to the current chunk. */
+/* Directly write a constant index to the chunk without any preceding opcode. */
+@(private = "file")
+emit_constant_only :: proc(p: ^Parser, index: int) {
+	if index <= U8_MAX {
+		emit_byte(p, byte(index))
+	} else {
+		emit_byte(p, byte((index >> 8) & 0xff))
+		emit_byte(p, byte(index & 0xff))
+	}
+}
+
+/* Write a OP_CONSTANT or OP_CONSTANT_LONG to the current chunk. */
 @(private = "file")
 emit_constant :: proc(p: ^Parser, value: Value) {
-	emit_bytes(p, byte(OpCode.OP_CONSTANT), make_constant(p, value))
+	index := make_constant(p, value)
+
+	if index <= U8_MAX {
+		emit_bytes(p, byte(OpCode.OP_CONSTANT), byte(index))
+	} else {
+		emit_opcode(p, .OP_CONSTANT_LONG)
+		emit_byte(p, byte((index >> 8) & 0xff))
+		emit_byte(p, byte(index & 0xff))
+	}
 }
+
+/* 
+Write a certain opcode to the current chunk followed by an appropriately sized
+constant index.
+*/
+@(private = "file")
+emit_op_with_constant :: proc(p: ^Parser, short_op: OpCode, long_op: OpCode, index: int) {
+	if index <= U8_MAX {
+		emit_bytes(p, byte(short_op), byte(index))
+	} else {
+		emit_opcode(p, long_op)
+		emit_byte(p, byte((index >> 8) & 0xff))
+		emit_byte(p, byte(index & 0xff))
+	}
+}
+
 
 /*
 Patch a jump instruction at the provided offset in the current chunk.
@@ -585,8 +620,7 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		}
 
 		expression(p)
-		emit_opcode(p, .OP_SET_PROPERTY)
-		emit_byte(p, name)
+		emit_op_with_constant(p, .OP_SET_PROPERTY, .OP_SET_PROPERTY_LONG, name)
 	} else if match(p, .LPAREN) {
 		/* Check if the receiver is a module. */
 		arg_count: u8 = 0
@@ -598,12 +632,10 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 
 		/* We have a method call here, so we compile it like a function call. */
 		arg_count += argument_list(p)
-		emit_opcode(p, .OP_INVOKE)
-		emit_byte(p, name)
+		emit_op_with_constant(p, .OP_INVOKE, .OP_INVOKE_LONG, name)
 		emit_byte(p, arg_count)
 	} else {
-		emit_opcode(p, .OP_GET_PROPERTY)
-		emit_byte(p, name)
+		emit_op_with_constant(p, .OP_GET_PROPERTY, .OP_GET_PROPERTY_LONG, name)
 	}
 }
 
@@ -771,19 +803,19 @@ This function will error if there is an attempt to assign to a constant.
 @(private = "file")
 named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 	name := name
-	get_op, set_op: u8
-	arg: u8
+	get_op, set_op: OpCode
+	arg: int
 	possible_local := resolve_local(p, p.current_compiler, &name)
 	possible_upvalue, upvalue_final := resolve_upvalue(p, p.current_compiler, &name)
 
 	if possible_local != -1 {
-		arg = u8(possible_local)
-		get_op = byte(OpCode.OP_GET_LOCAL)
-		set_op = byte(OpCode.OP_SET_LOCAL)
+		arg = possible_local
+		get_op = .OP_GET_LOCAL
+		set_op = .OP_SET_LOCAL
 	} else if possible_upvalue != -1 {
-		arg = u8(possible_upvalue)
-		get_op = byte(OpCode.OP_GET_UPVALUE)
-		set_op = byte(OpCode.OP_SET_UPVALUE)
+		arg = possible_upvalue
+		get_op = .OP_GET_UPVALUE
+		set_op = .OP_SET_UPVALUE
 	} else {
 		/* The assumption at this point is that the variable is global, since
          * it wasn't found as an upvalue or local variable. In the original
@@ -796,18 +828,18 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 		}
 
 		arg = identifier_constant(p, &name)
-		get_op = byte(OpCode.OP_GET_GLOBAL)
-		set_op = byte(OpCode.OP_SET_GLOBAL)
+		get_op = arg <= U8_MAX ? .OP_GET_GLOBAL : .OP_GET_GLOBAL_LONG
+		set_op = arg <= U8_MAX ? .OP_SET_GLOBAL : .OP_SET_GLOBAL_LONG
 	}
 
 	if can_assign && match(p, .EQUAL) {
-		if set_op == byte(OpCode.OP_SET_LOCAL) {
+		if set_op == .OP_SET_LOCAL {
 			if p.current_compiler.locals[arg].final == .FINAL {
 				error(p, "Can only set a final variable once.")
 			}
 		}
 
-		if set_op == byte(OpCode.OP_SET_GLOBAL) {
+		if set_op == .OP_SET_GLOBAL {
 			global_o_str := copy_string(p.gc, name.lexeme)
 			value: Value; ok: bool
 
@@ -822,14 +854,20 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 			}
 		}
 
-		if set_op == byte(OpCode.OP_SET_UPVALUE) {
+		if set_op == .OP_SET_UPVALUE {
 			if upvalue_final == .FINAL {
 				error(p, "Can only set a final variable once.")
 			}
 		}
 
 		expression(p)
-		emit_bytes(p, set_op, arg)
+		if set_op == .OP_SET_GLOBAL_LONG {
+			emit_opcode(p, set_op)
+			emit_byte(p, byte((arg >> 8) & 0xff))
+			emit_byte(p, byte(arg & 0xff))
+		} else {
+			emit_bytes(p, byte(set_op), byte(arg))
+		}
 	} else {
 		/* Lua-like feature to allow function calls without parens if the
          * function has a singular string. */
@@ -837,7 +875,13 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
          * remembered that that would break subscripting. */
 		if match(p, .STRING) {
 			/* Grab the (supposed) function */
-			emit_bytes(p, get_op, arg)
+			if set_op == .OP_GET_GLOBAL_LONG {
+				emit_opcode(p, get_op)
+				emit_byte(p, byte((arg >> 8) & 0xff))
+				emit_byte(p, byte(arg & 0xff))
+			} else {
+				emit_bytes(p, byte(get_op), byte(arg))
+			}
 
 			arg_count: u8 = 1
 
@@ -852,7 +896,13 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 
 			emit_bytes(p, byte(OpCode.OP_CALL), arg_count)
 		} else {
-			emit_bytes(p, get_op, arg)
+			if set_op == .OP_GET_GLOBAL_LONG {
+				emit_opcode(p, get_op)
+				emit_byte(p, byte((arg >> 8) & 0xff))
+				emit_byte(p, byte(arg & 0xff))
+			} else {
+				emit_bytes(p, byte(get_op), byte(arg))
+			}
 		}
 	}
 }
@@ -891,13 +941,11 @@ super_ :: proc(p: ^Parser, can_assign: bool) {
 	if match(p, .LPAREN) {
 		arg_count := argument_list(p)
 		named_variable(p, synthetic_token("super"), can_assign = false)
-		emit_opcode(p, .OP_SUPER_INVOKE)
-		emit_byte(p, name)
+		emit_op_with_constant(p, .OP_SUPER_INVOKE, .OP_SUPER_INVOKE_LONG, name)
 		emit_byte(p, arg_count)
 	} else {
 		named_variable(p, synthetic_token("super"), can_assign = false)
-		emit_opcode(p, .OP_GET_SUPER)
-		emit_byte(p, name)
+		emit_op_with_constant(p, .OP_GET_SUPER, .OP_GET_SUPER_LONG, name)
 	}
 }
 
@@ -1030,7 +1078,7 @@ parse_precedence :: proc(p: ^Parser, precedence: Precedence) {
 
 /* Store the lexeme of a token in the constant table. */
 @(private = "file")
-identifier_constant :: proc(p: ^Parser, name: ^Token) -> u8 {
+identifier_constant :: proc(p: ^Parser, name: ^Token) -> int {
 	return make_constant(p, obj_val(copy_string(p.gc, name.lexeme)))
 }
 
@@ -1038,7 +1086,7 @@ identifier_constant :: proc(p: ^Parser, name: ^Token) -> u8 {
  * Used to implement the modules, as module names are STRING tokens rather than
  * IDENT tokens. */
 @(private = "file")
-string_constant :: proc(p: ^Parser, text: string) -> u8 {
+string_constant :: proc(p: ^Parser, text: string) -> int {
 	return make_constant(p, obj_val(copy_string(p.gc, text)))
 }
 
@@ -1191,7 +1239,7 @@ parse_variable :: proc(
 	error_message: string,
 	final: Variability,
 	is_loop_variable: bool = false,
-) -> u8 {
+) -> int {
 	consume(p, .IDENT, error_message)
 
 	declare_variable(p, final, is_loop_variable)
@@ -1226,13 +1274,13 @@ mark_initialized :: proc(p: ^Parser) {
 
 /* Define a local or global name binding. */
 @(private = "file")
-define_variable :: proc(p: ^Parser, global: byte) {
+define_variable :: proc(p: ^Parser, global: int) {
 	if p.current_compiler.scope_depth > 0 {
 		mark_initialized(p)
 		return
 	}
 
-	emit_bytes(p, byte(OpCode.OP_DEFINE_GLOBAL), global)
+	emit_op_with_constant(p, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG, global)
 }
 
 /* 
@@ -1339,7 +1387,15 @@ function :: proc(p: ^Parser, type: FunctionType, public: bool = false) {
 
 
 	function := end_compiler(p)
-	emit_bytes(p, byte(OpCode.OP_CLOSURE), make_constant(p, obj_val(function)))
+
+	/* Note that OP_CLOSURE always uses a 2-byte constant index. While it would
+    be perfectly reasonable to switch between a 1-byte index and 2-byte index
+    using separate OP_CLOSURE and custom OP_CLOSURE_LONG opcodes, that would
+    further complicate the already complex closure encoding. */
+	emit_opcode(p, .OP_CLOSURE)
+	idx := make_constant(p, obj_val(function))
+	emit_byte(p, byte((idx >> 8) & 0xff))
+	emit_byte(p, byte(idx & 0xff))
 
 	/* Emit a final byte indicating whether the function should be available to
      * other files importing the file it is in. */
@@ -1375,8 +1431,7 @@ method :: proc(p: ^Parser) {
 	}
 	function(p, type)
 
-	emit_opcode(p, .OP_METHOD)
-	emit_byte(p, constant)
+	emit_op_with_constant(p, .OP_METHOD, .OP_METHOD_LONG, constant)
 }
 
 /* 
@@ -1417,10 +1472,9 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
      * because classes are, as of now, reassignable. */
 	table_set(p.current_compiler.globals, global_o_str, bool_val(false))
 
-	emit_opcode(p, .OP_CLASS)
-	emit_byte(p, 1 if public else 0)
-	emit_byte(p, name_constant)
+	emit_op_with_constant(p, .OP_CLASS, .OP_CLASS_LONG, name_constant)
 	define_variable(p, name_constant)
+	emit_byte(p, 1 if public else 0)
 
 	/* Push the current class to the linked list of classes. */
 	class_compiler: ClassCompiler
@@ -1516,37 +1570,19 @@ module_declaration :: proc(p: ^Parser) {
 		mod_type = .USER
 	}
 
-	mod_name: string
-	switch mod_type {
-	case .BUILTIN:
-		{
-			mod_name = path
-		}
-	case .USER:
-		{
-			mod_name = filepath.short_stem(path)
-		}
-	}
-
+	// the mod_name here is path, but will be turned into just the filename
+	// in the VM if it is a user module
+	mod_name := path
 	name_constant := string_constant(p, mod_name)
 
 	/* Standard library modules and user modules are implemented differently, so
        we need to emit the correct opcode. */
 	switch mod_type {
 	case .BUILTIN:
-		{
-			emit_opcode(p, .OP_MODULE_BUILTIN)
-			emit_byte(p, name_constant)
-		}
+		emit_op_with_constant(p, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, name_constant)
 	case .USER:
-		{
-			/* Provide the name of the module and the path as bytecode args. */
-			emit_opcode(p, .OP_MODULE_USER)
-			emit_byte(p, name_constant)
-			emit_byte(p, string_constant(p, abs_path))
-		}
+		emit_op_with_constant(p, .OP_MODULE_USER, .OP_MODULE_USER_LONG, name_constant)
 	}
-
 	define_variable(p, name_constant)
 
 	/* Set the module as a global variable for variable existence checks.

@@ -39,9 +39,31 @@ constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 }
 
 @(private = "file")
-class_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
-	constant := c.code[offset + 1]
-	public := bool(c.code[offset + 1])
+long_constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
+	constant := int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
+	fmt.eprintf("%-16s %4d '", name, constant)
+	str, was_allocation := stringify_value(c.constants.values[constant])
+	defer if was_allocation {delete(str)}
+	fmt.eprintf(str)
+	fmt.eprintf("'\n")
+	return offset + 3
+}
+
+@(private = "file")
+class_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
+	constant: int
+	if long {
+		constant = int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
+	} else {
+		constant = int(c.code[offset + 1])
+	}
+
+	public: bool
+	if long {
+		public = bool(c.code[offset + 3])
+	} else {
+		public = bool(c.code[offset + 2])
+	}
 	fmt.eprintf("%-16s %4d '", name, constant)
 
 	str, was_allocation := stringify_value(c.constants.values[constant])
@@ -51,34 +73,60 @@ class_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	fmt.eprintf("'")
 	fmt.eprintf(", %s", public ? "public" : "private")
 	fmt.eprintf("\n")
-	return offset + 3
+
+	if long {
+		return offset + 4
+	} else {
+		return offset + 3
+	}
 }
 
-/* Print debug info for a user-defined module import. */
 @(private = "file")
-user_module_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
-	module_name, mn_was_allocation := stringify_value(c.constants.values[c.code[offset + 1]])
-	module_path, mp_was_allocation := stringify_value(c.constants.values[c.code[offset + 2]])
+module_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
+	module_name_idx: int
+	if long {
+		module_name_idx = int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
+	} else {
+		module_name_idx = int(c.code[offset + 1])
+	}
 
+	module_name, mn_was_allocation := stringify_value(c.constants.values[module_name_idx])
 	defer if mn_was_allocation {delete(module_name)}
-	defer if mp_was_allocation {delete(module_path)}
 
-	fmt.eprintf("%-16s (module '%s', path '%s')\n", name, module_name, module_path)
-	return offset + 3
+	fmt.eprintf("%-16s (module '%s')\n", name, module_name)
+
+	if long {
+		return offset + 3
+	} else {
+		return offset + 2
+	}
 }
 
 /* Print debug info for the OP_INVOKE opcode. */
 @(private = "file")
-invoke_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
-	constant := c.code[offset + 1]
-	arg_count := c.code[offset + 2]
+invoke_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
+	constant: int
+	arg_count: byte
+	if long {
+		constant = int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
+		arg_count = c.code[offset + 3]
+	} else {
+		constant = int(c.code[offset + 1])
+		arg_count = c.code[offset + 2]
+	}
+
 	fmt.eprintf("%-16s (%d args) %4d '", name, arg_count, constant)
 
 	str, was_allocation := stringify_value(c.constants.values[constant])
 	defer if was_allocation {delete(str)}
 	fmt.eprintf(str)
 	fmt.eprintf("'\n")
-	return offset + 3
+
+	if long {
+		return offset + 4
+	} else {
+		return offset + 3
+	}
 }
 
 /* Disassembles the instruction at the provided offset. */
@@ -97,6 +145,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_NOOP", offset)
 	case .OP_CONSTANT:
 		return constant_instruction("OP_CONSTANT", c, offset)
+	case .OP_CONSTANT_LONG:
+		return long_constant_instruction("OP_CONSTANT_LONG", c, offset)
 	case .OP_NIL:
 		return simple_instruction("OP_NIL", offset)
 	case .OP_TRUE:
@@ -113,22 +163,34 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return byte_instruction("OP_SET_LOCAL", c, offset)
 	case .OP_GET_GLOBAL:
 		return constant_instruction("OP_GET_GLOBAL", c, offset)
+	case .OP_GET_GLOBAL_LONG:
+		return long_constant_instruction("OP_GET_GLOBAL", c, offset)
 	case .OP_DEFINE_GLOBAL:
 		return constant_instruction("OP_DEFINE_GLOBAL", c, offset)
+	case .OP_DEFINE_GLOBAL_LONG:
+		return long_constant_instruction("OP_DEFINE_GLOBAL", c, offset)
 	case .OP_EQUAL:
 		return simple_instruction("OP_EQUAL", offset)
 	case .OP_SET_GLOBAL:
 		return constant_instruction("OP_SET_GLOBAL", c, offset)
+	case .OP_SET_GLOBAL_LONG:
+		return long_constant_instruction("OP_SET_GLOBAL", c, offset)
 	case .OP_GET_UPVALUE:
 		return byte_instruction("OP_GET_UPVALUE", c, offset)
 	case .OP_SET_UPVALUE:
 		return byte_instruction("OP_SET_UPVALUE", c, offset)
 	case .OP_GET_PROPERTY:
 		return constant_instruction("OP_GET_PROPERTY", c, offset)
+	case .OP_GET_PROPERTY_LONG:
+		return long_constant_instruction("OP_GET_PROPERTY", c, offset)
 	case .OP_SET_PROPERTY:
 		return constant_instruction("OP_SET_PROPERTY", c, offset)
+	case .OP_SET_PROPERTY_LONG:
+		return long_constant_instruction("OP_SET_PROPERTY", c, offset)
 	case .OP_GET_SUPER:
 		return constant_instruction("OP_GET_SUPER", c, offset)
+	case .OP_GET_SUPER_LONG:
+		return long_constant_instruction("OP_GET_SUPER", c, offset)
 	case .OP_GET_IT:
 		return simple_instruction("OP_GET_IT", offset)
 	case .OP_SET_IT:
@@ -164,9 +226,13 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_CALL:
 		return byte_instruction("OP_CALL", c, offset)
 	case .OP_INVOKE:
-		return invoke_instruction("OP_INVOKE", c, offset)
+		return invoke_instruction("OP_INVOKE", c, offset, long = false)
+	case .OP_INVOKE_LONG:
+		return invoke_instruction("OP_INVOKE", c, offset, long = true)
 	case .OP_SUPER_INVOKE:
-		return invoke_instruction("OP_SUPER_INVOKE", c, offset)
+		return invoke_instruction("OP_SUPER_INVOKE", c, offset, long = false)
+	case .OP_SUPER_INVOKE_LONG:
+		return invoke_instruction("OP_SUPER_INVOKE", c, offset, long = true)
 	case .OP_LIST:
 		return byte_instruction("OP_LIST", c, offset)
 	case .OP_SUBSCRIPT:
@@ -212,15 +278,23 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_RETURN:
 		return simple_instruction("OP_RETURN", offset)
 	case .OP_CLASS:
-		return class_instruction("OP_CLASS", c, offset)
+		return class_instruction("OP_CLASS", c, offset, long = false)
+	case .OP_CLASS_LONG:
+		return class_instruction("OP_CLASS", c, offset, long = true)
 	case .OP_INHERIT:
 		return simple_instruction("OP_INHERIT", offset)
 	case .OP_METHOD:
 		return constant_instruction("OP_METHOD", c, offset)
+	case .OP_METHOD_LONG:
+		return long_constant_instruction("OP_METHOD", c, offset)
 	case .OP_MODULE_BUILTIN:
-		return constant_instruction("OP_MODULE_BUILTIN", c, offset)
+		return module_instruction("OP_MODULE_BUILTIN", c, offset, long = false)
+	case .OP_MODULE_BUILTIN_LONG:
+		return module_instruction("OP_MODULE_BUILTIN", c, offset, long = true)
 	case .OP_MODULE_USER:
-		return user_module_instruction("OP_MODULE_USER", c, offset)
+		return module_instruction("OP_MODULE_USER", c, offset, long = false)
+	case .OP_MODULE_USER_LONG:
+		return module_instruction("OP_MODULE_USER", c, offset, long = true)
 	case .OP_TOP_LEVEL_RETURN:
 		return simple_instruction("OP_TOP_LEVEL_RETURN", offset)
 	case:

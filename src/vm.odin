@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import "core:os"
+import "core:path/filepath"
 import "core:reflect"
 import "core:slice"
 import "core:strings"
@@ -197,6 +198,11 @@ read_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check
 }
 
 @(private = "file")
+read_long_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
+	return frame.closure.function.chunk.constants.values[read_short(frame)]
+}
+
+@(private = "file")
 read_string :: #force_inline proc(frame: ^CallFrame) -> ^ObjString {
 	return as_string(read_constant(frame))
 }
@@ -315,6 +321,9 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 		case .OP_CONSTANT:
 			constant := read_constant(frame)
 			vm_push(vm, constant)
+		case .OP_CONSTANT_LONG:
+			constant := read_long_constant(frame)
+			vm_push(vm, constant)
 		case .OP_NIL:
 			vm_push(vm, nil_val())
 		case .OP_TRUE:
@@ -340,13 +349,34 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				value, _ := table_get(&vm.gc.globals, name)
 				vm_push(vm, value)
 			}
+		case .OP_GET_GLOBAL_LONG:
+			{
+				name := as_string(read_long_constant(frame))
+
+				/* No runtime check is done for variable existence since that is
+                 * done at compile time. */
+				value, _ := table_get(&vm.gc.globals, name)
+				vm_push(vm, value)
+			}
 		case .OP_DEFINE_GLOBAL:
 			name := read_string(frame)
+			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
+			vm_pop(vm)
+		case .OP_DEFINE_GLOBAL_LONG:
+			name := as_string(read_long_constant(frame))
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			vm_pop(vm)
 		case .OP_SET_GLOBAL:
 			{
 				name := read_string(frame)
+
+				/* No runtime check is done for variable existence since that is
+                 * done at compile time. */
+				table_set(&vm.gc.globals, name, vm_peek(vm, 0))
+			}
+		case .OP_SET_GLOBAL_LONG:
+			{
+				name := as_string(read_long_constant(frame))
 
 				/* No runtime check is done for variable existence since that is
                  * done at compile time. */
@@ -409,6 +439,50 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
+		case .OP_GET_PROPERTY_LONG:
+			{
+				if is_module(vm_peek(vm, 0)) {
+					module := as_module(vm_peek(vm, 0))
+					name := as_string(read_long_constant(frame))
+
+					/* Look for the value in the module. */
+					value: Value; ok: bool
+					if value, ok = table_get(&module.values, name); ok {
+						vm_pop(vm) /* Module. */
+						vm_push(vm, value)
+						break /* Step out of the switch statement. */
+					} else {
+						panic_str := fmt.tprintf(
+							`Value '%s' does not exist on module '%s'.
+       If this module is a file, you may have forgotten the pub keyword.`,
+							name.chars,
+							module.name.chars,
+						)
+						vm_panic(vm, panic_str)
+						return .INTERPRET_RUNTIME_ERROR
+					}
+				} else if is_instance(vm_peek(vm, 0)) {
+					instance := as_instance(vm_peek(vm, 0))
+					name := as_string(read_long_constant(frame))
+
+					/* Look for a field. */
+					value: Value; ok: bool
+					if value, ok = table_get(&instance.fields, name); ok {
+						vm_pop(vm) /* Instance. */
+						vm_push(vm, value)
+						break /* Step out of the switch statement. */
+					}
+
+					/* Look for a method. If we don't find one, it means that name
+				     * wasn't a field either, which is a runtime error. */
+					if !bind_method(vm, instance.klass, name) {
+						return .INTERPRET_RUNTIME_ERROR
+					}
+				} else {
+					vm_panic(vm, "Only instances have properties.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+			}
 		case .OP_SET_PROPERTY:
 			{
 				if is_module(vm_peek(vm, 1)) {
@@ -438,9 +512,49 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				 * setter expression does. */
 				vm_push(vm, value)
 			}
+		case .OP_SET_PROPERTY_LONG:
+			{
+				if is_module(vm_peek(vm, 1)) {
+					vm_panic(vm, "Cannot change the values of a module.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				if !is_instance(vm_peek(vm, 1)) {
+					vm_panic(vm, "Only instances have fields.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				/* Get the instance, which is at this moment the 2nd to the top
+				 * value on the stack. */
+				instance := as_instance(vm_peek(vm, 1))
+
+				/* Store the value on top of the stack into the instance's fields. */
+				table_set(&instance.fields, as_string(read_long_constant(frame)), vm_peek(vm, 0))
+
+				/* Pop the value that we just stored as a field. */
+				value := vm_pop(vm)
+
+				/* Pop the instance off the stack. */
+				vm_pop(vm)
+
+				/* Push the value we stored back on the stack, that's what a 
+				 * setter expression does. */
+				vm_push(vm, value)
+			}
 		case .OP_GET_SUPER:
 			{
 				name := read_string(frame)
+				superclass := as_class(vm_pop(vm))
+
+				/* Look up the method in the superclass and push it to the
+				 * stack as an ObjBoundMethod. */
+				if !bind_method(vm, superclass, name) {
+					return .INTERPRET_RUNTIME_ERROR
+				}
+			}
+		case .OP_GET_SUPER_LONG:
+			{
+				name := as_string(read_long_constant(frame))
 				superclass := as_class(vm_pop(vm))
 
 				/* Look up the method in the superclass and push it to the
@@ -546,9 +660,32 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 
 				frame = &vm.frames[vm.frame_count - 1]
 			}
+		case .OP_INVOKE_LONG:
+			{
+				method := as_string(read_long_constant(frame))
+				arg_count := read_byte(frame)
+
+				if !invoke(vm, method, int(arg_count)) {
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				frame = &vm.frames[vm.frame_count - 1]
+			}
 		case .OP_SUPER_INVOKE:
 			{
 				method := read_string(frame)
+				arg_count := read_byte(frame)
+				superclass := as_class(vm_pop(vm))
+
+				if !invoke_from_class(vm, superclass, method, int(arg_count)) {
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
+				frame = &vm.frames[vm.frame_count - 1]
+			}
+		case .OP_SUPER_INVOKE_LONG:
+			{
+				method := as_string(read_long_constant(frame))
 				arg_count := read_byte(frame)
 				superclass := as_class(vm_pop(vm))
 
@@ -723,7 +860,9 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_CLOSURE:
 			{
-				function := as_function(read_constant(frame))
+				// the function is always a long constant in a closure
+				function := as_function(read_long_constant(frame))
+
 				closure := new_closure(vm.gc, function)
 				vm_push(vm, obj_val(closure))
 
@@ -793,8 +932,24 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_CLASS:
 			{
-				public := bool(read_byte(frame))
 				name := read_string(frame)
+				public := bool(read_byte(frame))
+
+				vm_push(vm, obj_val(new_class(vm.gc, name)))
+
+				/* If the current file is being imported AND the class being
+                 * compiled is set as public with the `pub` keyword, add the 
+                 * declared class into the module that's importing it. */
+				importing_module, ok := importer.(ImportingModuleStruct)
+				if public && ok {
+					module := importing_module.module
+					table_set(&module.values, name, vm_peek(vm, 0))
+				}
+			}
+		case .OP_CLASS_LONG:
+			{
+				name := as_string(read_long_constant(frame))
+				public := bool(read_byte(frame))
 
 				vm_push(vm, obj_val(new_class(vm.gc, name)))
 
@@ -824,9 +979,9 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				vm_pop(vm) /* Subclass. */
 			}
 		case .OP_METHOD:
-			{
-				define_method(vm, read_string(frame))
-			}
+			define_method(vm, read_string(frame))
+		case .OP_METHOD_LONG:
+			define_method(vm, as_string(read_long_constant(frame)))
 		case .OP_MODULE_BUILTIN:
 			{
 				module_str := strings.to_upper(read_string(frame).chars)
@@ -841,10 +996,60 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				defer delete(module_str_lower)
 				define_builtin_module(vm.gc, module_str_lower, module)
 			}
+		case .OP_MODULE_BUILTIN_LONG:
+			{
+				module_str := strings.to_upper(as_string(read_long_constant(frame)).chars)
+				defer delete(module_str)
+
+				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
+				if !ok {
+					vm_panic(vm, "Unknown builtin module %s.", module_str)
+				}
+
+				module_str_lower := strings.to_lower(module_str)
+				defer delete(module_str_lower)
+				define_builtin_module(vm.gc, module_str_lower, module)
+			}
 		case .OP_MODULE_USER:
 			{
-				module_name := read_string(frame)
 				module_path := read_string(frame)
+				module_name := copy_string(vm.gc, filepath.short_stem(module_path.chars))
+
+				/* Add a new module onto the stack. */
+				module := new_module(vm.gc, module_name)
+
+				/* Create a new VM for the imported module. */
+				mod_vm := init_VM()
+				defer free_VM(&mod_vm)
+
+				mod_vm.gc = vm.gc
+
+				prev_mark_roots := vm
+				vm.gc.mark_roots_arg = &mod_vm
+				defer vm.gc.mark_roots_arg = prev_mark_roots
+
+				// run the VM on the file
+				result := run_file(
+					&mod_vm,
+					module_path.chars,
+					importer = ImportingModuleStruct {
+						path = vm.path,
+						name = vm.name,
+						module = module,
+					},
+				)
+				if result != .INTERPRET_OK {
+					return result /* Return the errored program back out */
+				}
+
+				pop(&vm.gc.import_stack) /* Remove the path from the import stack. */
+
+				vm_push(vm, obj_val(module))
+			}
+		case .OP_MODULE_USER_LONG:
+			{
+				module_path := as_string(read_long_constant(frame))
+				module_name := copy_string(vm.gc, filepath.short_stem(module_path.chars))
 
 				/* Add a new module onto the stack. */
 				module := new_module(vm.gc, module_name)

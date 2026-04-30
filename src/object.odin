@@ -355,6 +355,7 @@ copy_string :: proc(gc: ^GC, str: string) -> ^ObjString {
 }
 
 
+@(private = "file")
 allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
 	zstring := as_string(obj_val(allocate_obj(gc, ObjString, .STRING)))
 	zstring.chars = str
