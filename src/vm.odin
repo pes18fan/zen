@@ -39,14 +39,14 @@ CallFrame :: struct {
 VM :: struct {
 	/* The path of the running program. Used to distinguish programs since they
      * can import each other as modules, and so it is necessary to disallow
-     * cyclic imports. Value is the file path for a file and an empty string
-     * for a REPL, since you can't import REPLs. */
+     * cyclic imports. Value is the file path for a file and "REPL" for a REPL
+     * since you can't import REPLs. */
 	path:             string,
 
 	/* Just the path, except with the file extension and other path stuff stripped
      * out, like in a module name. For instance, for a path "a/b/c.zn", the name
      * will be just "c". Used for working with user-defined modules, but NOT
-     * for distinguishing them. */
+     * for distinguishing them. For a REPL, this string is "REPL". */
 	name:             string,
 
 	/* The chunk being interpreted. */

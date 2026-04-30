@@ -87,6 +87,7 @@ color_yellow :: proc(stream: ^os.File, text: string) {
 		fmt.fprint(stream, "\x1b[33m")
 	}
 
+
 	fmt.fprint(stream, text)
 
 	color_reset(stream)
