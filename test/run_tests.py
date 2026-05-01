@@ -31,6 +31,7 @@ compiler = "../bin/test/zen.exe" if OS.is_windows() else "../bin/test/zen"
 tests = 0
 passed = 0
 failed = 0
+failed_paths = []
 
 
 def print_header():
@@ -69,6 +70,7 @@ def test(folder):
                     print(f"{COL_RED}FAILED{RESET} with unexpected output")
                     print(f"Expected:\n{expect}")
                     print(f"Actual:\n{output}")
+                    failed_paths.append(file_path)
                     failed += 1
             else:
                 if wants_err:
@@ -79,10 +81,12 @@ def test(folder):
                         print(f"{COL_RED}FAILED{RESET} with unexpected error")
                         print(f"Expected:\n{expected_err}")
                         print(f"Got:\n{error}")
+                        failed_paths.append(file_path)
                         failed += 1
                 else:
                     print(f"{COL_RED}FAILED{RESET} with error")
                     print(error)
+                    failed_paths.append(file_path)
                     failed += 1
 
             tests += 1
@@ -148,6 +152,11 @@ if __name__ == "__main__":
     print(f"Total tests: {tests}")
     if failed > 0:
         print(f"{COL_RED}FAILED{RESET}: {failed} tests failed.")
+
+        print()
+        print("Failed tests:")
+        for path in failed_paths:
+            print(f"\t{path}")
     elif passed == tests:
         print(f"All tests {COL_GREEN}PASSED!{RESET} :)")
     else:
