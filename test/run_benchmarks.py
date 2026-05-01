@@ -33,6 +33,7 @@ benchmarks = 0
 
 def print_header():
     print(f"{COL_RED}ZEN{RESET} {COL_GREEN}BENCHMARKER{RESET}\n")
+    print(f"Results are in {TEXT_BOLD}milliseconds{RESET}.")
 
 
 def bench(folder):
