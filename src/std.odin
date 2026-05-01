@@ -41,6 +41,9 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 		}
 	case .MATH:
 		{
+			append(&module_functions, ModuleFunction{"sin", sin_native, 1})
+			append(&module_functions, ModuleFunction{"cos", cos_native, 1})
+			append(&module_functions, ModuleFunction{"tan", tan_native, 1})
 			append(&module_functions, ModuleFunction{"sqrt", sqrt_native, 1})
 			append(&module_functions, ModuleFunction{"ln", ln_native, 1})
 			append(&module_functions, ModuleFunction{"pow", pow_native, 2})
@@ -357,6 +360,39 @@ parse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 }
 
 /* ---------- MATH ---------- */
+
+/* Find the sine of a number. */
+sin_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot find the sine of a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	n := as_number(args[0])
+	return number_val(math.sin(n)), true
+}
+
+/* Find the cosine of a number. */
+cos_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot find the cosine of a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	n := as_number(args[0])
+	return number_val(math.cos(n)), true
+}
+
+/* Find the tangent of a number. */
+tan_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_number(args[0]) {
+		vm_panic(vm, "Cannot find the tangent of a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	n := as_number(args[0])
+	return number_val(math.tan(n)), true
+}
 
 /* Find the square root of a number. */
 sqrt_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {

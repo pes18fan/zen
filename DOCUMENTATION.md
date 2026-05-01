@@ -411,6 +411,9 @@ for you to use.
 
 ### module `math`
 
+- `sin(x)`: Find the sine of a real number `x`.
+- `cos(x)`: Find the cosine of a real number `x`.
+- `tan(x)`: Find the tangent of a real number `x`.
 - `sqrt(x)`: Find the square root of a positive real number `x`.
 - `ln(x)`: Find the natural log of a positive real number `x`.
 - `pow(x, n)`: Find the result of raising `x` to the `n`th power.
