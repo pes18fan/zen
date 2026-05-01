@@ -164,17 +164,17 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_GET_GLOBAL:
 		return constant_instruction("OP_GET_GLOBAL", c, offset)
 	case .OP_GET_GLOBAL_LONG:
-		return long_constant_instruction("OP_GET_GLOBAL", c, offset)
+		return long_constant_instruction("OP_GET_GLOBAL_LONG", c, offset)
 	case .OP_DEFINE_GLOBAL:
 		return constant_instruction("OP_DEFINE_GLOBAL", c, offset)
 	case .OP_DEFINE_GLOBAL_LONG:
-		return long_constant_instruction("OP_DEFINE_GLOBAL", c, offset)
+		return long_constant_instruction("OP_DEFINE_GLOBAL_LONG", c, offset)
 	case .OP_EQUAL:
 		return simple_instruction("OP_EQUAL", offset)
 	case .OP_SET_GLOBAL:
 		return constant_instruction("OP_SET_GLOBAL", c, offset)
 	case .OP_SET_GLOBAL_LONG:
-		return long_constant_instruction("OP_SET_GLOBAL", c, offset)
+		return long_constant_instruction("OP_SET_GLOBAL_LONG", c, offset)
 	case .OP_GET_UPVALUE:
 		return byte_instruction("OP_GET_UPVALUE", c, offset)
 	case .OP_SET_UPVALUE:
@@ -182,15 +182,15 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_GET_PROPERTY:
 		return constant_instruction("OP_GET_PROPERTY", c, offset)
 	case .OP_GET_PROPERTY_LONG:
-		return long_constant_instruction("OP_GET_PROPERTY", c, offset)
+		return long_constant_instruction("OP_GET_PROPERTY_LONG", c, offset)
 	case .OP_SET_PROPERTY:
 		return constant_instruction("OP_SET_PROPERTY", c, offset)
 	case .OP_SET_PROPERTY_LONG:
-		return long_constant_instruction("OP_SET_PROPERTY", c, offset)
+		return long_constant_instruction("OP_SET_PROPERTY_LONG", c, offset)
 	case .OP_GET_SUPER:
 		return constant_instruction("OP_GET_SUPER", c, offset)
 	case .OP_GET_SUPER_LONG:
-		return long_constant_instruction("OP_GET_SUPER", c, offset)
+		return long_constant_instruction("OP_GET_SUPER_LONG", c, offset)
 	case .OP_GET_IT:
 		return simple_instruction("OP_GET_IT", offset)
 	case .OP_SET_IT:
@@ -228,11 +228,11 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_INVOKE:
 		return invoke_instruction("OP_INVOKE", c, offset, long = false)
 	case .OP_INVOKE_LONG:
-		return invoke_instruction("OP_INVOKE", c, offset, long = true)
+		return invoke_instruction("OP_INVOKE_LONG", c, offset, long = true)
 	case .OP_SUPER_INVOKE:
 		return invoke_instruction("OP_SUPER_INVOKE", c, offset, long = false)
 	case .OP_SUPER_INVOKE_LONG:
-		return invoke_instruction("OP_SUPER_INVOKE", c, offset, long = true)
+		return invoke_instruction("OP_SUPER_INVOKE_LONG", c, offset, long = true)
 	case .OP_LIST:
 		return byte_instruction("OP_LIST", c, offset)
 	case .OP_SUBSCRIPT:
@@ -243,14 +243,14 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		{
 			offset := offset
 			offset += 1
-			constant := c.code[offset]
+			constant := int(c.code[offset]) << 8 | int(c.code[offset + 1])
 			fmt.eprintf("%-16s %4d ", "OP_CLOSURE", constant)
 			str, was_allocation := stringify_value(c.constants.values[constant])
 			defer if was_allocation {
 				delete(str)
 			}
 			fmt.eprintf(str)
-			offset += 1
+			offset += 2
 			public := bool(c.code[offset])
 			fmt.eprintf(", %s", public ? "public" : "private")
 			fmt.eprintln()
@@ -280,21 +280,21 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_CLASS:
 		return class_instruction("OP_CLASS", c, offset, long = false)
 	case .OP_CLASS_LONG:
-		return class_instruction("OP_CLASS", c, offset, long = true)
+		return class_instruction("OP_CLASS_LONG", c, offset, long = true)
 	case .OP_INHERIT:
 		return simple_instruction("OP_INHERIT", offset)
 	case .OP_METHOD:
 		return constant_instruction("OP_METHOD", c, offset)
 	case .OP_METHOD_LONG:
-		return long_constant_instruction("OP_METHOD", c, offset)
+		return long_constant_instruction("OP_METHOD_LONG", c, offset)
 	case .OP_MODULE_BUILTIN:
 		return module_instruction("OP_MODULE_BUILTIN", c, offset, long = false)
 	case .OP_MODULE_BUILTIN_LONG:
-		return module_instruction("OP_MODULE_BUILTIN", c, offset, long = true)
+		return module_instruction("OP_MODULE_BUILTIN_LONG", c, offset, long = true)
 	case .OP_MODULE_USER:
 		return module_instruction("OP_MODULE_USER", c, offset, long = false)
 	case .OP_MODULE_USER_LONG:
-		return module_instruction("OP_MODULE_USER", c, offset, long = true)
+		return module_instruction("OP_MODULE_USER_LONG", c, offset, long = true)
 	case .OP_TOP_LEVEL_RETURN:
 		return simple_instruction("OP_TOP_LEVEL_RETURN", offset)
 	case:
