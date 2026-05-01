@@ -23,6 +23,9 @@ when NAN_BOXING {
 	TAG_FALSE :: 2 // 10.
 	TAG_TRUE :: 3 // 11.
 
+	FALSE_VAL :: cast(Value)(cast(u64)(QNAN | TAG_FALSE))
+	TRUE_VAL :: cast(Value)(cast(u64)(QNAN | TAG_TRUE))
+
 	/* Every value can be represented by a unsigned 64-bit integer. */
 	Value :: u64
 
@@ -41,7 +44,7 @@ when NAN_BOXING {
 	*/
 
 	/*
-	ORing FALSE_VAL (10 in binary) with 1 siply gives 11 in binary, which
+	ORing FALSE_VAL (10 in binary) with 1 simply gives 11 in binary, which
     equals TRUE_VAL, and ORing TRUE_VAL gives itself.
 	*/
 	is_bool :: #force_inline proc(value: Value) -> bool {
@@ -86,12 +89,10 @@ when NAN_BOXING {
 		return value ? TRUE_VAL : FALSE_VAL
 	}
 
-	FALSE_VAL :: cast(Value)(cast(u64)(QNAN | TAG_FALSE))
-	TRUE_VAL :: cast(Value)(cast(u64)(QNAN | TAG_TRUE))
-
 	nil_val :: #force_inline proc() -> Value {
 		return cast(Value)(cast(u64)(QNAN | TAG_NIL))
 	}
+
 	number_val :: #force_inline proc(num: f64) -> Value {
 		return transmute(Value)num
 	}

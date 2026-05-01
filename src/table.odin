@@ -58,9 +58,9 @@ find_entry :: proc(entries: []Entry, capacity: int, key: ^ObjString) -> ^Entry {
 	 * added. In other words, it is always a power of two. To find the index
 	 * here, we need to modulo the hash by the capacity. However, since the
 	 * capacity is always a power of two, we can avoid the slow modulo
-	 * operator and bitwise AND the hash with the capacity minus one, which in
-	 * fact provides the exact same result as the modulo operation when the
-	 * divisor (capacity in this case) is a power of two. */
+	 * operator and instead bitwise AND the hash with the capacity minus one, 
+     * which in fact provides the exact same result as the modulo operation when 
+     * the divisor (capacity in this case) is a power of two. */
 	index := key.hash & (u32(capacity) - 1)
 	tombstone: ^Entry = nil
 
@@ -157,8 +157,11 @@ grow_capacity :: proc(capacity: int) -> int {
 table_stringify :: proc(table: ^Table) {
 	for i in 0 ..< table.capacity {
 		entry := &table.entries[i]
+		val_str, was_allocation := stringify_value(entry.value)
+		defer if was_allocation {delete(val_str)}
+
 		if entry.key != nil {
-			fmt.eprintf("key: %s, value: %v\n", entry.key.chars, entry.value)
+			fmt.eprintf("key: %s, value: %v\n", entry.key.chars, val_str)
 		}
 	}
 }

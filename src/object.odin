@@ -120,7 +120,7 @@ ObjBoundMethod :: struct {
 	method:    ^ObjClosure,
 }
 
-/* A list. */
+/* A list. Stores a ValueArray for its items. */
 ObjList :: struct {
 	using obj: Obj,
 	items:     ValueArray,
@@ -421,7 +421,7 @@ stringify_object :: proc(obj: ^Obj) -> (res: string, was_allocation: bool) {
 	case .FUNCTION:
 		return stringify_function(as_function(obj_val(obj))), false
 	case .INSTANCE:
-		return fmt.tprintf("%s instance", as_instance(obj_val(obj)).klass.name.chars), false
+		return fmt.tprintf("<instance of %s>", as_instance(obj_val(obj)).klass.name.chars), false
 	case .LIST:
 		{
 			list := as_list(obj_val(obj))
@@ -447,7 +447,7 @@ stringify_object :: proc(obj: ^Obj) -> (res: string, was_allocation: bool) {
 			return strings.clone(str), true
 		}
 	case .MODULE:
-		return fmt.tprintf("%s module", as_module(obj_val(obj)).name.chars), false
+		return fmt.tprintf("<module %s>", as_module(obj_val(obj)).name.chars), false
 	case .NATIVE:
 		return "<native func>", false
 	case .STRING:
