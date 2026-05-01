@@ -31,7 +31,7 @@ class NthToggle < Toggle {
   }
 }
 
-var start = time.clock()
+var start = time.clock_ms()
 var n = 100000
 var value = true
 var toggle = Toggle(value)
@@ -68,4 +68,4 @@ for var i = 0; i < n; i = i + 1 {
 }
 
 puts(ntoggle.value())
-puts(time.clock() - start)
+puts(time.clock_ms() - start)

@@ -28,7 +28,7 @@ val minDepth = 4
 val maxDepth = 14
 val stretchDepth = maxDepth + 1
 
-val start = time.clock()
+val start = time.clock_ms()
 
 puts("stretch tree of depth:")
 puts(stretchDepth)
@@ -70,4 +70,4 @@ puts(maxDepth)
 puts("check:")
 puts(longLivedTree.check())
 puts("elapsed:")
-puts(time.clock() - start)
+puts(time.clock_ms() - start)

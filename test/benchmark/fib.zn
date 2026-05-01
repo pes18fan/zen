@@ -7,6 +7,6 @@ func fib(n) {
   return fib(n - 2) + fib(n - 1)
 }
 
-var start = time.clock()
+var start = time.clock_ms()
 puts(fib(35) == 9227465)
-puts(time.clock() - start)
+puts(time.clock_ms() - start)

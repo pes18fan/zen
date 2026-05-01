@@ -35,7 +35,7 @@ class Foo {
 }
 
 var foo = Foo()
-var start = time.clock()
+var start = time.clock_ms()
 var i = 0;
 while (i < 500000) {
   foo.method0()
@@ -71,4 +71,4 @@ while (i < 500000) {
   i = i + 1
 }
 
-print time.clock() - start
+puts(time.clock_ms() - start)

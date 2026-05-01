@@ -26,10 +26,11 @@ class Tree {
 }
 
 var tree = Tree(8)
-var start = time.clock()
+var start = time.clock_ms()
 for var i = 0; i < 100; i = i + 1 {
   if tree.walk() != 122068 {
     print "Error"
   }
 }
-print time.clock() - start
+
+print time.clock_ms() - start

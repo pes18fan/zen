@@ -19,7 +19,7 @@ class Zoo {
 
 var zoo = Zoo()
 var sum = 0
-var start = time.clock()
+var start = time.clock_ms()
 while (sum < 10000000) {
   sum = sum + zoo.ant()
             + zoo.banana()
@@ -29,5 +29,9 @@ while (sum < 10000000) {
             + zoo.mouse()
 }
 
+func in_seconds(t) {
+    return t / 1000000000
+}
+
 puts(sum)
-puts(time.clock() - start)
+puts(time.clock_ms() - start)

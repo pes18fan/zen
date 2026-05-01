@@ -1,5 +1,4 @@
-// DRAFT
-// NOTE: Doesn't run; too many constants for the compiler to handle for now
+// string_equality.zn
 use "time"
 
 var a1 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"
@@ -13,7 +12,7 @@ var a8 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8"
 
 var i = 0
 
-var loopStart = time.clock()
+var loopStart = time.clock_ms()
 
 while (i < 100000) {
   i = i + 1
@@ -109,18 +108,18 @@ while (i < 100000) {
   a8; a1; a8; a2; a8; a3; a8; a4; a8; a5; a8; a6; a8; a7; a8; a8;
 }
 
-var loopTime = time.clock() - loopStart
+var loopTime = time.clock_ms() - loopStart
 
-var start = time.clock()
+var start = time.clock_ms()
 
 i = 0
 while (i < 100000) {
   i = i + 1
 
-  // 1 == 1; 1 == 2; 1 == nil; 1 == "str"; 1 == true;
-  // nil == nil; nil == 1; nil == "str"; nil == true;
-  // true == true; true == 1; true == false; true == "str"; true == nil;
-  // "str" == "str"; "str" == "stru"; "str" == 1; "str" == nil; "str" == true;
+  1 == 1; 1 == 2; 1 == nil; 1 == "str"; 1 == true
+  nil == nil; nil == 1; nil == "str"; nil == true
+  true == true; true == 1; true == false; true == "str"; true == nil
+  "str" == "str"; "str" == "stru"; "str" == 1; "str" == nil; "str" == true
 
   a1 == a1; a1 == a2; a1 == a3; a1 == a4; a1 == a5; a1 == a6; a1 == a7; a1 == a8;
   a2 == a1; a2 == a2; a2 == a3; a2 == a4; a2 == a5; a2 == a6; a2 == a7; a2 == a8;
@@ -211,10 +210,9 @@ while (i < 100000) {
   a6 == a1; a6 == a2; a6 == a3; a6 == a4; a6 == a5; a6 == a6; a6 == a7; a6 == a8;
   a7 == a1; a7 == a2; a7 == a3; a7 == a4; a7 == a5; a7 == a6; a7 == a7; a7 == a8;
   a8 == a1; a8 == a2; a8 == a3; a8 == a4; a8 == a5; a8 == a6; a8 == a7; a8 == a8;
-
 }
 
-var elapsed = time.clock() - start
+var elapsed = time.clock_ms() - start
 puts("loop")
 puts(loopTime)
 puts("elapsed")
