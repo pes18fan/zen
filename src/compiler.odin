@@ -875,7 +875,7 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
          * remembered that that would break subscripting. */
 		if match(p, .STRING) {
 			/* Grab the (supposed) function */
-			if set_op == .OP_GET_GLOBAL_LONG {
+			if get_op == .OP_GET_GLOBAL_LONG {
 				emit_opcode(p, get_op)
 				emit_byte(p, byte((arg >> 8) & 0xff))
 				emit_byte(p, byte(arg & 0xff))
@@ -896,7 +896,7 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 
 			emit_bytes(p, byte(OpCode.OP_CALL), arg_count)
 		} else {
-			if set_op == .OP_GET_GLOBAL_LONG {
+			if get_op == .OP_GET_GLOBAL_LONG {
 				emit_opcode(p, get_op)
 				emit_byte(p, byte((arg >> 8) & 0xff))
 				emit_byte(p, byte(arg & 0xff))
@@ -1572,16 +1572,45 @@ module_declaration :: proc(p: ^Parser) {
 
 	// the mod_name here is path, but will be turned into just the filename
 	// in the VM if it is a user module
-	mod_name := path
+	mod_name: string
+	switch mod_type {
+	case .BUILTIN:
+		mod_name = path
+	case .USER:
+		mod_name = filepath.short_stem(path)
+	}
+	path_constant := string_constant(p, path)
+
+	/* Save the module name to the constant pool, but don't write it to the bytecode.
+    We do this because the module needs to exist as a variable with the name
+    in mod_name so that the compiler's variable existence checks don't error
+    out thinking of it as a nonexistent global variable. This is not a problem
+    for builtin modules as mod_name == path for them, but that is not true
+    for user modules. 
+
+    We don't need to save this index in the bytecode because:
+
+    - It is a string saved in a table which we can index with that string value
+        itself
+    - The string value can be obtained directly from filepath.short_stem on the
+        path
+
+    Why don't we send it in bytecode itself? For user modules; this would prevent
+    any need to run short_stem in the VM and this improve performance... and this
+    was in fact what was being done before the constant limit per chunk was
+    increased from 256 to 65536. The reason it was changed after that is because
+    if you have 254 constants at the time of compiling a user module declaration,
+    one of the constants will be in 1 byte but the other will have to be in
+    2 bytes, causing unpredictable inconsistency in the bytecode size. */
 	name_constant := string_constant(p, mod_name)
 
 	/* Standard library modules and user modules are implemented differently, so
        we need to emit the correct opcode. */
 	switch mod_type {
 	case .BUILTIN:
-		emit_op_with_constant(p, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, name_constant)
+		emit_op_with_constant(p, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, path_constant)
 	case .USER:
-		emit_op_with_constant(p, .OP_MODULE_USER, .OP_MODULE_USER_LONG, name_constant)
+		emit_op_with_constant(p, .OP_MODULE_USER, .OP_MODULE_USER_LONG, path_constant)
 	}
 	define_variable(p, name_constant)
 

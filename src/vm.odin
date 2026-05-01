@@ -191,6 +191,12 @@ read_byte :: #force_inline proc(frame: ^CallFrame) -> byte #no_bounds_check {
 	return frame.ip^
 }
 
+@(private = "file")
+read_short :: #force_inline proc(frame: ^CallFrame) -> int #no_bounds_check {
+	defer frame.ip = mem.ptr_offset(frame.ip, 2)
+	return int((frame.ip^ << 8) | (mem.ptr_offset(frame.ip, 1)^))
+}
+
 /* Reads a constant from the chunk and pushes it onto the stack. */
 @(private = "file")
 read_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
@@ -205,12 +211,6 @@ read_long_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_
 @(private = "file")
 read_string :: #force_inline proc(frame: ^CallFrame) -> ^ObjString {
 	return as_string(read_constant(frame))
-}
-
-@(private = "file")
-read_short :: #force_inline proc(frame: ^CallFrame) -> int #no_bounds_check {
-	defer frame.ip = mem.ptr_offset(frame.ip, 2)
-	return int((frame.ip^ << 8) | (mem.ptr_offset(frame.ip, 1)^))
 }
 
 /*
@@ -953,9 +953,6 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 
 				vm_push(vm, obj_val(new_class(vm.gc, name)))
 
-				/* If the current file is being imported AND the class being
-                 * compiled is set as public with the `pub` keyword, add the 
-                 * declared class into the module that's importing it. */
 				importing_module, ok := importer.(ImportingModuleStruct)
 				if public && ok {
 					module := importing_module.module
