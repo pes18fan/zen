@@ -407,6 +407,7 @@ for you to use.
 ### module `time`
 
 - `clock()`: Get the current UNIX time in seconds.
+- `clock_ms()`: Get the current UNIX time in milliseconds.
 
 ### module `math`
 

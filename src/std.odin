@@ -37,6 +37,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 	case .TIME:
 		{
 			append(&module_functions, ModuleFunction{"clock", clock_native, 0})
+			append(&module_functions, ModuleFunction{"clock_ms", clock_ms_native, 0})
 		}
 	case .MATH:
 		{
@@ -222,6 +223,11 @@ filename_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool)
 /* Get the current UNIX time in seconds. */
 clock_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return number_val(f64(time.to_unix_seconds(time.now()))), true
+}
+
+/* Get the current UNIX time in milliseconds. */
+clock_ms_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return number_val(f64(time.to_unix_nanoseconds(time.now()) / 1e6)), true
 }
 
 /* ---------- OS ---------- */
