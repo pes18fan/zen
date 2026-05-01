@@ -82,23 +82,27 @@ class_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> i
 }
 
 @(private = "file")
-module_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
-	module_name_idx: int
+user_module_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
+	module_name_idx, module_path_idx: int
 	if long {
 		module_name_idx = int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
+		module_path_idx = int(c.code[offset + 3]) << 8 | int(c.code[offset + 4])
 	} else {
 		module_name_idx = int(c.code[offset + 1])
+		module_path_idx = int(c.code[offset + 2])
 	}
 
 	module_name, mn_was_allocation := stringify_value(c.constants.values[module_name_idx])
+	module_path, mp_was_allocation := stringify_value(c.constants.values[module_path_idx])
 	defer if mn_was_allocation {delete(module_name)}
+	defer if mp_was_allocation {delete(module_path)}
 
-	fmt.eprintf("%-16s (module '%s')\n", name, module_name)
+	fmt.eprintf("%-16s (module '%s', path '%s')\n", name, module_name, module_path)
 
 	if long {
-		return offset + 3
+		return offset + 5
 	} else {
-		return offset + 2
+		return offset + 3
 	}
 }
 
@@ -288,13 +292,13 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_METHOD_LONG:
 		return long_constant_instruction("OP_METHOD_LONG", c, offset)
 	case .OP_MODULE_BUILTIN:
-		return module_instruction("OP_MODULE_BUILTIN", c, offset, long = false)
+		return constant_instruction("OP_MODULE_BUILTIN", c, offset)
 	case .OP_MODULE_BUILTIN_LONG:
-		return module_instruction("OP_MODULE_BUILTIN_LONG", c, offset, long = true)
+		return long_constant_instruction("OP_MODULE_BUILTIN_LONG", c, offset)
 	case .OP_MODULE_USER:
-		return module_instruction("OP_MODULE_USER", c, offset, long = false)
+		return user_module_instruction("OP_MODULE_USER", c, offset, long = false)
 	case .OP_MODULE_USER_LONG:
-		return module_instruction("OP_MODULE_USER_LONG", c, offset, long = true)
+		return user_module_instruction("OP_MODULE_USER_LONG", c, offset, long = true)
 	case .OP_TOP_LEVEL_RETURN:
 		return simple_instruction("OP_TOP_LEVEL_RETURN", offset)
 	case:
@@ -318,24 +322,24 @@ disassemble :: proc(c: ^Chunk, name: string) {
 /* Some debug print functions to avoid printing debug info in prod code */
 dbg_print :: proc(data: string) {
 	when ODIN_DEBUG {
-		fmt.print(data)
+		fmt.eprint(data)
 	}
 }
 
 dbg_println :: proc(data: string) {
 	when ODIN_DEBUG {
-		fmt.println(data)
+		fmt.eprintln(data)
 	}
 }
 
 dbg_printf :: proc(format: string, args: ..any) {
 	when ODIN_DEBUG {
-		fmt.printf(format, ..args)
+		fmt.eprintf(format, ..args)
 	}
 }
 
 dbg_printfln :: proc(format: string, args: ..any) {
 	when ODIN_DEBUG {
-		fmt.printfln(format, ..args)
+		fmt.eprintfln(format, ..args)
 	}
 }

@@ -1554,7 +1554,6 @@ module_declaration :: proc(p: ^Parser) {
 		error(p, fmt.tprintf("Allocator error when declaring module"))
 		return
 	}
-
 	defer delete(abs_path)
 
 	// look for the path in the stdlib, if not present look for a file at the path
@@ -1579,38 +1578,32 @@ module_declaration :: proc(p: ^Parser) {
 	case .USER:
 		mod_name = filepath.short_stem(path)
 	}
-	path_constant := string_constant(p, path)
-
-	/* Save the module name to the constant pool, but don't write it to the bytecode.
-    We do this because the module needs to exist as a variable with the name
-    in mod_name so that the compiler's variable existence checks don't error
-    out thinking of it as a nonexistent global variable. This is not a problem
-    for builtin modules as mod_name == path for them, but that is not true
-    for user modules. 
-
-    We don't need to save this index in the bytecode because:
-
-    - It is a string saved in a table which we can index with that string value
-        itself
-    - The string value can be obtained directly from filepath.short_stem on the
-        path
-
-    Why don't we send it in bytecode itself? For user modules; this would prevent
-    any need to run short_stem in the VM and this improve performance... and this
-    was in fact what was being done before the constant limit per chunk was
-    increased from 256 to 65536. The reason it was changed after that is because
-    if you have 254 constants at the time of compiling a user module declaration,
-    one of the constants will be in 1 byte but the other will have to be in
-    2 bytes, causing unpredictable inconsistency in the bytecode size. */
 	name_constant := string_constant(p, mod_name)
 
 	/* Standard library modules and user modules are implemented differently, so
        we need to emit the correct opcode. */
 	switch mod_type {
 	case .BUILTIN:
-		emit_op_with_constant(p, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, path_constant)
+		emit_op_with_constant(p, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, name_constant)
 	case .USER:
-		emit_op_with_constant(p, .OP_MODULE_USER, .OP_MODULE_USER_LONG, path_constant)
+		/* Provide the name of the module and the path as bytecode args. */
+		path_constant := string_constant(p, abs_path)
+
+		/* Use OP_MODULE_USER_LONG if the path_constant needs to be encoded
+        as 2 bytes, even if the name_constant fits in 1. */
+		if path_constant <= U8_MAX {
+			emit_opcode(p, .OP_MODULE_USER)
+			emit_constant_only(p, name_constant)
+			emit_constant_only(p, path_constant)
+		} else {
+			emit_opcode(p, .OP_MODULE_USER_LONG)
+
+			emit_byte(p, byte((name_constant >> 8) & 0xff))
+			emit_byte(p, byte(name_constant & 0xff))
+
+			emit_byte(p, byte((path_constant >> 8) & 0xff))
+			emit_byte(p, byte(path_constant & 0xff))
+		}
 	}
 	define_variable(p, name_constant)
 

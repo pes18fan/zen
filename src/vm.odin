@@ -4,7 +4,6 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import "core:os"
-import "core:path/filepath"
 import "core:reflect"
 import "core:slice"
 import "core:strings"
@@ -1009,8 +1008,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_MODULE_USER:
 			{
+				module_name := read_string(frame)
 				module_path := read_string(frame)
-				module_name := copy_string(vm.gc, filepath.short_stem(module_path.chars))
 
 				/* Add a new module onto the stack. */
 				module := new_module(vm.gc, module_name)
@@ -1045,8 +1044,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_MODULE_USER_LONG:
 			{
+				module_name := as_string(read_long_constant(frame))
 				module_path := as_string(read_long_constant(frame))
-				module_name := copy_string(vm.gc, filepath.short_stem(module_path.chars))
 
 				/* Add a new module onto the stack. */
 				module := new_module(vm.gc, module_name)
