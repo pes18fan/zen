@@ -1460,9 +1460,7 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 	/* The class name is captured to push it back on the stack later on while
 	   compiling methods. */
 	class_name := p.previous
-
 	name_constant := identifier_constant(p, &p.previous)
-
 	declare_variable(p, .VAR) /* Classes are reassignable, subject to change. */
 
 	global_o_str := copy_string(p.gc, p.previous.lexeme)
@@ -1472,9 +1470,18 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
      * because classes are, as of now, reassignable. */
 	table_set(p.current_compiler.globals, global_o_str, bool_val(false))
 
-	emit_op_with_constant(p, .OP_CLASS, .OP_CLASS_LONG, name_constant)
+	if name_constant <= U8_MAX {
+		emit_opcode(p, .OP_CLASS)
+		emit_byte(p, 1 if public else 0)
+		emit_byte(p, byte(name_constant))
+	} else {
+		emit_opcode(p, .OP_CLASS_LONG)
+		emit_byte(p, 1 if public else 0)
+		emit_byte(p, byte((name_constant >> 8) & 0xff))
+		emit_byte(p, byte(name_constant & 0xff))
+	}
+	// FIXME: implicit byte emisssion here!!! fucks up the disassembler and vm, fix
 	define_variable(p, name_constant)
-	emit_byte(p, 1 if public else 0)
 
 	/* Push the current class to the linked list of classes. */
 	class_compiler: ClassCompiler

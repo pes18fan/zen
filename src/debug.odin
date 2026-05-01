@@ -51,19 +51,14 @@ long_constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 
 @(private = "file")
 class_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
+	public := bool(c.code[offset + 1])
 	constant: int
 	if long {
-		constant = int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
+		constant = int(c.code[offset + 2]) << 8 | int(c.code[offset + 3])
 	} else {
-		constant = int(c.code[offset + 1])
+		constant = int(c.code[offset + 2])
 	}
 
-	public: bool
-	if long {
-		public = bool(c.code[offset + 3])
-	} else {
-		public = bool(c.code[offset + 2])
-	}
 	fmt.eprintf("%-16s %4d '", name, constant)
 
 	str, was_allocation := stringify_value(c.constants.values[constant])

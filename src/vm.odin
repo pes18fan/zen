@@ -931,8 +931,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_CLASS:
 			{
-				name := read_string(frame)
 				public := bool(read_byte(frame))
+				name := read_string(frame)
 
 				vm_push(vm, obj_val(new_class(vm.gc, name)))
 
@@ -947,8 +947,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_CLASS_LONG:
 			{
-				name := as_string(read_long_constant(frame))
 				public := bool(read_byte(frame))
+				name := as_string(read_long_constant(frame))
 
 				vm_push(vm, obj_val(new_class(vm.gc, name)))
 
