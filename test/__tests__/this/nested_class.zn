@@ -1,13 +1,13 @@
 class Outer {
   method() {
-    puts(this) // expect: Outer instance
+    puts(this) // expect: <instance of Outer>
 
     func f() {
-      puts(this) // expect: Outer instance
+      puts(this) // expect: <instance of Outer>
 
       class Inner {
         method() {
-          puts(this) // expect: Inner instance
+          puts(this) // expect: <instance of Inner>
         }
       }
 

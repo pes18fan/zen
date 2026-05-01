@@ -1,2 +1,2 @@
 class Klass {}
-print Klass() // expect: Klass instance
+print Klass() // expect: <instance of Klass>
