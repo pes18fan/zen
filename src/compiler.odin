@@ -429,7 +429,6 @@ init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
 	/* DON'T FORGET to set current_compiler to the new compiler!
 	Took me WAAAAAAAAAAY too long to figure out I was missing this. */
 	p.current_compiler = c
-
 	c.function = new_function(p.gc)
 
 	if type != .SCRIPT && type != .LAMBDA {
@@ -1701,7 +1700,11 @@ if_statement :: proc(p: ^Parser, ifnt: bool = false) {
 	consume(p, .LSQUIRLY, "Expect '{' after if condition.")
 
 	when CHAOTIC {
-		then_jump := emit_jump(p, .OP_JUMP_IF_TRUE)
+		if ifnt {
+			then_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+		} else {
+			then_jump := emit_jump(p, .OP_JUMP_IF_TRUE)
+		}
 	} else {
 		then_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
 	}
@@ -1959,7 +1962,11 @@ while_statement :: proc(p: ^Parser, whilent: bool = false) {
 	consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
 
 	when CHAOTIC {
-		exit_jump := emit_jump(p, .OP_JUMP_IF_TRUE)
+		if whilent {
+			exit_jump := emit_jump(p, .OP_JUMP_IF_TRUE)
+		} else {
+			exit_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+		}
 	} else {
 		exit_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
 	}
