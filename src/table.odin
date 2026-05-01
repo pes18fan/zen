@@ -154,7 +154,7 @@ grow_capacity :: proc(capacity: int) -> int {
 }
 
 /* Print out a string representation of the table. For debug purposes. */
-table_stringify :: proc(table: ^Table) {
+table_print :: proc(table: ^Table) {
 	for i in 0 ..< table.capacity {
 		entry := &table.entries[i]
 		val_str, was_allocation := stringify_value(entry.value)

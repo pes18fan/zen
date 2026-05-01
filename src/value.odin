@@ -167,6 +167,21 @@ free_value_array :: proc(a: ^ValueArray) {
 	delete(a.values)
 }
 
+/* For debug purposes */
+print_value_array :: proc(a: ^ValueArray) {
+	fmt.eprint("[ ")
+	for i in 0 ..< a.count {
+		fmt.eprint(" ")
+
+		str, was_allocation := stringify_value(a.values[i])
+		defer if was_allocation {delete(str)}
+
+		fmt.eprint(str)
+		fmt.eprintf(" at %d,", i)
+	}
+	fmt.eprintln(" ]")
+}
+
 @(private = "file")
 is_integer :: proc(value: f64) -> bool {
 	return value == math.floor(value)
