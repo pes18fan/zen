@@ -193,7 +193,7 @@ read_byte :: #force_inline proc(frame: ^CallFrame) -> byte #no_bounds_check {
 @(private = "file")
 read_short :: #force_inline proc(frame: ^CallFrame) -> int #no_bounds_check {
 	defer frame.ip = mem.ptr_offset(frame.ip, 2)
-	return int((frame.ip^ << 8) | (mem.ptr_offset(frame.ip, 1)^))
+	return int(frame.ip^) << 8 | int(mem.ptr_offset(frame.ip, 1)^)
 }
 
 /* Reads a constant from the chunk and pushes it onto the stack. */
@@ -203,13 +203,18 @@ read_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check
 }
 
 @(private = "file")
-read_long_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
+read_constant_long :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
 	return frame.closure.function.chunk.constants.values[read_short(frame)]
 }
 
 @(private = "file")
 read_string :: #force_inline proc(frame: ^CallFrame) -> ^ObjString {
 	return as_string(read_constant(frame))
+}
+
+@(private = "file")
+read_string_long :: #force_inline proc(frame: ^CallFrame) -> ^ObjString {
+	return as_string(read_constant_long(frame))
 }
 
 /*
@@ -321,7 +326,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			constant := read_constant(frame)
 			vm_push(vm, constant)
 		case .OP_CONSTANT_LONG:
-			constant := read_long_constant(frame)
+			constant := read_constant_long(frame)
 			vm_push(vm, constant)
 		case .OP_NIL:
 			vm_push(vm, nil_val())
@@ -350,7 +355,10 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_GET_GLOBAL_LONG:
 			{
-				name := as_string(read_long_constant(frame))
+				name := read_string_long(frame)
+
+				// dbg_printfln("name: %s", name.chars)
+				// table_print(&vm.gc.globals)
 
 				/* No runtime check is done for variable existence since that is
                  * done at compile time. */
@@ -362,7 +370,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			vm_pop(vm)
 		case .OP_DEFINE_GLOBAL_LONG:
-			name := as_string(read_long_constant(frame))
+			name := read_string_long(frame)
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			vm_pop(vm)
 		case .OP_SET_GLOBAL:
@@ -375,7 +383,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_SET_GLOBAL_LONG:
 			{
-				name := as_string(read_long_constant(frame))
+				name := read_string_long(frame)
 
 				/* No runtime check is done for variable existence since that is
                  * done at compile time. */
@@ -442,7 +450,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			{
 				if is_module(vm_peek(vm, 0)) {
 					module := as_module(vm_peek(vm, 0))
-					name := as_string(read_long_constant(frame))
+					name := read_string_long(frame)
 
 					/* Look for the value in the module. */
 					value: Value; ok: bool
@@ -462,7 +470,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 					}
 				} else if is_instance(vm_peek(vm, 0)) {
 					instance := as_instance(vm_peek(vm, 0))
-					name := as_string(read_long_constant(frame))
+					name := read_string_long(frame)
 
 					/* Look for a field. */
 					value: Value; ok: bool
@@ -528,7 +536,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				instance := as_instance(vm_peek(vm, 1))
 
 				/* Store the value on top of the stack into the instance's fields. */
-				table_set(&instance.fields, as_string(read_long_constant(frame)), vm_peek(vm, 0))
+				table_set(&instance.fields, read_string_long(frame), vm_peek(vm, 0))
 
 				/* Pop the value that we just stored as a field. */
 				value := vm_pop(vm)
@@ -553,7 +561,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_GET_SUPER_LONG:
 			{
-				name := as_string(read_long_constant(frame))
+				name := read_string_long(frame)
 				superclass := as_class(vm_pop(vm))
 
 				/* Look up the method in the superclass and push it to the
@@ -661,7 +669,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_INVOKE_LONG:
 			{
-				method := as_string(read_long_constant(frame))
+				method := read_string_long(frame)
 				arg_count := read_byte(frame)
 
 				if !invoke(vm, method, int(arg_count)) {
@@ -684,7 +692,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_SUPER_INVOKE_LONG:
 			{
-				method := as_string(read_long_constant(frame))
+				method := read_string_long(frame)
 				arg_count := read_byte(frame)
 				superclass := as_class(vm_pop(vm))
 
@@ -860,7 +868,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 		case .OP_CLOSURE:
 			{
 				// the function is always a long constant in a closure
-				function := as_function(read_long_constant(frame))
+				function := as_function(read_constant_long(frame))
 
 				closure := new_closure(vm.gc, function)
 				vm_push(vm, obj_val(closure))
@@ -948,7 +956,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 		case .OP_CLASS_LONG:
 			{
 				public := bool(read_byte(frame))
-				name := as_string(read_long_constant(frame))
+				name := read_string_long(frame)
 
 				vm_push(vm, obj_val(new_class(vm.gc, name)))
 
@@ -977,7 +985,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 		case .OP_METHOD:
 			define_method(vm, read_string(frame))
 		case .OP_METHOD_LONG:
-			define_method(vm, as_string(read_long_constant(frame)))
+			define_method(vm, read_string_long(frame))
 		case .OP_MODULE_BUILTIN:
 			{
 				module_str := strings.to_upper(read_string(frame).chars)
@@ -994,7 +1002,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_MODULE_BUILTIN_LONG:
 			{
-				module_str := strings.to_upper(as_string(read_long_constant(frame)).chars)
+				module_str := strings.to_upper(read_string_long(frame).chars)
 				defer delete(module_str)
 
 				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
@@ -1044,8 +1052,8 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 			}
 		case .OP_MODULE_USER_LONG:
 			{
-				module_name := as_string(read_long_constant(frame))
-				module_path := as_string(read_long_constant(frame))
+				module_name := read_string_long(frame)
+				module_path := read_string_long(frame)
 
 				/* Add a new module onto the stack. */
 				module := new_module(vm.gc, module_name)

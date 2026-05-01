@@ -290,8 +290,8 @@ emit_loop :: proc(p: ^Parser, loop_start: int) {
 	offset := len(current_chunk(p).code) - loop_start + 2
 	if offset > U16_MAX {error(p, "Loop body too large.")}
 
-	emit_byte(p, (u8(offset) >> 8) & 0xff)
-	emit_byte(p, u8(offset) & 0xff)
+	emit_byte(p, byte((offset >> 8) & 0xff))
+	emit_byte(p, byte(offset & 0xff))
 }
 
 /*
