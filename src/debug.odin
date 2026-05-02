@@ -315,15 +315,15 @@ disassemble :: proc(c: ^Chunk, name: string) {
 }
 
 /* Some debug print functions to avoid printing debug info in prod code */
-dbg_print :: proc(data: string) {
+dbg_print :: proc(args: ..any) {
 	when ODIN_DEBUG {
-		fmt.eprint(data)
+		fmt.eprint(..args)
 	}
 }
 
-dbg_println :: proc(data: string) {
+dbg_println :: proc(args: ..any) {
 	when ODIN_DEBUG {
-		fmt.eprintln(data)
+		fmt.eprintln(..args)
 	}
 }
 
