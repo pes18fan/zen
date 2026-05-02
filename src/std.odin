@@ -64,6 +64,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 		{
 			append(&module_functions, ModuleFunction{"push", push_native, 2})
 			append(&module_functions, ModuleFunction{"pop", pop_native, 1})
+			append(&module_functions, ModuleFunction{"remove_last", remove_last_native, 1})
 			append(&module_functions, ModuleFunction{"sort", sort_native, 1})
 		}
 	case .STRING:
@@ -612,10 +613,28 @@ push_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	item := args[1]
 
 	write_value_array(&list.items, item)
-	return nil_val(), true
+	return args[0], true
 }
 
-/* Pop a value off a list and return it. */
+/* Pop a value off a list and return the list. */
+remove_last_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_list(args[0]) {
+		vm_panic(vm, "Cannot pop a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	list := as_list(args[0])
+
+	if list.items.count == 0 {
+		vm_panic(vm, "Cannot pop an empty list.")
+		return nil_val(), false
+	}
+
+	pop_value_array(&list.items)
+	return args[0], true
+}
+
+/* Pop a value off a list and return that value. */
 pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_list(args[0]) {
 		vm_panic(vm, "Cannot pop a %v.", type_of_value(args[0]))
@@ -670,7 +689,7 @@ _sort :: proc(list: ^[dynamic]Value, lo, hi: int) {
 	_sort(list, pivot_idx + 1, hi)
 }
 
-/* Sort a list using the quicksort algorithm. */
+/* Sort a list using the quicksort algorithm, and return the sorted list. */
 sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_list(args[0]) {
 		vm_panic(vm, "Cannot sort a %v.", type_of_value(args[0]))
@@ -681,5 +700,5 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	_sort(&list.items.values, 0, list.items.count - 1)
 
-	return nil_val(), true
+	return args[0], true
 }

@@ -7,6 +7,10 @@ use "string"
 print "Hello, world!"
 print "\n" // The print statement does not append a newline by default.
 
+// Use the puts() native function appends a newline after printing.
+// You can pass single strings to functions without parentheses!
+puts "With a newline!"
+
 var name = "Sam" // Create a variable!
 val nice = 69 // Can't reassign to this!
 
@@ -24,32 +28,29 @@ val
 puts(string.upcase("hello")) //=> "HELLO"
 puts(math.ln(2)) //=> 0.693
 
-// Note that the puts() native function appends a newline unlike the print
-// statement.
-
 // Conditionals!
 // Note that there are no else-if statements. Use a switch statement instead.
 if false {
-    puts("How did this happen!")
+    puts "How did this happen!"
 } else {
-    puts("This is supposed to happen")
+    puts "This is supposed to happen"
 }
 
 val a = math.rand() * 10 |> math.floor()
 
 switch a {
-    0 => puts("a is 0")
-    1 => puts("a is 1")
-    2 => puts("a is 2")
-    3 => puts("a is 3")
-    4 => puts("a is 4")
-    5 => puts("a is 5")
-    else => puts("a is not between 0 and 5")
+    0 => puts "a is 0"
+    1 => puts "a is 1"
+    2 => puts "a is 2"
+    3 => puts "a is 3"
+    4 => puts "a is 4"
+    5 => puts "a is 5"
+    else => puts "a is not between 0 and 5"
 }
 
 // Loops.
 while true {
-    puts("This will never end!")
+    puts "This will never end!"
     break // sike
 }
 
@@ -59,7 +60,7 @@ for var i = 0; i < 10; i = i + 1 {
 } //=> 0 1 2 3 4 5 6 7 8 9
 
 // Lists.
-val l = [7, 69, 420]
+val l = [97, 69, 420]
 
 list.push(l, 27)
 puts(list.pop(l)) //=> 27
@@ -89,13 +90,12 @@ puts(a_function()) //=> "This is a function!"
 
 // If the function just returns an expression, simply use the `=>` operator.
 func sum(a, b) => a + b
-
 puts(sum(1, 2)) //=> 3
 
 // Anonymous functions have no name. Here, we assign it to a variable, so it
 // isn't really anonymous anymore.
 val anon = func() { 
-    puts("This is an anonymous function!") 
+    puts "This is an anonymous function!"
 }
 // Functions are first-class, so you can pass them around to other functions.
 
@@ -112,6 +112,14 @@ puts("69"
     |> parse()
     |> it + 1) //=> 70
 
+// Lists work nicely with pipelines.
+// If you're sending a list variable to the pipeline, copy it to avoid mutating it.
+val n = copy(l)
+    |> list.remove_last()
+    |> list.push(27)
+    |> list.sort()
+    |> puts()   //=> [27, 69, 97]
+
 // Modules!
 // You can use one of the builtin modules:
 use "time"
@@ -126,5 +134,5 @@ helper.woo() //=> from a module!
 // Note that if you import your own files, to use functions in them they must
 // be explicitly set as public using the `pub` keyword.
 pub func foo() {
-    puts("You can use this from any file!")    
+    puts "You can use this from any file!"
 }

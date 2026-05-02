@@ -249,12 +249,43 @@ list[0] //=> 1
 ```
 
 The `push()` and `pop()` native functions in the `list` module can be used to 
-add and remove items from a list, and the global `len()` native function can be used 
-to get the length of the list.
+add and remove items from a list, and the global `len()` native function can be 
+used to get the length of the list.
 
 > [!NOTE]
 > You can also use the subscripting syntax on strings to get a character at the
 > provided index.
+
+Lists work well with pipes as well!
+
+```zen
+[4, 3, 2, 1]
+    |> list.push(5)
+    |> list.push(6)
+    |> list.remove_last()
+    |> list.sort()  //=> [1, 2, 3, 4, 5]
+```
+
+> [!NOTE]
+> All the list functions mutate the provided list. Therefore, if a list bound
+> to a variable is passed through a pipeline, it will be modified. This is
+> done because keeping the passed variable the same would necessitate copying
+> lists on every pipeline stage, which would be very expensive.
+>
+> ```zen
+> var a = [1, 2, 3]
+> var b = a |> list.push(4)
+> puts(a)   //=> [1, 2, 3, 4]
+> ```
+> 
+> To avoid this, you can explicitly copy the list before passing it through the
+> pipeline.
+>
+> ```zen
+> var a = [1, 2, 3]
+> var b = copy(a) |> list.push(4)
+> puts(a)   //=> [1, 2, 3]
+> ```
 
 ## Classes
 
@@ -431,7 +462,9 @@ for you to use.
 
 - `panic(s)`: Crash the program with a message `s`.
 - `read(p)`: Read a file at the path `p` and return the contents as a string.
-- `write(p, m, s)`: Write the string `s` to a file `p` in the mode `m`. This function returns `nil`. If the file does not exist, it will be created. The mode is a string and may be one of the following:
+- `write(p, m, s)`: Write the string `s` to a file `p` in the mode `m`. This 
+    function returns `nil`. If the file does not exist, it will be created. The
+    mode is a string and may be one of the following:
     - `"w"`: To overwrite the file's contents.
     - `"a"`: To append to the file.
 
@@ -453,9 +486,13 @@ for you to use.
 
 ### module `list`
 
-- `push(l, i)`: Add an item `i` to the end of the list `l`.
+- `push(l, i)`: Add an item `i` to the end of the list `l` and return the new list.
 - `pop(l)`: Get the last item of the list `l` after removing it from the list.
-- `sort(l)`: Sort the list `l`. Note that this sorts in-place rather than returning a new list.
+- `remove_last(l)`: Remove the last item of the list `l` and return the list.
+- `sort(l)`: Sort the list `l` and return it.
+
+> [!NOTE]
+> All these functions mutate the list in-place and return the mutated list.
 
 ## The chaotic stuff
 
