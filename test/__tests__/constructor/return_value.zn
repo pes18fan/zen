@@ -1,5 +1,5 @@
 class Foo {
   init() {
-    return "result" // ERR: Can't return a value from an initializer.
+    return "result" // ERR: Cannot return a value from an initializer.
   }
 }

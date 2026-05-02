@@ -1743,26 +1743,14 @@ print_statement :: proc(p: ^Parser) {
 @(private = "file")
 return_statement :: proc(p: ^Parser) {
 	if p.current_compiler.type == .SCRIPT {
-		/* If you invoke `return` outside a function, it is interpreted as an
-         * exit statement. A bare return will exit the program successfully,
-         * and you can add a number after it to make it return with a certain
-         * status code. */
-		if match(p, .SEMI) {
-			emit_constant(p, 0)
-		} else {
-			expression(p)
-			consume_semi(p, "exit code")
-		}
-
-		emit_opcode(p, .OP_TOP_LEVEL_RETURN)
-		return
+		error(p, "Cannot return from the top level.")
 	}
 
 	if match(p, .SEMI) {
 		emit_return(p)
 	} else {
 		if p.current_compiler.type == .INITIALIZER {
-			error(p, "Can't return a value from an initializer.")
+			error(p, "Cannot return a value from an initializer.")
 		}
 
 		expression(p)
@@ -1775,6 +1763,21 @@ return_statement :: proc(p: ^Parser) {
 	if p.current_compiler.scope_depth == 0 {
 		p.current_compiler.function.has_returned = true
 	}
+}
+
+@(private = "file")
+exit_statement :: proc(p: ^Parser) {
+	/* A bare exit will exit the program successfully (with status code 0),
+     * and you can add a number after it to make it exit with a certain
+     * status code. */
+	if match(p, .SEMI) {
+		emit_constant(p, 0)
+	} else {
+		expression(p)
+		consume_semi(p, "exit code")
+	}
+
+	emit_opcode(p, .OP_EXIT)
 }
 
 /* Add a loop to the current compiler's loop stack. */
@@ -2052,6 +2055,7 @@ for_statement :: proc(p: ^Parser) {
 	end_loop(p)
 }
 
+@(private = "file")
 for_in_statement :: proc(p: ^Parser) {
 	begin_scope(p)
 
@@ -2232,6 +2236,8 @@ statement :: proc(p: ^Parser) {
 	case match(p, .WHILE):
 		while_statement(p)
 	case match(p, .SEMI): // Do nothing. This is equivalent to `pass`.
+	case match(p, .EXIT):
+		exit_statement(p)
 	case match(p, .ELSE):
 		error(p, "You can't have an `else` without an `if`.")
 	case:

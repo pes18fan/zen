@@ -54,19 +54,18 @@ nice = 68 // ERROR!
 
 ## Exiting early
 
-You can use the `return` statement, normally used to return from functions, to
-exit a program early, similar to `exit()` functions in other languages. This takes
-inspiration from Lua.
+You can use the `exit` statement to exit a program early.
 
 ```
 puts "hello"
-return
+exit
 puts "world"
 ```
 
 This will print "hello" and exit.
 
-You can add a number after `return` to exit with that status code.
+You can add a number after `exit` to exit with that status code. Without any
+number, it defaults to a status code of 0 (success).
 
 ## Conditionals
 

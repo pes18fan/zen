@@ -46,6 +46,7 @@ TokenType :: enum {
 	CONTINUE,
 	CLASS,
 	ELSE,
+	EXIT,
 	FALSE,
 	FOR,
 	FUNC,
@@ -247,6 +248,7 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 			     .RPAREN,
 			     .RSQUIRLY,
 			     .RSQUARE,
+			     .EXIT,
 			     .IT:
 				#partial switch tokens[idx + 1].type {
 				case .IN,
@@ -360,7 +362,14 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 		}
 	case 'e':
 		{
-			return check_keyword(l, 1, 3, "lse", .ELSE)
+			if l.current - l.start > 1 {
+				switch utf8.rune_at(l.source, l.start + 1) {
+				case 'x':
+					return check_keyword(l, 2, 2, "it", .EXIT)
+				case 'l':
+					return check_keyword(l, 2, 2, "se", .ELSE)
+				}
+			}
 		}
 	case 'f':
 		{

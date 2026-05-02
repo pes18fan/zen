@@ -1112,7 +1112,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					vm_panic(vm, "Can only iterate over lists and strings.")
 				}
 			}
-		case .OP_TOP_LEVEL_RETURN:
+		case .OP_EXIT:
 			{
 				top := vm_pop(vm) /* Grab the exit code */
 
