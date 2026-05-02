@@ -442,7 +442,7 @@ for you to use.
 
 ### Functions in the global scope
 
-- `puts(x)`: Print an expression to stdin and append a newline.
+- `puts(x)`: Print an expression to stdout and append a newline.
 - `gets()`: Read a line from stdin.
 - `len(s)`: Get the length of a string or list `s`.
 - `typeof(x)`: Get the type of any expression as a string.
