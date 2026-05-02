@@ -304,7 +304,7 @@ Run the VM, going through the bytecode and interpreting each instruction
 one by one.
 */
 @(private = "file")
-run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bounds_check {
+run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult #no_bounds_check {
 	frame := &vm.frames[vm.frame_count - 1]
 
 	/* This variable stores the value of the built-in `it` variable, which
@@ -899,7 +899,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				/* If the current file is being imported AND the function being
                  * compiled is set as public with the `pub` keyword, add the 
                  * declared closure into the module that's importing it. */
-				importing_module, ok := importer.(ImportingModuleStruct)
+				importing_module, ok := importer.?
 				if is_public && ok {
 					module := importing_module.module
 					table_set(&module.values, closure.function.name, vm_peek(vm, 0))
@@ -948,7 +948,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				/* If the current file is being imported AND the class being
                  * compiled is set as public with the `pub` keyword, add the 
                  * declared class into the module that's importing it. */
-				importing_module, ok := importer.(ImportingModuleStruct)
+				importing_module, ok := importer.?
 				if public && ok {
 					module := importing_module.module
 					table_set(&module.values, name, vm_peek(vm, 0))
@@ -961,7 +961,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 
 				vm_push(vm, obj_val(new_class(vm.gc, name)))
 
-				importing_module, ok := importer.(ImportingModuleStruct)
+				importing_module, ok := importer.?
 				if public && ok {
 					module := importing_module.module
 					table_set(&module.values, name, vm_peek(vm, 0))
@@ -1037,11 +1037,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				result := run_file(
 					&mod_vm,
 					module_path.chars,
-					importer = ImportingModuleStruct {
-						path = vm.path,
-						name = vm.name,
-						module = module,
-					},
+					importer = ImportingModule{path = vm.path, name = vm.name, module = module},
 				)
 				if result != .INTERPRET_OK {
 					return result /* Return the errored program back out */
@@ -1073,11 +1069,7 @@ run :: proc(vm: ^VM, importer: ImportingModule = nil) -> InterpretResult #no_bou
 				result := run_file(
 					&mod_vm,
 					module_path.chars,
-					importer = ImportingModuleStruct {
-						path = vm.path,
-						name = vm.name,
-						module = module,
-					},
+					importer = ImportingModule{path = vm.path, name = vm.name, module = module},
 				)
 				if result != .INTERPRET_OK {
 					return result /* Return the errored program back out */
@@ -1108,12 +1100,12 @@ interpret :: proc(
 	vm: ^VM,
 	gc: ^GC,
 	source: string,
-	importer: ImportingModule = nil,
+	importer: Maybe(ImportingModule) = nil,
 ) -> InterpretResult {
 	/* If the name of the VM and the importing module are both the same (if the
      * importing module is not nil), then we have a cyclic import, which causes
      * all sorts of problems. So we have to disallow that. */
-	importer_struct, importer_exists := importer.(ImportingModuleStruct)
+	importer_struct, importer_exists := importer.?
 
 	if importer_exists && slice.contains(vm.gc.import_stack[:], vm.path) {
 		vm_panic(vm, "Cannot perform a cyclic import.")

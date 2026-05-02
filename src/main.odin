@@ -10,7 +10,8 @@ VERSION :: "0.0.1-beta"
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)
 
-/* Config values set on start, mostly for debugging. */
+/* Config values set on start, most are for debugging, but some have use in
+the actual program. */
 Config :: struct {
 	compile_only:     bool,
 	dump_disassembly: bool,
@@ -98,23 +99,22 @@ read_file :: proc(path: string) -> (string, bool) {
 	return string(data[:]), true
 }
 
-/* DO NOT USE DIRECTLY, USE ImportingModule INSTEAD */
-ImportingModuleStruct :: struct {
+/* A module that imports another. It may be nil, so it is set as a union. */
+ImportingModule :: struct {
 	path:   string,
 	name:   string,
 	module: ^ObjModule,
-}
-
-/* A module that imports another. It may be nil, so it is set as a union. */
-ImportingModule :: union {
-	ImportingModuleStruct,
 }
 
 /* 
 Run a file.
 This is not private to the file as it is used in the VM for importing modules.
 */
-run_file :: proc(vm: ^VM, path: string, importer: ImportingModule = nil) -> InterpretResult {
+run_file :: proc(
+	vm: ^VM,
+	path: string,
+	importer: Maybe(ImportingModule) = nil,
+) -> InterpretResult {
 	source, ok := read_file(path)
 	if !ok {return .INTERPRET_READ_ERROR}
 	defer delete(source)
