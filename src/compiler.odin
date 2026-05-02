@@ -1700,10 +1700,11 @@ if_statement :: proc(p: ^Parser, ifnt: bool = false) {
 	consume(p, .LSQUIRLY, "Expect '{' after if condition.")
 
 	when CHAOTIC {
+		then_jump: int
 		if ifnt {
-			then_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+			then_jump = emit_jump(p, .OP_JUMP_IF_FALSE)
 		} else {
-			then_jump := emit_jump(p, .OP_JUMP_IF_TRUE)
+			then_jump = emit_jump(p, .OP_JUMP_IF_TRUE)
 		}
 	} else {
 		then_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
@@ -1962,10 +1963,11 @@ while_statement :: proc(p: ^Parser, whilent: bool = false) {
 	consume(p, .LSQUIRLY, "Expect '{' after while loop condition.")
 
 	when CHAOTIC {
+		exit_jump: int
 		if whilent {
-			exit_jump := emit_jump(p, .OP_JUMP_IF_TRUE)
+			exit_jump = emit_jump(p, .OP_JUMP_IF_TRUE)
 		} else {
-			exit_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
+			exit_jump = emit_jump(p, .OP_JUMP_IF_FALSE)
 		}
 	} else {
 		exit_jump := emit_jump(p, .OP_JUMP_IF_FALSE)
