@@ -456,6 +456,7 @@ stringify_object :: proc(obj: ^Obj) -> (res: string, was_allocation: bool) {
 		return "upvalue", false
 	}
 
+	fmt.eprintln("bug: reached unreachable code")
 	unreachable()
 }
 
@@ -464,6 +465,7 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 
 	if config.log_gc {
 		fmt.eprintf("%p free ", obj)
+
 		str, was_allocation := stringify_object(obj)
 		defer if was_allocation {
 			delete(str)

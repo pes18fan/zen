@@ -677,7 +677,6 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
-
 	list := as_list(args[0])
 
 	_sort(&list.items.values, 0, list.items.count - 1)
