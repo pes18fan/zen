@@ -1,0 +1,27 @@
+use "math"
+
+puts(math.floor(3.1)) // expect: 3
+puts(math.floor(3.9)) // expect: 3
+puts(math.ceil(3.1)) // expect: 4
+puts(math.ceil(3.9)) // expect: 4
+puts(math.round(3.1)) // expect: 3
+puts(math.round(3.5)) // expect: 4
+puts(math.round(3.9)) // expect: 4
+puts(math.abs(-3.5)) // expect: 3.500
+puts(math.abs(3.5)) // expect: 3.500
+
+puts(math.pow(2, 3)) // expect: 8
+puts(math.pow(4, 0.5)) // expect: 2
+
+// Trigonometry
+// Testing floating points can be tricky due to precision, so we round them.
+puts(math.round(math.sin(0))) // expect: 0
+puts(math.round(math.cos(0))) // expect: 1
+puts(math.round(math.tan(0))) // expect: 0
+
+// Random
+var r = math.rand()
+var is_num = typeof(r) == "number"
+puts(is_num) // expect: true
+var is_in_range = r >= 0 and r < 1
+puts(is_in_range) // expect: true

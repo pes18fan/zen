@@ -1,0 +1,22 @@
+use "time"
+use "list"
+
+var start = time.clock_ms()
+
+var l = []
+
+for var i = 0; i < 100000; i = i + 1 {
+    list.push(l, i)
+}
+
+var sum = 0
+for var i = 0; i < 100000; i = i + 1 {
+    sum = sum + l[i]
+}
+
+for var i = 0; i < 100000; i = i + 1 {
+    list.pop(l)
+}
+
+puts(sum == 4999950000)
+puts(time.clock_ms() - start)

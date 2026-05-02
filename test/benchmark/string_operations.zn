@@ -1,0 +1,17 @@
+use "time"
+use "string"
+
+var start = time.clock_ms()
+
+var res = ""
+var s = "hello world"
+
+for var i = 0; i < 10000; i = i + 1 {
+    res = string.replace(s, "world", "universe")
+    res = string.upcase(res)
+    res = string.downcase(res)
+    res = string.reverse(res)
+}
+
+puts(res == "!esrevinu olleh")
+puts(time.clock_ms() - start)

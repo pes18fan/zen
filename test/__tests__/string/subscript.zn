@@ -1,0 +1,7 @@
+var s = "hello"
+puts(s[0]) // expect: h
+puts(s[1]) // expect: e
+puts(s[4]) // expect: o
+
+var a = "a"
+puts(a[0]) // expect: a

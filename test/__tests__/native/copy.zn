@@ -1,0 +1,19 @@
+var a = [1, 2, 3]
+var b = copy(a)
+use "list"
+list.push(b, 4)
+puts(a) // expect: [1, 2, 3]
+puts(b) // expect: [1, 2, 3, 4]
+
+class Pair {
+    init(x, y) {
+        this.x = x
+        this.y = y
+    }
+}
+
+var p1 = Pair(1, 2)
+var p2 = copy(p1)
+p2.x = 3
+puts(p1.x) // expect: 1
+puts(p2.x) // expect: 3

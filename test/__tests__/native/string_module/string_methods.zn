@@ -1,0 +1,9 @@
+use "string"
+
+puts(string.chomp("  hello  ")) // expect: hello
+puts(string.upcase("hello")) // expect: HELLO
+puts(string.downcase("HeLLo")) // expect: hello
+puts(string.reverse("hello")) // expect: olleh
+
+puts(string.asciichar(65)) // expect: A
+puts(string.asciinum("A")) // expect: 65
