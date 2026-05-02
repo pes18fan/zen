@@ -146,6 +146,19 @@ for var i = 0; i < 10; i = i + 1 {
 }
 ```
 
+Additionally, zen also provides the more modern `for in` loops. They can be
+used to loop over either a list or a string element-by-element.
+
+```
+for i in [1, 2, 3] {
+    puts(i)
+}
+
+for x in "hello" {
+    puts(x)
+}
+```
+
 ## Functions
 
 zen has powerful and flexible functions. All functions are first-class, so they can
