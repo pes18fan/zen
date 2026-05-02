@@ -18,11 +18,14 @@ You can prevent automatic semicolon insertion by using a backslash.
 
 ## Datatypes
 
-zen has the following datatypes:
+zen has the following primitive datatypes:
 
 - `number`: A real number represented as a 64-bit floating point.
 - `bool`: A boolean value i.e. true or false.
 - `string`: A sequence of text, enclosed by either double or single quotes.
+- `list`: An ordered sequence of data.
+- `function`: A callable chunk of code.
+- `nil`: A value that represents the presence of no value.
 
 You can create your own datatypes via classes.
 
