@@ -6,7 +6,13 @@ A lightweight dynamically typed programming language written in Odin.
     <img src="https://github.com/pes18fan/zen/raw/main/example.png" alt="zen code example" />
 </p>
 
-# documentation
+# features
+
+- dynamic typing with garbage collection
+- object-oriented programming: classes and inheritance
+- first-class functions and closures
+- file-based module system for code organization
+- minimal standard library
 
 All the documentation about the language is in the markdown file `DOCUMENTATION.md`
 in the root of this repository.

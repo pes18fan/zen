@@ -48,7 +48,8 @@ nice = 68 // ERROR!
 > Like in Python, zen uses aliasing. Basically, what that means is that doing
 > something like `b = a` causes `b` and `a` to both refer to the same object in
 > memory, rather than creating a new copy. So, any changes to `a` will also be
-> reflected in `b`. To avoid this, use the `copy()` global function described around
+> reflected in `b`. This issue is specifically present for lists and class 
+> instances. To avoid it, use the `copy()` global function described around 
 > the end of this documentation.
 
 ## Exiting early
