@@ -1295,7 +1295,7 @@ argument_list :: proc(p: ^Parser) -> u8 {
 		for {
 			expression(p)
 			// Arg count can't be more than 255 since it's stuffed in one byte.
-			if arg_count == 255 {
+			if arg_count == U8_MAX {
 				error(p, "Can't have more than 255 arguments.")
 			}
 			arg_count += 1
@@ -1362,7 +1362,7 @@ function :: proc(p: ^Parser, type: FunctionType, public: bool = false) {
 	if !check(p, .RPAREN) {
 		for {
 			p.current_compiler.function.arity += 1
-			if p.current_compiler.function.arity > 255 {
+			if p.current_compiler.function.arity == U8_MAX {
 				error_at_current(p, "Can't have more than 255 parameters.")
 			}
 
