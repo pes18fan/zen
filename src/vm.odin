@@ -159,6 +159,7 @@ define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 
 /* Resets the stack. */
 reset_stack :: proc(vm: ^VM) {
+	vm.stack_top = -1
 	vm.frame_count = 0
 	vm.open_upvalues = nil
 }
