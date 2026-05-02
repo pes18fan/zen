@@ -92,7 +92,7 @@ repl :: proc(vm: ^VM) -> int {
 read_file :: proc(path: string) -> (string, bool) {
 	data, err := os.read_entire_file(path, context.allocator)
 	if err != nil {
-		fmt.printf("Could not open file \"%s\". Does it exist?", path)
+		fmt.printf("Could not open file \"%s\": %s", path, os.error_string(err))
 		return "", false
 	}
 
