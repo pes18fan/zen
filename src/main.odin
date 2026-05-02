@@ -277,14 +277,14 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 	} else {
 		current_dir, err := os.get_working_directory(context.allocator)
 		if err != nil {
-			fmt.eprintf("Failed to allocate current directory name")
+			fmt.eprintf("Failed to get working directory: %s", os.error_string(err))
 			return 1
 		}
 		defer delete(current_dir)
 
 		config.__path, err = filepath.join([]string{current_dir, script}, context.allocator)
 		if err != nil {
-			fmt.eprintf("Failed to allocate path to executable")
+			fmt.eprintf("Failed to get file path: %s", os.error_string(err))
 		}
 
 		config.__dirname, _ = filepath.split(config.__path)

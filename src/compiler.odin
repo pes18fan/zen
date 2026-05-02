@@ -1557,7 +1557,7 @@ module_declaration :: proc(p: ^Parser) {
 	path := strings.trim(p.previous.lexeme[1:len(p.previous.lexeme) - 1], " ")
 	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
 	if err != nil {
-		error(p, fmt.tprintf("Allocator error when declaring module"))
+		error(p, fmt.tprintf("Error when declaring module: %s", os.error_string(err)))
 		return
 	}
 	defer delete(abs_path)

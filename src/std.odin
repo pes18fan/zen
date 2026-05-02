@@ -256,7 +256,7 @@ read_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	path := as_string(args[0]).chars
 	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
 	if err != nil {
-		vm_panic(vm, "Failed to allocate filename for read operation")
+		vm_panic(vm, "Failed to get filepath for read operation: %s", os.error_string(err))
 		return nil_val(), false
 	}
 	defer delete(abs_path)
@@ -287,7 +287,7 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	path := as_string(args[0]).chars
 	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
 	if err != nil {
-		vm_panic(vm, "Failed to allocate filename for write operation")
+		vm_panic(vm, "Failed to get filepath for write operation: %s", os.error_string(err))
 		return nil_val(), false
 	}
 
@@ -535,7 +535,7 @@ upcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	str, err := strings.to_upper(as_string(args[0]).chars)
 	if err != nil {
-		vm_panic(vm, "Allocator error on upcase(): %s", err)
+		vm_panic(vm, "Failed to run upcase(): %s", os.error_string(err))
 		return nil_val(), false
 	}
 
@@ -551,7 +551,7 @@ downcase_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool)
 
 	str, err := strings.to_lower(as_string(args[0]).chars)
 	if err != nil {
-		vm_panic(vm, "Allocator error on downcase(): %s", err)
+		vm_panic(vm, "Failed to run downcase(): %s", os.error_string(err))
 		return nil_val(), false
 	}
 
@@ -567,7 +567,7 @@ reverse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 
 	str, err := strings.reverse(as_cstring(args[0]))
 	if err != nil {
-		vm_panic(vm, "Allocator error on reverse(): %s", err)
+		vm_panic(vm, "Failed to run reverse(): %s", os.error_string(err))
 		return nil_val(), false
 	}
 
