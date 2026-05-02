@@ -99,7 +99,8 @@ read_file :: proc(path: string) -> (string, bool) {
 	return string(data[:]), true
 }
 
-/* A module that imports another. It may be nil, so it is set as a union. */
+/* A module that imports another. It may be nil, so it is generally passed around
+as a Maybe type. */
 ImportingModule :: struct {
 	path:   string,
 	name:   string,
