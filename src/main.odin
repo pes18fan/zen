@@ -17,7 +17,6 @@ Config :: struct {
 	dump_disassembly: bool,
 	dump_tokens:      bool,
 	trace_exec:       bool,
-	check_leaks:      bool,
 	stress_gc:        bool,
 	log_gc:           bool,
 	record_time:      bool,
@@ -38,7 +37,6 @@ config := Config {
 	dump_disassembly = false,
 	dump_tokens      = false,
 	trace_exec       = false,
-	check_leaks      = false,
 	stress_gc        = false,
 	log_gc           = false,
 	record_time      = false,
@@ -142,8 +140,7 @@ print_help :: proc(stream: ^os.File) {
     --dump-tokens       Dump tokens from lexer and exit
     -T, --trace         Trace script execution
     -L, --log-gc        Log garbage collection
-    -S, --stress-gc     Collect garbage on every allocation
-    -c, --check-leaks   Report memory leaks on exit`
+    -S, --stress-gc     Collect garbage on every allocation`
 
 
 	color_green(stream, "zen ")
@@ -259,9 +256,8 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		argc -= 1
 	}
 
-	/* Create a ObjList for the args */
+	/* Create a ObjList for the args. Don't worry about freeing it, GC will handle it */
 	args_list := new_list(vm.gc)
-	defer free_object(vm.gc, args_list)
 
 	for i in 0 ..< len(argv) {
 		if args_passed {
