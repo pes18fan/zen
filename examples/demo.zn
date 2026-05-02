@@ -83,12 +83,14 @@ for var i = 0; i < 6; i = i + 1 {
 
 // Functions!
 func a_function() {
-    puts("This is a function!")
+    return "This is a function!" // To return a value from the function.
 }
-a_function() //=> "This is a function!"
+puts(a_function()) //=> "This is a function!"
 
 // If the function just returns an expression, simply use the `=>` operator.
 func sum(a, b) => a + b
+
+puts(sum(1, 2)) //=> 3
 
 // Anonymous functions have no name. Here, we assign it to a variable, so it
 // isn't really anonymous anymore.
