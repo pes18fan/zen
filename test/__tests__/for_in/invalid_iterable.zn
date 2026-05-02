@@ -1,0 +1,5 @@
+// Iterating over a non-iterable should runtime error
+for x in 42 {
+    puts(x)
+}
+// ERR: Can only iterate over lists and strings

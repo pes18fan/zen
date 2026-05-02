@@ -1,0 +1,10 @@
+// Continue skips to next iteration
+var result = 0
+for x in [1, 2, 3, 4, 5] {
+    if x == 3 {
+        continue
+    }
+    result = result + x
+}
+puts(result)
+// expect: 12

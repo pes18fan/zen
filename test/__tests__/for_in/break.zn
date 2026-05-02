@@ -1,0 +1,10 @@
+// Break exits the loop early
+var count = 0
+for x in [1, 2, 3, 4, 5] {
+    if count == 3 {
+        break
+    }
+    count = count + 1
+}
+puts(count)
+// expect: 3

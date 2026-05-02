@@ -1,0 +1,9 @@
+// Iterating over a string gives individual characters
+for c in "hello" {
+    puts(c)
+}
+// expect: h
+// expect: e
+// expect: l
+// expect: l
+// expect: o

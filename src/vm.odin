@@ -771,14 +771,11 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						return .INTERPRET_RUNTIME_ERROR
 					}
 
-					for char, idx in zstring.chars {
-						if int(index) == idx {
-							res := utf8.runes_to_string([]rune{char})
-							defer delete(res)
-							vm_push(vm, obj_val(copy_string(vm.gc, res)))
-							break
-						}
-					}
+					runes := utf8.string_to_runes(zstring.chars)
+					defer delete(runes)
+					char := runes[int(index)]
+					res := utf8.runes_to_string([]rune{char})
+					vm_push(vm, obj_val(take_string(vm.gc, res)))
 				}
 			}
 		case .OP_SUBSCRIPT_SET:
@@ -906,10 +903,11 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				}
 			}
 		case .OP_CLOSE_UPVALUE:
-			{
-				close_upvalues(vm, &vm.stack[vm.stack_top])
-				vm_pop(vm)
-			}
+			close_upvalues(vm, &vm.stack[vm.stack_top])
+			vm_pop(vm)
+		case .OP_CLOSE_LOOP_VAR:
+			slot := read_byte(frame)
+			close_upvalues(vm, mem.ptr_offset(frame.slots, int(slot))) // don't pop here
 		case .OP_RETURN:
 			{
 				result := vm_pop(vm) // Retrieve the return value from the stack.
@@ -1078,6 +1076,41 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				pop(&vm.gc.import_stack) /* Remove the path from the import stack. */
 
 				vm_push(vm, obj_val(module))
+			}
+		case .OP_ITERATE:
+			{
+				iter := vm_pop(vm)
+
+				assert(is_number(vm_peek(vm, 0)))
+				idx := as_number(vm_pop(vm))
+
+				if is_list(iter) {
+					list := as_list(iter)
+					if int(idx) < len(list.items.values) {
+						vm_push(vm, list.items.values[int(idx)])
+						vm_push(vm, number_val(idx + 1))
+						vm_push(vm, bool_val(true))
+					} else {
+						vm_push(vm, bool_val(false))
+					}
+				} else if is_string(iter) {
+					str := as_string(iter)
+
+					if int(idx) < len(str.chars) {
+						runes := utf8.string_to_runes(str.chars)
+						defer delete(runes)
+						char := runes[int(idx)]
+						res := utf8.runes_to_string([]rune{char})
+
+						vm_push(vm, obj_val(take_string(vm.gc, res)))
+						vm_push(vm, number_val(idx + 1))
+						vm_push(vm, bool_val(true))
+					} else {
+						vm_push(vm, bool_val(false))
+					}
+				} else {
+					vm_panic(vm, "Can only iterate over lists and strings.")
+				}
 			}
 		case .OP_TOP_LEVEL_RETURN:
 			{

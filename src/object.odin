@@ -354,6 +354,16 @@ copy_string :: proc(gc: ^GC, str: string) -> ^ObjString {
 	return allocate_string(gc, s, hash)
 }
 
+/* Take ownership of a string and return an interned one if it exists. */
+take_string :: proc(gc: ^GC, str: string) -> ^ObjString {
+	hash := hash_string(str)
+	interned := table_find_string(&gc.strings, str, hash)
+	if interned != nil {
+		delete(str)
+		return interned
+	}
+	return allocate_string(gc, str, hash)
+}
 
 @(private = "file")
 allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
@@ -386,17 +396,6 @@ hash_string :: proc(str: string) -> u32 {
 		hash *= 16777619
 	}
 	return hash
-}
-
-/* Take ownership of a string and return an interned one if it exists. */
-take_string :: proc(gc: ^GC, str: string) -> ^ObjString {
-	hash := hash_string(str)
-	interned := table_find_string(&gc.strings, str, hash)
-	if interned != nil {
-		delete(str)
-		return interned
-	}
-	return allocate_string(gc, str, hash)
 }
 
 /* Print the string representation of a function. */

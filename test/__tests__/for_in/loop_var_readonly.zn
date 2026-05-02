@@ -1,0 +1,4 @@
+// Loop variable is final, assigning to it should error
+for x in [1, 2, 3] {
+    x = 99  // ERR: Can only set a final variable once
+}

@@ -274,6 +274,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		}
 	case .OP_CLOSE_UPVALUE:
 		return simple_instruction("OP_CLOSE_UPVALUE", offset)
+	case .OP_CLOSE_LOOP_VAR:
+		return byte_instruction("OP_CLOSE_LOOP_VAR", c, offset)
 	case .OP_RETURN:
 		return simple_instruction("OP_RETURN", offset)
 	case .OP_CLASS:
@@ -294,6 +296,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return user_module_instruction("OP_MODULE_USER", c, offset, long = false)
 	case .OP_MODULE_USER_LONG:
 		return user_module_instruction("OP_MODULE_USER_LONG", c, offset, long = true)
+	case .OP_ITERATE:
+		return simple_instruction("OP_ITERATE_NEXT", offset)
 	case .OP_TOP_LEVEL_RETURN:
 		return simple_instruction("OP_TOP_LEVEL_RETURN", offset)
 	case:

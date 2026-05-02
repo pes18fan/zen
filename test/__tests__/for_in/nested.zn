@@ -1,0 +1,9 @@
+// Nested for-in loops, inner and outer variables don't bleed
+var result = 0
+for i in [1, 2, 3] {
+    for j in [10, 20] {
+        result = result + i + j
+    }
+}
+puts(result)
+// expect: 102

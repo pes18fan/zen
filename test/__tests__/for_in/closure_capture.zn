@@ -1,0 +1,13 @@
+use "list"
+
+var fns = []
+for x in [1, 2, 3] {
+    list.push(fns, func() => x)
+}
+// Each closure should capture its own x
+for f in fns {
+    puts(f())
+}
+// expect: 1
+// expect: 2
+// expect: 3

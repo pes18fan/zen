@@ -92,7 +92,10 @@ Local :: struct {
 	/* Whether the local variable is captured in a closure. */
 	is_captured:      bool,
 
-	/* Whether the variable is a loop variable of a `for` loop. */
+	/* A loop variable is a variable used for operation of a loop itself.
+     * In the case of a C-style for loop it is the iteration variable only,
+     * and in case of for-in loops it is the iteration variable, and the
+     * hidden iterator and index variables. */
 	is_loop_variable: bool,
 }
 
@@ -563,7 +566,6 @@ subscript :: proc(p: ^Parser, can_assign: bool) {
 	if match(p, .EQUAL) {
 		// Parse right hand side of equals
 		expression(p)
-
 		emit_opcode(p, .OP_SUBSCRIPT_SET)
 	} else {
 		emit_opcode(p, .OP_SUBSCRIPT)
@@ -1467,7 +1469,9 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 
 	/* Add the value onto the globals table. We don't check if it already exists
      * because classes are, as of now, reassignable. */
-	table_set(p.current_compiler.globals, global_o_str, bool_val(false))
+	if p.current_compiler.scope_depth == 0 {
+		table_set(p.current_compiler.globals, global_o_str, bool_val(false))
+	}
 
 	if name_constant <= U8_MAX {
 		emit_opcode(p, .OP_CLASS)
@@ -1479,7 +1483,6 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 		emit_byte(p, byte((name_constant >> 8) & 0xff))
 		emit_byte(p, byte(name_constant & 0xff))
 	}
-	// FIXME: implicit byte emisssion here!!! fucks up the disassembler and vm, fix
 	define_variable(p, name_constant)
 
 	/* Push the current class to the linked list of classes. */
@@ -1989,11 +1992,14 @@ while_statement :: proc(p: ^Parser, whilent: bool = false) {
 /* Parse a for loop. */
 @(private = "file")
 for_statement :: proc(p: ^Parser) {
+	loop_variable_slot := -1
+
 	begin_scope(p)
 	if match(p, .SEMI) {
 		// No initializer.
 	} else if match(p, .VAR) {
 		var_declaration(p, is_loop_variable = true)
+		loop_variable_slot = p.current_compiler.local_count - 1
 	} else {
 		expression_statement(p)
 	}
@@ -2028,12 +2034,89 @@ for_statement :: proc(p: ^Parser) {
 	begin_loop(p, loop_start)
 	block(p)
 
+	if loop_variable_slot != -1 {
+		loop_var := &p.current_compiler.locals[loop_variable_slot]
+		if loop_var.is_captured {
+			emit_opcode(p, .OP_CLOSE_LOOP_VAR)
+			emit_byte(p, byte(loop_variable_slot))
+		}
+	}
 	emit_loop(p, loop_start)
 
 	if exit_jump != -1 {
 		patch_jump(p, exit_jump)
 		emit_pop(p) // Condition.
 	}
+
+	end_scope(p)
+	end_loop(p)
+}
+
+for_in_statement :: proc(p: ^Parser) {
+	begin_scope(p)
+
+	// Create the loop variable. (declare_variable implicitly uses the previous
+	// token for the name.)
+	emit_opcode(p, .OP_NIL) // assign it as nil to begin with
+	declare_variable(p, .FINAL, is_loop_variable = true)
+	define_variable(p, 0)
+	loop_variable_slot := p.current_compiler.local_count - 1
+
+	consume(p, .IN, "Expect \"in\" after identifier.")
+	expression(p) // Push the iterable (list or string, verified at runtime).
+
+	consume(p, .LSQUIRLY, "Expect \"{\" after iterable.")
+
+	add_local(p, synthetic_token("__iter"), .FINAL, is_loop_variable = true)
+	mark_initialized(p)
+	iter_slot := p.current_compiler.local_count - 1
+
+	emit_constant(p, number_val(0))
+	add_local(p, synthetic_token("__idx"), .FINAL, is_loop_variable = true)
+	mark_initialized(p)
+	idx_slot := p.current_compiler.local_count - 1
+
+	loop_start := len(current_chunk(p).code)
+	exit_jump := -1
+
+	// Push idx and iter for ITERATE_NEXT.
+	emit_opcode(p, .OP_GET_LOCAL)
+	emit_byte(p, byte(idx_slot))
+
+	emit_opcode(p, .OP_GET_LOCAL)
+	emit_byte(p, byte(iter_slot))
+
+	// Pops iter and idx and checks idx < len(iter).
+	// If true, pushs (iter[idx], idx+1, true) or false.
+	emit_opcode(p, .OP_ITERATE)
+
+	// Jump out of the loop if ITERATE_NEXT said false.
+	exit_jump = emit_jump(p, .OP_JUMP_IF_FALSE)
+	emit_pop(p) // Condition.
+
+	// updated idx is on top, assign it back to hidden __idx
+	emit_opcode(p, .OP_SET_LOCAL)
+	emit_byte(p, byte(idx_slot))
+	emit_pop(p) // idx.
+
+	emit_opcode(p, .OP_SET_LOCAL)
+	emit_byte(p, byte(loop_variable_slot))
+	emit_pop(p) // iter[idx].
+
+	begin_loop(p, loop_start)
+	block(p)
+
+	// close the loop var's upvalue if it was captured
+	// ensures each iteration's closure gets its own snapshot
+	loop_var := &p.current_compiler.locals[loop_variable_slot]
+	if loop_var.is_captured {
+		emit_opcode(p, .OP_CLOSE_LOOP_VAR)
+		emit_byte(p, byte(loop_variable_slot))
+	}
+	emit_loop(p, loop_start)
+
+	patch_jump(p, exit_jump)
+	emit_pop(p) // Condition.
 
 	end_scope(p)
 	end_loop(p)
@@ -2129,7 +2212,11 @@ statement :: proc(p: ^Parser) {
 	case match(p, .CONTINUE):
 		continue_statement(p)
 	case match(p, .FOR):
-		for_statement(p)
+		if match(p, .IDENT) {
+			for_in_statement(p)
+		} else {
+			for_statement(p)
+		}
 	case match(p, .LSQUIRLY):
 		begin_scope(p)
 		block(p)

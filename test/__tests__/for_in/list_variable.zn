@@ -1,0 +1,8 @@
+// Iterating over a variable holding a list, not a literal
+val words = ["one", "two", "three"]
+for w in words {
+    puts(w)
+}
+// expect: one
+// expect: two
+// expect: three
