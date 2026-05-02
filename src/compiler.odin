@@ -669,11 +669,11 @@ list :: proc(p: ^Parser, can_assign: bool) {
 		// Read args as long as we see a comma next.
 		for {
 			expression(p)
-			/* Maximum arg count that can be stuffed in one byte is 255, and 
-			 * the list itself is also a constant so we'll then have 256
-			 * constants in one chunk, which is one over the limit. */
-			if item_count == 254 {
-				error(p, "Can't have more than 254 list items in a literal.")
+			/* TODO: Maximum item count that can be stuffed in one byte is 255. 
+             * We can stuff it in two bytes instead though.
+             */
+			if item_count == U8_MAX {
+				error(p, "Can't have more than 255 list items in a literal.")
 			}
 			item_count += 1
 

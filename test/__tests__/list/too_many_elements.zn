@@ -252,4 +252,5 @@ var l = [1, // 1
 1, // 252
 1, // 253
 1, // 254
-1] // ERR: Can't have more than 254 list items in a literal.
+1, // 255
+1] // ERR: Can't have more than 255 list items in a literal.
