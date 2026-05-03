@@ -23,8 +23,78 @@ match platform.system():
         pass
 
 
+def setup_isocline():
+    repo = "https://github.com/daanx/isocline.git"
+    root = "isocline"
+    inc = os.path.join(root, "include")
+    src = os.path.join(root, "src")
+
+    lib_name = "isocline.lib" if platform.system() == "Windows" else "libisocline.a"
+    lib_path = os.path.join(root, lib_name)
+
+    if os.path.exists(lib_path):
+        return lib_path
+
+    if not os.path.isdir(root):
+        print("Downloading isocline...")
+        subprocess.run(["git", "clone", "--depth",
+                       "1", repo, root], check=True)
+
+    if not (os.path.isdir(inc) and os.path.isdir(src)):
+        raise RuntimeError("isocline repo is missing /include or /src")
+
+    source = os.path.join(src, "isocline.c")
+
+    print("Compiling isocline...")
+    if platform.system() == "Windows":
+        cc = shutil.which("cl")
+        if cc:
+            objs = []
+            obj = os.path.join(root, os.path.splitext(
+                os.path.basename(source))[0] + ".obj")
+            subprocess.run([cc, "/nologo", "/O2", "/c",
+                           source, f"/Fo{obj}"], check=True)
+            objs.append(obj)
+            subprocess.run(
+                ["lib.exe", "/nologo", f"/OUT:{lib_path}"] + objs, check=True)
+            return lib_path
+
+        cc = shutil.which("clang") or shutil.which("gcc")
+        if not cc:
+            raise RuntimeError("No C compiler found for isocline build")
+
+        objs = []
+        obj = os.path.join(root, os.path.splitext(
+            os.path.basename(source))[0] + ".o")
+        subprocess.run([cc, "-O2", "-c", source, "-o", obj], check=True)
+        objs.append(obj)
+
+        ar = shutil.which("ar")
+        if not ar:
+            raise RuntimeError("No archiver found for isocline build")
+        subprocess.run([ar, "rcs", lib_path] + objs, check=True)
+        return lib_path
+
+    cc = shutil.which("cc") or shutil.which("clang") or shutil.which("gcc")
+    if not cc:
+        raise RuntimeError("No C compiler found for isocline build")
+
+    objs = []
+    obj = os.path.join(root, os.path.splitext(
+        os.path.basename(source))[0] + ".o")
+    subprocess.run([cc, "-O2", "-c", source, "-o", obj], check=True)
+    objs.append(obj)
+
+    ar = shutil.which("ar")
+    if not ar:
+        raise RuntimeError("No archiver found for isocline build")
+    subprocess.run([ar, "rcs", lib_path] + objs, check=True)
+    return lib_path
+
+
 def create_debug_build():
     try:
+        setup_isocline()
         print("Compiling the debug build..")
 
         os.makedirs("bin/dbg", exist_ok=True)
@@ -38,6 +108,7 @@ def create_debug_build():
 
 def create_release_build():
     try:
+        setup_isocline()
         print("Compiling in release mode..")
 
         os.makedirs("bin/rel", exist_ok=True)
@@ -53,6 +124,7 @@ def create_release_build():
 
 def create_chaotic_build():
     try:
+        setup_isocline()
         print("Compiling in chaotic mode..")
 
         os.makedirs("bin/chaotic", exist_ok=True)
@@ -65,7 +137,31 @@ def create_chaotic_build():
         exit(1)
 
 
+def test():
+    create_release_build()
+
+    print("Running unit tests:")
+    try:
+        subprocess.run(f"{OC} test ../../src/".split(),
+                       cwd="bin/test/", check=True)
+    except ProcError as e:
+        print(f"Error when running unit tests: {e}", file=sys.stderr)
+        exit(1)
+
+    print("")
+
+    print("Running end-to-end tests:")
+    try:
+        subprocess.run("python ./run_tests.py".split(),
+                       cwd="test/", check=True)
+    except ProcError as e:
+        print(f"Error during e2e tests: {e}", file=sys.stderr)
+        exit(1)
+
+
 def benchmark():
+    create_release_build()
+
     print("Starting up the benchmark runner..")
     try:
         subprocess.run("python ./run_benchmarks.py".split(),
@@ -91,26 +187,6 @@ def generate_docs():
             exit(1)
 
     print("docs generated at doc/docs.txt")
-
-
-def test():
-    print("Running unit tests:")
-    try:
-        subprocess.run(f"{OC} test ../../src/".split(),
-                       cwd="bin/test/", check=True)
-    except ProcError as e:
-        print(f"Error when running unit tests: {e}", file=sys.stderr)
-        exit(1)
-
-    print("")
-
-    print("Running end-to-end tests:")
-    try:
-        subprocess.run("python ./run_tests.py".split(),
-                       cwd="test/", check=True)
-    except ProcError as e:
-        print(f"Error during e2e tests: {e}", file=sys.stderr)
-        exit(1)
 
 
 def run_build(args):

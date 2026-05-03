@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:mem"
 import "core:os"
 import "core:path/filepath"
+import ic "isocline"
 
 VERSION :: "0.0.1-beta"
 
@@ -60,26 +61,29 @@ repl :: proc(vm: ^VM) -> int {
 	}
 
 	fmt.println("Press 'Ctrl-D' to exit.")
-	buf: [1024]byte
+
+	// nil means no persistent history file
+	ic.ic_set_history(nil, 200)
 
 	for i := 1;; i += 1 {
-		fmt.printf("zen:%d> ", i)
-		n, err := os.read(os.stdin, buf[:])
-		if err != nil {
-			if err == .EOF {
-				fmt.println("\n")
-				break
-			}
-
-			fmt.eprintln("Failed to read input.")
-			return 74
+		prompt := fmt.ctprintf("zen:%d", i)
+		raw := ic.ic_readline(prompt)
+		if raw == nil {
+			fmt.println("\n")
+			break
 		}
 
-		if n == 1 {continue}
+		line_str := string(raw)
+		if len(line_str) == 0 {
+			ic.ic_free(rawptr(raw))
+			continue
+		}
 
-		line := string(buf[:n])
+		ic.ic_history_add(raw)
 
+		line := fmt.tprintf("%s\n", line_str)
 		interpret(vm, vm.gc, line)
+		ic.ic_free(rawptr(raw))
 	}
 
 	return 0
