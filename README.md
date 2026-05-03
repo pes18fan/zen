@@ -22,12 +22,20 @@ in the root of this repository.
 
 # development
 
+The script `x.py` in the root of this repository is where you will go for
+most of your development work on zen. It is used for building, testing,
+running benchmarks and generating documentation.
+
 ## building
 
 ### requirements
 
 - [Odin](https://odin-lang.org)
 - Python
+
+zen uses [isocline](https://github.com/daanx/isocline) for its REPL. Downloading
+and setting up the library for use is handled by the `x.py` build script
+automatically.
 
 ### steps
 
