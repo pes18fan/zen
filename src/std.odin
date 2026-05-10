@@ -524,7 +524,8 @@ chomp_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
-	return obj_val(copy_string(vm.gc, strings.trim_space(as_string(args[0]).chars))), true
+	chomped := strings.trim_space(as_string(args[0]).chars)
+	return obj_val(copy_string(vm.gc, chomped)), true
 }
 
 /* Turn all the characters of a string into uppercase. */
@@ -697,8 +698,6 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	list := as_list(args[0])
-
 	_sort(&list.items.values, 0, list.items.count - 1)
-
 	return args[0], true
 }

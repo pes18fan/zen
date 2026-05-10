@@ -223,7 +223,7 @@ Performs a binary operation on the top two values of the stack. In zen, a
 binary operator can only return either a 64-bit float or a boolean. 
 */
 @(private = "file")
-binary_op :: proc(v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
+binary_op :: proc(v: ^VM, $returns: typeid, op: string) -> InterpretResult {
 	if !is_number(vm_peek(v, 0)) || !is_number(vm_peek(v, 1)) {
 		vm_panic(
 			v,
@@ -238,7 +238,7 @@ binary_op :: proc(v: ^VM, $Returns: typeid, op: string) -> InterpretResult {
 	b := as_number(vm_pop(v))
 	a := as_number(vm_pop(v))
 
-	switch typeid_of(Returns) {
+	switch typeid_of(returns) {
 	case f64:
 		// Note: Addition is handled seperately from this procedure.
 		switch op {
@@ -346,26 +346,16 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			slot := read_byte(frame)
 			mem.ptr_offset(frame.slots, slot)^ = vm_peek(vm, 0)
 		case .OP_GET_GLOBAL:
-			{
-				name := read_string(frame)
+			name := read_string(frame)
 
-				/* No runtime check is done for variable existence since that is
+			/* No runtime check is done for variable existence since that is
                  * done at compile time. */
-				value, _ := table_get(&vm.gc.globals, name)
-				vm_push(vm, value)
-			}
+			value, _ := table_get(&vm.gc.globals, name)
+			vm_push(vm, value)
 		case .OP_GET_GLOBAL_LONG:
-			{
-				name := read_string_long(frame)
-
-				// dbg_printfln("name: %s", name.chars)
-				// table_print(&vm.gc.globals)
-
-				/* No runtime check is done for variable existence since that is
-                 * done at compile time. */
-				value, _ := table_get(&vm.gc.globals, name)
-				vm_push(vm, value)
-			}
+			name := read_string_long(frame)
+			value, _ := table_get(&vm.gc.globals, name)
+			vm_push(vm, value)
 		case .OP_DEFINE_GLOBAL:
 			name := read_string(frame)
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
@@ -375,21 +365,14 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			vm_pop(vm)
 		case .OP_SET_GLOBAL:
-			{
-				name := read_string(frame)
+			name := read_string(frame)
 
-				/* No runtime check is done for variable existence since that is
+			/* No runtime check is done for variable existence since that is
                  * done at compile time. */
-				table_set(&vm.gc.globals, name, vm_peek(vm, 0))
-			}
+			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 		case .OP_SET_GLOBAL_LONG:
-			{
-				name := read_string_long(frame)
-
-				/* No runtime check is done for variable existence since that is
-                 * done at compile time. */
-				table_set(&vm.gc.globals, name, vm_peek(vm, 0))
-			}
+			name := read_string_long(frame)
+			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 		case .OP_GET_UPVALUE:
 			{
 				slot := read_byte(frame)
@@ -453,12 +436,11 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					module := as_module(vm_peek(vm, 0))
 					name := read_string_long(frame)
 
-					/* Look for the value in the module. */
 					value: Value; ok: bool
 					if value, ok = table_get(&module.values, name); ok {
-						vm_pop(vm) /* Module. */
+						vm_pop(vm)
 						vm_push(vm, value)
-						break /* Step out of the switch statement. */
+						break
 					} else {
 						panic_str := fmt.tprintf(
 							`Value '%s' does not exist on module '%s'.
@@ -473,16 +455,13 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					instance := as_instance(vm_peek(vm, 0))
 					name := read_string_long(frame)
 
-					/* Look for a field. */
 					value: Value; ok: bool
 					if value, ok = table_get(&instance.fields, name); ok {
-						vm_pop(vm) /* Instance. */
+						vm_pop(vm)
 						vm_push(vm, value)
-						break /* Step out of the switch statement. */
+						break
 					}
 
-					/* Look for a method. If we don't find one, it means that name
-				     * wasn't a field either, which is a runtime error. */
 					if !bind_method(vm, instance.klass, name) {
 						return .INTERPRET_RUNTIME_ERROR
 					}
@@ -532,55 +511,38 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
-				/* Get the instance, which is at this moment the 2nd to the top
-				 * value on the stack. */
 				instance := as_instance(vm_peek(vm, 1))
-
-				/* Store the value on top of the stack into the instance's fields. */
 				table_set(&instance.fields, read_string_long(frame), vm_peek(vm, 0))
 
-				/* Pop the value that we just stored as a field. */
 				value := vm_pop(vm)
-
-				/* Pop the instance off the stack. */
 				vm_pop(vm)
 
-				/* Push the value we stored back on the stack, that's what a 
-				 * setter expression does. */
 				vm_push(vm, value)
 			}
 		case .OP_GET_SUPER:
-			{
-				name := read_string(frame)
-				superclass := as_class(vm_pop(vm))
+			name := read_string(frame)
+			superclass := as_class(vm_pop(vm))
 
-				/* Look up the method in the superclass and push it to the
+			/* Look up the method in the superclass and push it to the
 				 * stack as an ObjBoundMethod. */
-				if !bind_method(vm, superclass, name) {
-					return .INTERPRET_RUNTIME_ERROR
-				}
+			if !bind_method(vm, superclass, name) {
+				return .INTERPRET_RUNTIME_ERROR
 			}
 		case .OP_GET_SUPER_LONG:
-			{
-				name := read_string_long(frame)
-				superclass := as_class(vm_pop(vm))
+			name := read_string_long(frame)
+			superclass := as_class(vm_pop(vm))
 
-				/* Look up the method in the superclass and push it to the
-				 * stack as an ObjBoundMethod. */
-				if !bind_method(vm, superclass, name) {
-					return .INTERPRET_RUNTIME_ERROR
-				}
+			if !bind_method(vm, superclass, name) {
+				return .INTERPRET_RUNTIME_ERROR
 			}
 		case .OP_GET_IT:
 			vm_push(vm, pipeline_it)
 		case .OP_SET_IT:
 			pipeline_it = vm_pop(vm)
 		case .OP_EQUAL:
-			{
-				b := vm_pop(vm)
-				a := vm_pop(vm)
-				vm_push(vm, bool_val(values_equal(a, b)))
-			}
+			b := vm_pop(vm)
+			a := vm_pop(vm)
+			vm_push(vm, bool_val(values_equal(a, b)))
 		case .OP_GREATER:
 			binary_op(vm, bool, ">") or_return
 		case .OP_LESS:
