@@ -1000,7 +1000,7 @@ unary :: proc(p: ^Parser, can_assign: bool) {
 }
 
 /* A table of the parsing rules for all the token types. */
-rules: []ParseRule = {
+rules: [TokenType]ParseRule = {
 	TokenType.LPAREN        = ParseRule{grouping, call, .CALL},
 	TokenType.RPAREN        = ParseRule{nil, nil, .NONE},
 	TokenType.LSQUIRLY      = ParseRule{nil, nil, .NONE},
@@ -1028,12 +1028,15 @@ rules: []ParseRule = {
 	TokenType.NUMBER        = ParseRule{number, nil, .NONE},
 	TokenType.AND           = ParseRule{nil, and_, .AND},
 	TokenType.BREAK         = ParseRule{nil, nil, .NONE},
+	TokenType.CONTINUE      = ParseRule{nil, nil, .NONE},
 	TokenType.ELSE          = ParseRule{nil, nil, .NONE},
 	TokenType.FALSE         = ParseRule{literal, nil, .NONE},
 	TokenType.VAL           = ParseRule{nil, nil, .NONE},
+	TokenType.WHILE         = ParseRule{nil, nil, .NONE},
 	TokenType.FOR           = ParseRule{nil, nil, .NONE},
 	TokenType.FUNC          = ParseRule{lambda, nil, .NONE},
 	TokenType.IF            = ParseRule{nil, nil, .NONE},
+	TokenType.SWITCH        = ParseRule{nil, nil, .NONE},
 	TokenType.USE           = ParseRule{nil, nil, .NONE},
 	TokenType.IN            = ParseRule{nil, nil, .NONE},
 	TokenType.IT            = ParseRule{it_, nil, .NONE},
@@ -1048,6 +1051,13 @@ rules: []ParseRule = {
 	TokenType.THIS          = ParseRule{this_, nil, .NONE},
 	TokenType.TRUE          = ParseRule{literal, nil, .NONE},
 	TokenType.EOF           = ParseRule{nil, nil, .NONE},
+	TokenType.BACKSLASH     = ParseRule{nil, nil, .NONE},
+	TokenType.NEWLINE       = ParseRule{nil, nil, .NONE},
+	TokenType.FAT_ARROW     = ParseRule{nil, nil, .NONE},
+	TokenType.CLASS         = ParseRule{nil, nil, .NONE},
+	TokenType.EXIT          = ParseRule{nil, nil, .NONE},
+	TokenType.IFNT          = ParseRule{nil, nil, .NONE},
+	TokenType.WHILENT       = ParseRule{nil, nil, .NONE},
 }
 
 /* 
