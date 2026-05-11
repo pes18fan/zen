@@ -168,47 +168,9 @@ typeof_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return obj_val(copy_string(vm.gc, type_of_value(args[0]))), true
 }
 
-_copy_item :: proc(vm: ^VM, value: Value) -> Value {
-	if !is_obj(value) {
-		return value
-	}
-
-	obj := as_obj(value)
-
-	#partial switch obj.type {
-	case .INSTANCE:
-		{
-			instance := as_instance(obj_val(obj))
-			new := new_instance(vm.gc, instance.klass)
-
-			/* Deep copy the fields */
-			table_add_all(from = &instance.fields, to = &new.fields)
-			return obj_val(new)
-		}
-	case .LIST:
-		{
-			list := as_list(obj_val(obj))
-			new := new_list(vm.gc)
-
-			/* Copy all the list's items over. */
-			for i := 0; i < list.items.count; i += 1 {
-				/* _copy_item may be called recursively if we're deep copying a
-                 * list within a list. */
-				write_value_array(&new.items, _copy_item(vm, list.items.values[i]))
-			}
-
-			return obj_val(new)
-		}
-	case:
-		return value
-	}
-
-	return nil_val()
-}
-
 /* Copy an object. */
 copy_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return _copy_item(vm, args[0]), true
+	return copy_value(vm.gc, args[0]), true
 }
 
 /* Return the directory containing the running program. Returns an empty string
@@ -610,6 +572,7 @@ push_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
+	args[0] = copy_if_shared(vm.gc, args[0])
 	list := as_list(args[0])
 	item := args[1]
 
@@ -624,6 +587,7 @@ remove_last_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bo
 		return nil_val(), false
 	}
 
+	args[0] = copy_if_shared(vm.gc, args[0])
 	list := as_list(args[0])
 
 	if list.items.count == 0 {
@@ -642,6 +606,7 @@ pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
+	args[0] = copy_if_shared(vm.gc, args[0])
 	list := as_list(args[0])
 
 	if list.items.count == 0 {
@@ -697,6 +662,7 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
+	args[0] = copy_if_shared(vm.gc, args[0])
 	list := as_list(args[0])
 	_sort(&list.items.values, 0, list.items.count - 1)
 	return args[0], true

@@ -157,7 +157,7 @@ write_value_array :: proc(a: ^ValueArray, value: Value) {
 
 /* Pop a value off the constant pool. */
 pop_value_array :: proc(a: ^ValueArray) -> Value {
-	assert(a.count > 0)
+	assert(a.count > 0, "value array count cannot be less than 0\n")
 	defer a.count -= 1
 	return pop(&a.values)
 }
@@ -255,6 +255,72 @@ stringify_value :: proc(value: Value) -> (res: string, was_allocation: bool) {
 	}
 
 	unreachable()
+}
+
+// Make a deep copy of a value; only makes sense in the case of instances and
+// lists.
+copy_value :: proc(gc: ^GC, value: Value) -> Value {
+	if !is_obj(value) {
+		return value
+	}
+
+	obj := as_obj(value)
+
+	#partial switch obj.type {
+	case .INSTANCE:
+		{
+			instance := as_instance(obj_val(obj))
+			new := new_instance(gc, instance.klass)
+
+			/* Deep copy the fields */
+			table_add_all(from = &instance.fields, to = &new.fields)
+			return obj_val(new)
+		}
+	case .LIST:
+		{
+			list := as_list(obj_val(obj))
+			new := new_list(gc)
+
+			/* Copy all the list's items over. */
+			for i := 0; i < list.items.count; i += 1 {
+				/* _copy_item may be called recursively if we're deep copying a
+                 * list within a list. */
+				write_value_array(&new.items, copy_value(gc, list.items.values[i]))
+			}
+
+			return obj_val(new)
+		}
+	case:
+		return value
+	}
+
+	return nil_val()
+}
+
+// Copy a value if it is shared i.e. its refcount is more than 1 (more than one
+// variable refers to it.)
+copy_if_shared :: proc(gc: ^GC, value: Value) -> Value {
+	if !is_obj(value) {return value}
+
+	obj := as_obj(value)
+	str, was_allocation := stringify_object(obj)
+	defer if was_allocation {delete(str)}
+	if obj.refcount <= 1 {
+		return value
+	}
+
+	obj.refcount -= 1
+	assert(obj.refcount >= 0, "refcount cannot be less than zero\n")
+	dbg_printfln(
+		"%p copy shared object %s, refcount %d -> %d",
+		obj,
+		str,
+		obj.refcount + 1,
+		obj.refcount,
+	)
+	new_obj := copy_value(gc, value)
+	as_obj(new_obj).refcount = 1
+	return new_obj
 }
 
 /* Print out `value` in a human-readable format. */

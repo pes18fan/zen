@@ -100,7 +100,8 @@ Local :: struct {
 }
 
 /*
-An upvalue. References a local variable in an enclosing function.
+An upvalue. References a local variable in an enclosing function, or an upvalue
+from one of any functions that enclose the current function.
 Each closure keeps an array of upvalues, which include all the variables
 that the closure closes over.
 */
@@ -497,6 +498,7 @@ end_scope :: proc(p: ^Parser) {
 		if curr.locals[curr.local_count - 1].is_captured {
 			emit_opcode(p, .OP_CLOSE_UPVALUE)
 		} else {
+			emit_opcode(p, .OP_DECREMENT_REFCOUNT)
 			emit_pop(p)
 		}
 		p.current_compiler.local_count -= 1
@@ -1278,6 +1280,7 @@ mark_initialized :: proc(p: ^Parser) {
 define_variable :: proc(p: ^Parser, global: int) {
 	if p.current_compiler.scope_depth > 0 {
 		mark_initialized(p)
+		emit_opcode(p, .OP_INCREMENT_REFCOUNT)
 		return
 	}
 
@@ -1462,7 +1465,7 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 	   compiling methods. */
 	class_name := p.previous
 	name_constant := identifier_constant(p, &p.previous)
-	declare_variable(p, .VAR) /* Classes are reassignable, subject to change. */
+	declare_variable(p, .FINAL) /* Classes are not reassignable. */
 
 	global_o_str := copy_string(p.gc, p.previous.lexeme)
 	value: Value; ok: bool
@@ -1800,7 +1803,7 @@ statements, if any exist. */
 end_loop :: proc(p: ^Parser) {
 	loop := &p.current_compiler.loops[p.current_compiler.loop_count - 1]
 
-	assert(p.current_compiler.loop_count > 0)
+	assert(p.current_compiler.loop_count > 0, "number of loops should not be less than zero")
 	patch_breaks(p)
 	p.current_compiler.loop_count -= 1
 
@@ -1905,7 +1908,6 @@ switch_statement :: proc(p: ^Parser) {
 			error(p, "Too many cases in switch statement.")
 			return
 		}
-		assert(i < U8_COUNT)
 
 		if match(p, .ELSE) {
 			has_else_clause = true
