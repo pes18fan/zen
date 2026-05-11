@@ -1206,7 +1206,7 @@ interpret :: proc(
 
 	when AST {
 		p := init_parser(tokens)
-		ast, ps_ok := parse_program(&p)
+		ast, ps_ok := parse(&p)
 		if !ps_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
