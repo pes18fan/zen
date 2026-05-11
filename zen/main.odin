@@ -7,6 +7,7 @@ import "core:path/filepath"
 import ic "isocline"
 
 VERSION :: "0.0.1-beta"
+AST :: true
 
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)
@@ -82,8 +83,9 @@ repl :: proc(vm: ^VM) -> int {
 		ic.ic_history_add(raw)
 
 		line := fmt.tprintf("%s\n", line_str)
-		interpret(vm, vm.gc, line)
 		ic.ic_free(rawptr(raw))
+
+		interpret(vm, vm.gc, line)
 	}
 
 	return 0

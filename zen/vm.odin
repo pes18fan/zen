@@ -1204,37 +1204,52 @@ interpret :: proc(
 		return .INTERPRET_OK
 	}
 
-	fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
-	if !cmp_ok {
-		return .INTERPRET_COMPILE_ERROR
-	}
+	when AST {
+		p := init_parser(tokens)
+		ast, ps_ok := parse_program(&p)
+		if !ps_ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
+		defer free_decls(ast)
 
-	/* Time the compiler. */
-	if config.record_time {
-		time.stopwatch_stop(&sw)
-		fmt.eprintf("Compiler: %v\n", time.stopwatch_duration(sw))
-		time.stopwatch_reset(&sw)
-		time.stopwatch_start(&sw)
-	}
+		str := ast_print(ast)
+		defer delete(str)
+		fmt.println(str)
 
-	/* Time the VM. */
-	defer if config.record_time {
-		time.stopwatch_stop(&sw)
-		fmt.eprintf("\nVM: %v\n", time.stopwatch_duration(sw))
-	}
-
-	/* If the user only wants to compile the script, then we can stop here. */
-	if config.compile_only {
 		return .INTERPRET_OK
+	} else {
+		fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
+		if !cmp_ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
+
+		/* Time the compiler. */
+		if config.record_time {
+			time.stopwatch_stop(&sw)
+			fmt.eprintf("Compiler: %v\n", time.stopwatch_duration(sw))
+			time.stopwatch_reset(&sw)
+			time.stopwatch_start(&sw)
+		}
+
+		/* Time the VM. */
+		defer if config.record_time {
+			time.stopwatch_stop(&sw)
+			fmt.eprintf("\nVM: %v\n", time.stopwatch_duration(sw))
+		}
+
+		/* If the user only wants to compile the script, then we can stop here. */
+		if config.compile_only {
+			return .INTERPRET_OK
+		}
+
+		vm_push(vm, obj_val(fn))
+		closure := new_closure(gc, fn)
+		vm_pop(vm)
+		vm_push(vm, obj_val(closure))
+		call(vm, closure, 0) // The script itself is a function, so call it.
+
+		return run(vm, importer)
 	}
-
-	vm_push(vm, obj_val(fn))
-	closure := new_closure(gc, fn)
-	vm_pop(vm)
-	vm_push(vm, obj_val(closure))
-	call(vm, closure, 0) // The script itself is a function, so call it.
-
-	return run(vm, importer)
 }
 
 /* Push a value onto the stack. */
