@@ -81,16 +81,15 @@ Token :: struct {
 
 /* The lexer. */
 Lexer :: struct {
-	source:    string,
-	start:     int,
-	current:   int,
-	line:      int,
-	had_error: bool,
+	source:  string,
+	start:   int,
+	current: int,
+	line:    int,
 }
 
 /* Create a new lexer. */
 init_lexer :: proc(source: string) -> Lexer {
-	return Lexer{source = source, start = 0, current = 0, line = 1, had_error = false}
+	return Lexer{source = source, start = 0, current = 0, line = 1}
 }
 
 /* 
@@ -102,7 +101,6 @@ syntax_error :: proc(l: ^Lexer, message: string) {
 	color_red(os.stderr, "syntax error: ")
 	fmt.eprintf("%s\n", message)
 	fmt.eprintf("  on [line %d]\n", l.line)
-	l.had_error = true
 }
 
 /* Returns true if `c` is alphanumeric, a question mark or an exclamation mark. */
@@ -640,7 +638,6 @@ lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
 
 	for {
 		token, ok := lex_token(l).?
-
 		if !ok {
 			delete(toks)
 			return nil, false

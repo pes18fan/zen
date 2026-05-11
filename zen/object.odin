@@ -397,6 +397,8 @@ allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
 		vm = s
 	case ^Parser:
 		vm = as_vm(s.prev_mark_roots)
+	case ^Codegen:
+		vm = as_vm(s.prev_mark_roots)
 	}
 
 	/* Stash the string on the stack so it doesn't get collected. */

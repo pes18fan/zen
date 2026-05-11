@@ -47,6 +47,7 @@ GC :: struct {
 
 /* Source for the roots for the root marking step in the GC. */
 RootSource :: union {
+	^Codegen,
 	^Parser,
 	^VM,
 }
@@ -107,11 +108,11 @@ free_gc :: proc(gc: ^GC) {
 temp_push :: proc(gc: ^GC, value: Value) {
 	switch s in gc.mark_roots_arg {
 	case ^Parser:
-		{
-			/* The parser stores the previous mark_roots_arg of the GC, which is
+		/* The parser stores the previous mark_roots_arg of the GC, which is
             the VM, so we temporarily restore it. */
-			vm_push(as_vm(s.prev_mark_roots), value)
-		}
+		vm_push(as_vm(s.prev_mark_roots), value)
+	case ^Codegen:
+		vm_push(as_vm(s.prev_mark_roots), value)
 	case ^VM:
 		vm_push(as_vm(s), value)
 	}
@@ -122,10 +123,11 @@ temp_pop :: proc(gc: ^GC) -> Value {
 	value: Value
 	switch s in gc.mark_roots_arg {
 	case ^Parser:
-		{
-			value = vm_pop(as_vm(s.prev_mark_roots))
-			gc.mark_roots_arg = s
-		}
+		value = vm_pop(as_vm(s.prev_mark_roots))
+		gc.mark_roots_arg = s
+	case ^Codegen:
+		value = vm_pop(as_vm(s.prev_mark_roots))
+		gc.mark_roots_arg = s
 	case ^VM:
 		value = vm_pop(as_vm(s))
 	}
@@ -225,6 +227,8 @@ mark_roots :: proc(gc: ^GC, source: RootSource) {
 
 	switch s in source {
 	case ^Parser:
+		mark_compiler_roots(gc, s.current_compiler)
+	case ^Codegen:
 		mark_compiler_roots(gc, s.current_compiler)
 	case ^VM:
 		mark_vm_roots(gc, s)

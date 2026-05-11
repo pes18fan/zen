@@ -335,198 +335,19 @@ parse :: proc(p: ^AstParser) -> ([]Decl, bool) {
 	return declarations[:], !p.had_error
 }
 
-free_decls :: proc(decls: []Decl) {
-	for decl in decls {
-		free_decl(decl)
-	}
-	delete(decls)
-}
-
-@(private = "file")
-free_decl :: proc(decl: Decl) {
-	if decl == nil {
-		return
-	}
-
-	switch d in decl {
-	case ^ClassDecl:
-		delete(d.methods)
-		free(d)
-	case ^FuncDecl:
-		switch b in d.body {
-		case ^BlockStmt:
-			free_stmt(b)
-		case Expr:
-			free_expr(b)
-		}
-		delete(d.params)
-		free(d)
-	case ^ModuleDecl:
-		free(d)
-	case ^PubDecl:
-		free_decl(d.decl)
-		free(d)
-	case ^VarDecl:
-		for binding in d.bindings {
-			free_expr(binding.initializer)
-		}
-		delete(d.bindings)
-		free(d)
-	case Stmt:
-		free_stmt(d)
-	}
-}
-
-@(private = "file")
-free_stmt :: proc(stmt: Stmt) {
-	if stmt == nil {
-		return
-	}
-
-	switch s in stmt {
-	case ^BlockStmt:
-		free_decls(s.declarations)
-		free(s)
-	case ^BreakStmt:
-		free(s)
-	case ^ContinueStmt:
-		free(s)
-	case ^EmptyStmt:
-		free(s)
-	case ^ExitStmt:
-		free_expr(s.code)
-		free(s)
-	case ^ExprStmt:
-		free_expr(s.expr)
-		free(s)
-	case ^ForInStmt:
-		free_expr(s.iterable)
-		free_stmt(s.body)
-		free(s)
-	case ^ForStmt:
-		switch iz in s.initializer {
-		case ^VarDecl:
-			free_decl(iz)
-		case ^ExprStmt:
-			free_expr(iz.expr)
-			free(iz)
-		case ^EmptyStmt:
-			free(iz)
-		}
-		free_decls(s.body.declarations)
-		free(s.body)
-		free_expr(s.condition)
-		free_expr(s.increment)
-		free(s)
-	case ^IfStmt:
-		free_expr(s.condition)
-		free_decls(s.then_branch.declarations)
-		free(s.then_branch)
-		free_decls(s.else_branch.declarations)
-		free(s.else_branch)
-		free(s)
-	case ^PrintStmt:
-		free_expr(s.expr)
-		free(s)
-	case ^ReturnStmt:
-		free_expr(s.value)
-		free(s)
-	case ^SwitchStmt:
-		free_expr(s.condition)
-		for c in s.cases {
-			free_expr(c.condition)
-			free_stmt(c.body)
-		}
-		delete(s.cases)
-		free_stmt(s.else_branch)
-		free(s)
-	case ^WhileStmt:
-		free_expr(s.condition)
-		free_decls(s.body.declarations)
-		free(s.body)
-		free(s)
-	}
-}
-
-@(private = "file")
-free_expr :: proc(expr: Expr) {
-	if expr == nil {
-		return
-	}
-
-	switch e in expr {
-	case ^AssignExpr:
-		free_expr(e.value)
-		free(e)
-	case ^BinaryExpr:
-		free_expr(e.left)
-		free_expr(e.right)
-		free(e)
-	case ^CallExpr:
-		for arg in e.arguments {
-			free_expr(arg)
-		}
-		delete(e.arguments)
-		free_expr(e.callee)
-		free(e)
-	case ^GetExpr:
-		free_expr(e.object)
-		free(e)
-	case ^GroupingExpr:
-		free_expr(e.expression)
-		free(e)
-	case ^ItExpr:
-		free(e)
-	case ^LambdaExpr:
-		free_decl(e.func_decl)
-		free(e)
-	case ^ListExpr:
-		for element in e.elements {
-			free_expr(element)
-		}
-		delete(e.elements)
-		free(e)
-	case ^LiteralExpr:
-		free(e)
-	case ^LogicalExpr:
-		free_expr(e.left)
-		free_expr(e.right)
-		free(e)
-	case ^PipeExpr:
-		free_expr(e.left)
-		free_expr(e.right)
-		free(e)
-	case ^SetExpr:
-		free_expr(e.object)
-		free_expr(e.value)
-		free(e)
-	case ^SubscriptExpr:
-		free_expr(e.object)
-		free_expr(e.index)
-		free(e)
-	case ^SubscriptSetExpr:
-		free_expr(e.object)
-		free_expr(e.index)
-		free_expr(e.value)
-		free(e)
-	case ^SuperExpr:
-		free(e)
-	case ^ThisExpr:
-		free(e)
-	case ^UnaryExpr:
-		free_expr(e.right)
-		free(e)
-	case ^VariableExpr:
-		free(e)
-	}
-}
-
 parse_declaration :: proc(p: ^AstParser) -> Decl {
-	if ast_match(p, .VAR, .VAL) {return parse_var_decl(p)}
-	if ast_match(p, .CLASS) {return parse_class_decl(p)}
-	if ast_match(p, .USE) {return parse_module_decl(p)}
-	if ast_match(p, .FUNC) {return parse_func_decl(p, "function")}
-	if ast_match(p, .PUB) {return parse_pub_decl(p)}
+	switch {
+	case ast_match(p, .VAR, .VAL):
+		return parse_var_decl(p)
+	case ast_match(p, .CLASS):
+		return parse_class_decl(p)
+	case ast_match(p, .USE):
+		return parse_module_decl(p)
+	case ast_match(p, .FUNC):
+		return parse_func_decl(p, "function")
+	case ast_match(p, .PUB):
+		return parse_pub_decl(p)
+	}
 	return parse_statement(p)
 }
 
@@ -668,19 +489,32 @@ ast_parse_precedence :: proc(p: ^AstParser, precedence: AstPrecedence) -> Expr {
 // Statement parsers
 
 parse_statement :: proc(p: ^AstParser) -> Stmt {
-	if ast_match(p, .IF) {return parse_if_stmt(p, false)}
-	if ast_match(p, .IFNT) {return parse_if_stmt(p, true)}
-	if ast_match(p, .WHILE) {return parse_while_stmt(p, false)}
-	if ast_match(p, .WHILENT) {return parse_while_stmt(p, true)}
-	if ast_match(p, .BREAK) {return parse_break_stmt(p)}
-	if ast_match(p, .CONTINUE) {return parse_continue_stmt(p)}
-	if ast_match(p, .FOR) {return parse_for_stmt(p)}
-	if ast_match(p, .LSQUIRLY) {return parse_block(p)}
-	if ast_match(p, .PRINT) {return parse_print_stmt(p)}
-	if ast_match(p, .RETURN) {return parse_return_stmt(p)}
-	if ast_match(p, .EXIT) {return parse_exit_stmt(p)}
-	if ast_match(p, .SWITCH) {return parse_switch_stmt(p)}
-	if ast_match(p, .SEMI) {
+	switch {
+	case ast_match(p, .IF):
+		return parse_if_stmt(p, false)
+	case ast_match(p, .IFNT):
+		return parse_if_stmt(p, true)
+	case ast_match(p, .WHILE):
+		return parse_while_stmt(p, false)
+	case ast_match(p, .WHILENT):
+		return parse_while_stmt(p, true)
+	case ast_match(p, .BREAK):
+		return parse_break_stmt(p)
+	case ast_match(p, .CONTINUE):
+		return parse_continue_stmt(p)
+	case ast_match(p, .FOR):
+		return parse_for_stmt(p)
+	case ast_match(p, .LSQUIRLY):
+		return parse_block(p)
+	case ast_match(p, .PRINT):
+		return parse_print_stmt(p)
+	case ast_match(p, .RETURN):
+		return parse_return_stmt(p)
+	case ast_match(p, .EXIT):
+		return parse_exit_stmt(p)
+	case ast_match(p, .SWITCH):
+		return parse_switch_stmt(p)
+	case ast_match(p, .SEMI):
 		stmt := new(EmptyStmt)
 		stmt.token = ast_previous(p)
 		return stmt
@@ -1137,7 +971,7 @@ ast_error :: proc(p: ^AstParser, token: Token, message: string) {
 	if p.panic_mode do return
 	p.panic_mode = true
 
-	color_red(os.stderr, "compile error ")
+	color_red(os.stderr, "parse error ")
 
 	if token.type == TokenType.EOF {
 		fmt.eprintf("at end")
@@ -1206,6 +1040,195 @@ ast_synchronize :: proc(p: ^AstParser) {
 		ast_advance(p)
 	}
 }
+
+// AST freeing functions
+
+free_decls :: proc(decls: []Decl) {
+	for decl in decls {
+		free_decl(decl)
+	}
+	delete(decls)
+}
+
+@(private = "file")
+free_decl :: proc(decl: Decl) {
+	if decl == nil {
+		return
+	}
+
+	switch d in decl {
+	case ^ClassDecl:
+		delete(d.methods)
+		free(d)
+	case ^FuncDecl:
+		switch b in d.body {
+		case ^BlockStmt:
+			free_stmt(b)
+		case Expr:
+			free_expr(b)
+		}
+		delete(d.params)
+		free(d)
+	case ^ModuleDecl:
+		free(d)
+	case ^PubDecl:
+		free_decl(d.decl)
+		free(d)
+	case ^VarDecl:
+		for binding in d.bindings {
+			free_expr(binding.initializer)
+		}
+		delete(d.bindings)
+		free(d)
+	case Stmt:
+		free_stmt(d)
+	}
+}
+
+@(private = "file")
+free_stmt :: proc(stmt: Stmt) {
+	if stmt == nil {
+		return
+	}
+
+	switch s in stmt {
+	case ^BlockStmt:
+		free_decls(s.declarations)
+		free(s)
+	case ^BreakStmt:
+		free(s)
+	case ^ContinueStmt:
+		free(s)
+	case ^EmptyStmt:
+		free(s)
+	case ^ExitStmt:
+		free_expr(s.code)
+		free(s)
+	case ^ExprStmt:
+		free_expr(s.expr)
+		free(s)
+	case ^ForInStmt:
+		free_expr(s.iterable)
+		free_stmt(s.body)
+		free(s)
+	case ^ForStmt:
+		switch iz in s.initializer {
+		case ^VarDecl:
+			free_decl(iz)
+		case ^ExprStmt:
+			free_expr(iz.expr)
+			free(iz)
+		case ^EmptyStmt:
+			free(iz)
+		}
+		free_decls(s.body.declarations)
+		free(s.body)
+		free_expr(s.condition)
+		free_expr(s.increment)
+		free(s)
+	case ^IfStmt:
+		free_expr(s.condition)
+		free_decls(s.then_branch.declarations)
+		free(s.then_branch)
+		free_decls(s.else_branch.declarations)
+		free(s.else_branch)
+		free(s)
+	case ^PrintStmt:
+		free_expr(s.expr)
+		free(s)
+	case ^ReturnStmt:
+		free_expr(s.value)
+		free(s)
+	case ^SwitchStmt:
+		free_expr(s.condition)
+		for c in s.cases {
+			free_expr(c.condition)
+			free_stmt(c.body)
+		}
+		delete(s.cases)
+		free_stmt(s.else_branch)
+		free(s)
+	case ^WhileStmt:
+		free_expr(s.condition)
+		free_decls(s.body.declarations)
+		free(s.body)
+		free(s)
+	}
+}
+
+@(private = "file")
+free_expr :: proc(expr: Expr) {
+	if expr == nil {
+		return
+	}
+
+	switch e in expr {
+	case ^AssignExpr:
+		free_expr(e.value)
+		free(e)
+	case ^BinaryExpr:
+		free_expr(e.left)
+		free_expr(e.right)
+		free(e)
+	case ^CallExpr:
+		for arg in e.arguments {
+			free_expr(arg)
+		}
+		delete(e.arguments)
+		free_expr(e.callee)
+		free(e)
+	case ^GetExpr:
+		free_expr(e.object)
+		free(e)
+	case ^GroupingExpr:
+		free_expr(e.expression)
+		free(e)
+	case ^ItExpr:
+		free(e)
+	case ^LambdaExpr:
+		free_decl(e.func_decl)
+		free(e)
+	case ^ListExpr:
+		for element in e.elements {
+			free_expr(element)
+		}
+		delete(e.elements)
+		free(e)
+	case ^LiteralExpr:
+		free(e)
+	case ^LogicalExpr:
+		free_expr(e.left)
+		free_expr(e.right)
+		free(e)
+	case ^PipeExpr:
+		free_expr(e.left)
+		free_expr(e.right)
+		free(e)
+	case ^SetExpr:
+		free_expr(e.object)
+		free_expr(e.value)
+		free(e)
+	case ^SubscriptExpr:
+		free_expr(e.object)
+		free_expr(e.index)
+		free(e)
+	case ^SubscriptSetExpr:
+		free_expr(e.object)
+		free_expr(e.index)
+		free_expr(e.value)
+		free(e)
+	case ^SuperExpr:
+		free(e)
+	case ^ThisExpr:
+		free(e)
+	case ^UnaryExpr:
+		free_expr(e.right)
+		free(e)
+	case ^VariableExpr:
+		free(e)
+	}
+}
+
 
 // AST pretty-printer
 

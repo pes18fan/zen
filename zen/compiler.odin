@@ -1,3 +1,4 @@
+// compiler.odin
 package zen
 
 import "core:fmt"
@@ -68,6 +69,68 @@ ParseRule :: struct {
 	infix:      ParseFn,
 	precedence: Precedence,
 }
+
+/* A table of the parsing rules for all the token types. */
+rules := [TokenType]ParseRule {
+	TokenType.LPAREN        = ParseRule{grouping, call, .CALL},
+	TokenType.RPAREN        = ParseRule{nil, nil, .NONE},
+	TokenType.LSQUIRLY      = ParseRule{nil, nil, .NONE},
+	TokenType.RSQUIRLY      = ParseRule{nil, nil, .NONE},
+	TokenType.LSQUARE       = ParseRule{list, subscript, .CALL},
+	TokenType.RSQUARE       = ParseRule{nil, nil, .NONE},
+	TokenType.COMMA         = ParseRule{nil, nil, .NONE},
+	TokenType.DOT           = ParseRule{nil, dot, .CALL},
+	TokenType.MINUS         = ParseRule{unary, binary, .TERM},
+	TokenType.PLUS          = ParseRule{nil, binary, .TERM},
+	TokenType.SEMI          = ParseRule{nil, nil, .NONE},
+	TokenType.SLASH         = ParseRule{nil, binary, .FACTOR},
+	TokenType.PERCENT       = ParseRule{nil, binary, .FACTOR},
+	TokenType.STAR          = ParseRule{nil, binary, .FACTOR},
+	TokenType.BANG_EQUAL    = ParseRule{nil, binary, .EQUALITY},
+	TokenType.BAR_GREATER   = ParseRule{nil, nil, .NONE},
+	TokenType.EQUAL         = ParseRule{nil, nil, .NONE},
+	TokenType.EQUAL_EQUAL   = ParseRule{nil, binary, .EQUALITY},
+	TokenType.GREATER       = ParseRule{nil, binary, .COMPARISON},
+	TokenType.GREATER_EQUAL = ParseRule{nil, binary, .COMPARISON},
+	TokenType.LESS          = ParseRule{nil, binary, .COMPARISON},
+	TokenType.LESS_EQUAL    = ParseRule{nil, binary, .COMPARISON},
+	TokenType.IDENT         = ParseRule{variable, nil, .NONE},
+	TokenType.STRING        = ParseRule{zstring, nil, .NONE},
+	TokenType.NUMBER        = ParseRule{number, nil, .NONE},
+	TokenType.AND           = ParseRule{nil, and_, .AND},
+	TokenType.BREAK         = ParseRule{nil, nil, .NONE},
+	TokenType.CONTINUE      = ParseRule{nil, nil, .NONE},
+	TokenType.ELSE          = ParseRule{nil, nil, .NONE},
+	TokenType.FALSE         = ParseRule{literal, nil, .NONE},
+	TokenType.VAL           = ParseRule{nil, nil, .NONE},
+	TokenType.WHILE         = ParseRule{nil, nil, .NONE},
+	TokenType.FOR           = ParseRule{nil, nil, .NONE},
+	TokenType.FUNC          = ParseRule{lambda, nil, .NONE},
+	TokenType.IF            = ParseRule{nil, nil, .NONE},
+	TokenType.SWITCH        = ParseRule{nil, nil, .NONE},
+	TokenType.USE           = ParseRule{nil, nil, .NONE},
+	TokenType.IN            = ParseRule{nil, nil, .NONE},
+	TokenType.IT            = ParseRule{it_, nil, .NONE},
+	TokenType.VAR           = ParseRule{nil, nil, .NONE},
+	TokenType.NIL           = ParseRule{literal, nil, .NONE},
+	TokenType.NOT           = ParseRule{unary, nil, .NONE},
+	TokenType.OR            = ParseRule{nil, or_, .OR},
+	TokenType.PRINT         = ParseRule{nil, nil, .NONE},
+	TokenType.PUB           = ParseRule{nil, nil, .NONE},
+	TokenType.RETURN        = ParseRule{nil, nil, .NONE},
+	TokenType.SUPER         = ParseRule{super_, nil, .NONE},
+	TokenType.THIS          = ParseRule{this_, nil, .NONE},
+	TokenType.TRUE          = ParseRule{literal, nil, .NONE},
+	TokenType.EOF           = ParseRule{nil, nil, .NONE},
+	TokenType.BACKSLASH     = ParseRule{nil, nil, .NONE},
+	TokenType.NEWLINE       = ParseRule{nil, nil, .NONE},
+	TokenType.FAT_ARROW     = ParseRule{nil, nil, .NONE},
+	TokenType.CLASS         = ParseRule{nil, nil, .NONE},
+	TokenType.EXIT          = ParseRule{nil, nil, .NONE},
+	TokenType.IFNT          = ParseRule{nil, nil, .NONE},
+	TokenType.WHILENT       = ParseRule{nil, nil, .NONE},
+}
+
 
 /* Whether a variable is reassignable or not. */
 Variability :: enum {
@@ -170,6 +233,7 @@ ClassCompiler :: struct {
 
 /* Returns the chunk that is currently being compiled. This function is just
 for convenience. */
+@(private = "file")
 current_chunk :: proc(p: ^Parser) -> ^Chunk {
 	return &p.current_compiler.function.chunk
 }
@@ -409,71 +473,6 @@ free_loops :: proc(p: ^Parser) {
 	for i in p.current_compiler.loops {
 		delete(i.breaks)
 	}
-}
-
-/*
-Return a new Compiler struct.
-
-The globals table is inherited from previous runs of the compiler so that
-final variables' "finality" can be preserved in the global scope.
-
-Also makes sure that the current_compiler is set to the new compiler.
-*/
-init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
-	c^ = Compiler {
-		enclosing   = p.current_compiler,
-		type        = type,
-		local_count = 0,
-		loop_count  = 0,
-		scope_depth = 0,
-		function    = nil,
-		globals     = p.globals,
-	}
-
-	/* DON'T FORGET to set current_compiler to the new compiler!
-	Took me WAAAAAAAAAAY too long to figure out I was missing this. */
-	p.current_compiler = c
-	c.function = new_function(p.gc)
-
-	if type != .SCRIPT && type != .LAMBDA {
-		c.function.name = copy_string(p.gc, p.previous.lexeme)
-	} else if type == .LAMBDA {
-		c.function.name = copy_string(p.gc, "lambda")
-	}
-
-	/* The first slot is the function itself. */
-	local := &p.current_compiler.locals[p.current_compiler.local_count]
-	c.local_count += 1
-	local.depth = 0
-	local.is_captured = false /* You cannot capture the slot zero value. */
-
-	/* If the function is a method, the first slot is repurposed to store that
-	 * method's receiver instead. */
-	if type != .FUNCTION {
-		local.name.lexeme = "this"
-	} else {
-		local.name.lexeme = ""
-	}
-}
-
-/* Emit a return instruction and decode the RLE-encoded lines. */
-@(private = "file")
-end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
-	fn := p.current_compiler.function
-	if !fn.has_returned {
-		emit_return(p)
-	}
-
-	if config.dump_disassembly {
-		if !p.had_error {
-			disassemble(current_chunk(p), fn.name != nil ? fn.name.chars : "<script>")
-		}
-	}
-
-	free_loops(p)
-	p.current_compiler = p.current_compiler.enclosing
-
-	return fn
 }
 
 /* Begin a new scope when compiling. */
@@ -997,67 +996,6 @@ unary :: proc(p: ^Parser, can_assign: bool) {
 	case .MINUS:
 		emit_opcode(p, .OP_NEGATE)
 	}
-}
-
-/* A table of the parsing rules for all the token types. */
-rules: [TokenType]ParseRule = {
-	TokenType.LPAREN        = ParseRule{grouping, call, .CALL},
-	TokenType.RPAREN        = ParseRule{nil, nil, .NONE},
-	TokenType.LSQUIRLY      = ParseRule{nil, nil, .NONE},
-	TokenType.RSQUIRLY      = ParseRule{nil, nil, .NONE},
-	TokenType.LSQUARE       = ParseRule{list, subscript, .CALL},
-	TokenType.RSQUARE       = ParseRule{nil, nil, .NONE},
-	TokenType.COMMA         = ParseRule{nil, nil, .NONE},
-	TokenType.DOT           = ParseRule{nil, dot, .CALL},
-	TokenType.MINUS         = ParseRule{unary, binary, .TERM},
-	TokenType.PLUS          = ParseRule{nil, binary, .TERM},
-	TokenType.SEMI          = ParseRule{nil, nil, .NONE},
-	TokenType.SLASH         = ParseRule{nil, binary, .FACTOR},
-	TokenType.PERCENT       = ParseRule{nil, binary, .FACTOR},
-	TokenType.STAR          = ParseRule{nil, binary, .FACTOR},
-	TokenType.BANG_EQUAL    = ParseRule{nil, binary, .EQUALITY},
-	TokenType.BAR_GREATER   = ParseRule{nil, nil, .NONE},
-	TokenType.EQUAL         = ParseRule{nil, nil, .NONE},
-	TokenType.EQUAL_EQUAL   = ParseRule{nil, binary, .EQUALITY},
-	TokenType.GREATER       = ParseRule{nil, binary, .COMPARISON},
-	TokenType.GREATER_EQUAL = ParseRule{nil, binary, .COMPARISON},
-	TokenType.LESS          = ParseRule{nil, binary, .COMPARISON},
-	TokenType.LESS_EQUAL    = ParseRule{nil, binary, .COMPARISON},
-	TokenType.IDENT         = ParseRule{variable, nil, .NONE},
-	TokenType.STRING        = ParseRule{zstring, nil, .NONE},
-	TokenType.NUMBER        = ParseRule{number, nil, .NONE},
-	TokenType.AND           = ParseRule{nil, and_, .AND},
-	TokenType.BREAK         = ParseRule{nil, nil, .NONE},
-	TokenType.CONTINUE      = ParseRule{nil, nil, .NONE},
-	TokenType.ELSE          = ParseRule{nil, nil, .NONE},
-	TokenType.FALSE         = ParseRule{literal, nil, .NONE},
-	TokenType.VAL           = ParseRule{nil, nil, .NONE},
-	TokenType.WHILE         = ParseRule{nil, nil, .NONE},
-	TokenType.FOR           = ParseRule{nil, nil, .NONE},
-	TokenType.FUNC          = ParseRule{lambda, nil, .NONE},
-	TokenType.IF            = ParseRule{nil, nil, .NONE},
-	TokenType.SWITCH        = ParseRule{nil, nil, .NONE},
-	TokenType.USE           = ParseRule{nil, nil, .NONE},
-	TokenType.IN            = ParseRule{nil, nil, .NONE},
-	TokenType.IT            = ParseRule{it_, nil, .NONE},
-	TokenType.VAR           = ParseRule{nil, nil, .NONE},
-	TokenType.NIL           = ParseRule{literal, nil, .NONE},
-	TokenType.NOT           = ParseRule{unary, nil, .NONE},
-	TokenType.OR            = ParseRule{nil, or_, .OR},
-	TokenType.PRINT         = ParseRule{nil, nil, .NONE},
-	TokenType.PUB           = ParseRule{nil, nil, .NONE},
-	TokenType.RETURN        = ParseRule{nil, nil, .NONE},
-	TokenType.SUPER         = ParseRule{super_, nil, .NONE},
-	TokenType.THIS          = ParseRule{this_, nil, .NONE},
-	TokenType.TRUE          = ParseRule{literal, nil, .NONE},
-	TokenType.EOF           = ParseRule{nil, nil, .NONE},
-	TokenType.BACKSLASH     = ParseRule{nil, nil, .NONE},
-	TokenType.NEWLINE       = ParseRule{nil, nil, .NONE},
-	TokenType.FAT_ARROW     = ParseRule{nil, nil, .NONE},
-	TokenType.CLASS         = ParseRule{nil, nil, .NONE},
-	TokenType.EXIT          = ParseRule{nil, nil, .NONE},
-	TokenType.IFNT          = ParseRule{nil, nil, .NONE},
-	TokenType.WHILENT       = ParseRule{nil, nil, .NONE},
 }
 
 /* 
@@ -2261,6 +2199,71 @@ restore_gc :: proc(p: ^Parser) {
 	p.gc.mark_roots_arg = p.prev_mark_roots
 }
 
+/*
+Return a new Compiler struct.
+
+The globals table is inherited from previous runs of the compiler so that
+final variables' "finality" can be preserved in the global scope.
+
+Also makes sure that the current_compiler is set to the new compiler.
+*/
+init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
+	c^ = Compiler {
+		enclosing   = p.current_compiler,
+		type        = type,
+		local_count = 0,
+		loop_count  = 0,
+		scope_depth = 0,
+		function    = nil,
+		globals     = p.globals,
+	}
+
+	/* DON'T FORGET to set current_compiler to the new compiler!
+	Took me WAAAAAAAAAAY too long to figure out I was missing this. */
+	p.current_compiler = c
+	c.function = new_function(p.gc)
+
+	if type != .SCRIPT && type != .LAMBDA {
+		c.function.name = copy_string(p.gc, p.previous.lexeme)
+	} else if type == .LAMBDA {
+		c.function.name = copy_string(p.gc, "lambda")
+	}
+
+	/* The first slot is the function itself. */
+	local := &p.current_compiler.locals[p.current_compiler.local_count]
+	c.local_count += 1
+	local.depth = 0
+	local.is_captured = false /* You cannot capture the slot zero value. */
+
+	/* If the function is a method, the first slot is repurposed to store that
+	 * method's receiver instead. */
+	if type != .FUNCTION {
+		local.name.lexeme = "this"
+	} else {
+		local.name.lexeme = ""
+	}
+}
+
+/* Emit a return instruction and decode the RLE-encoded lines. */
+@(private = "file")
+end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
+	fn := p.current_compiler.function
+	if !fn.has_returned {
+		emit_return(p)
+	}
+
+	if config.dump_disassembly {
+		if !p.had_error {
+			disassemble(current_chunk(p), fn.name != nil ? fn.name.chars : "<script>")
+		}
+	}
+
+	free_loops(p)
+	p.current_compiler = p.current_compiler.enclosing
+
+	return fn
+}
+
 /* 
 Compile the provided slice of tokens into a bytecode chunk. 
 The compile function also takes in a pointer to a globals table with each key
@@ -2274,12 +2277,6 @@ TODO: Find a better way to store global variables so that this whole
 table-passing thing isn't necessary.
 */
 compile :: proc(gc: ^GC, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
-	/* Add all the native function names to the global table, for variable
-     * existence checks. */
-	for fn_name in gc.global_native_fns {
-		table_set(globals, copy_string(gc, fn_name), bool_val(true))
-	}
-
 	c: Compiler
 	p := Parser {
 		tokens           = tokens,

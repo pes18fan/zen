@@ -41,34 +41,31 @@ VM :: struct {
      * can import each other as modules, and so it is necessary to disallow
      * cyclic imports. Value is the file path for a file and "REPL" for a REPL
      * since you can't import REPLs. */
-	path:             string,
+	path:          string,
 
 	/* Just the path, except with the file extension and other path stuff stripped
      * out, like in a module name. For instance, for a path "a/b/c.zn", the name
      * will be just "c". Used for working with user-defined modules, but NOT
      * for distinguishing them. For a REPL, this string is "REPL". */
-	name:             string,
+	name:          string,
 
 	/* The chunk being interpreted. */
-	chunk:            ^Chunk,
+	chunk:         ^Chunk,
 
 	/* The stack of values. */
-	stack:            [STACK_MAX]Value,
-	stack_top:        int,
+	stack:         [STACK_MAX]Value,
+	stack_top:     int,
 
 	/* Call frames present in the chunk. */
-	frames:           [FRAMES_MAX]CallFrame,
-	frame_count:      int,
-
-	/* Table of compile-time global variables; necessary for the REPL. */
-	compiler_globals: Table,
+	frames:        [FRAMES_MAX]CallFrame,
+	frame_count:   int,
 
 	/* Linked list of all open upvalues. */
-	open_upvalues:    ^ObjUpvalue,
-	gc:               ^GC,
+	open_upvalues: ^ObjUpvalue,
+	gc:            ^GC,
 
 	/* Arguments passed to the program. */
-	args:             ^ObjList,
+	args:          ^ObjList,
 }
 
 /* The result of the interpreting. */
@@ -76,6 +73,7 @@ InterpretResult :: enum {
 	INTERPRET_OK,
 	INTERPRET_VOLUNTARY_EXIT,
 	INTERPRET_LEX_ERROR,
+	INTERPRET_PARSE_ERROR,
 	INTERPRET_COMPILE_ERROR,
 	INTERPRET_READ_ERROR,
 	INTERPRET_RUNTIME_ERROR,
@@ -167,13 +165,12 @@ reset_stack :: proc(vm: ^VM) {
 /* Returns a newly created VM. */
 init_VM :: proc() -> VM {
 	vm := VM {
-		name             = "",
-		path             = "",
-		chunk            = nil,
-		open_upvalues    = nil,
-		compiler_globals = init_table(),
-		stack_top        = -1,
-		frame_count      = 0,
+		name          = "",
+		path          = "",
+		chunk         = nil,
+		open_upvalues = nil,
+		stack_top     = -1,
+		frame_count   = 0,
 	}
 
 	return vm
@@ -181,7 +178,7 @@ init_VM :: proc() -> VM {
 
 /* Free's the VM's memory. */
 free_VM :: proc(vm: ^VM) {
-	free_table(&vm.compiler_globals)
+	// nothing dynamic to free actually
 }
 
 /* Reads a byte from the chunk and increments the instruction pointer. */
@@ -1206,19 +1203,29 @@ interpret :: proc(
 
 	when AST {
 		p := init_parser(tokens)
-		ast, ps_ok := parse(&p)
+		decls, ps_ok := parse(&p)
 		if !ps_ok {
-			return .INTERPRET_COMPILE_ERROR
+			free_decls(decls)
+			return .INTERPRET_PARSE_ERROR
 		}
-		defer free_decls(ast)
+		defer free_decls(decls)
 
-		str := ast_print(ast)
+		str := ast_print(decls)
 		defer delete(str)
 		fmt.println(str)
 
+		if !config.repl {
+			// TODO: do a pre-pass to collect globals in gc.globals
+		}
+
+		fn, cg_ok := codegen(gc, decls, &gc.globals)
+		if !cg_ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
+
 		return .INTERPRET_OK
 	} else {
-		fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
+		fn, cmp_ok := compile(gc, tokens, &gc.globals)
 		if !cmp_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
