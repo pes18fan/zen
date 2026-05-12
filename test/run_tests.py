@@ -135,7 +135,7 @@ def multiline_output_match(actual_output, expected_output):
 def capture_output(command):
     try:
         result = subprocess.run(
-            command, shell=True, text=True, capture_output=True
+            command, shell=True, text=True, capture_output=True, timeout=2
         )
         return result.stdout, result.stderr, result.returncode
     except Exception as e:

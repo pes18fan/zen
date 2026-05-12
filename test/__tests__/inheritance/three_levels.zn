@@ -1,17 +1,17 @@
-// DRAFT
+
 // Not run cuz it starts an infinite loop for some reason
 class A {
-    method() { return "A" }
-    a_only() { return "a_only" }
+    method() { return "A"; }
+    a_only() { return "a_only"; }
 }
 
 class B < A {
-    method() { return "B" }
-    b_only() { return "b_only" }
+    method() { return "B"; }
+    b_only() { return "b_only"; }
 }
 
 class C < B {
-    method() { return "C" }
+    method() { return "C"; }
 }
 
 val c = C()

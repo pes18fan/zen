@@ -1097,7 +1097,16 @@ string_constant :: proc(p: ^Parser, text: string) -> int {
 @(private = "file")
 identifiers_equal :: proc(a: ^Token, b: ^Token) -> bool {
 	if len(a.lexeme) != len(b.lexeme) {return false}
-	return a.lexeme == b.lexeme
+	if a.lexeme == b.lexeme {
+		// HACK: temporary fix for making the internal __iter and __idx variables
+		// of the for-in loop inaccessible (which itself is a bit of a hack)
+		// must be fixed in the AST version
+		if len(a.lexeme) >= 2 && a.lexeme[0:2] == "__" {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 /* 
@@ -1983,7 +1992,9 @@ while_statement :: proc(p: ^Parser, whilent: bool = false) {
 
 	emit_pop(p)
 
+	begin_scope(p)
 	block(p)
+	end_scope(p)
 
 	emit_loop(p, loop_start)
 
@@ -2037,7 +2048,9 @@ for_statement :: proc(p: ^Parser) {
 	}
 
 	begin_loop(p, loop_start)
+	begin_scope(p)
 	block(p)
+	end_scope(p)
 
 	if loop_variable_slot != -1 {
 		loop_var := &p.current_compiler.locals[loop_variable_slot]
@@ -2110,7 +2123,9 @@ for_in_statement :: proc(p: ^Parser) {
 	emit_pop(p) // iter[idx].
 
 	begin_loop(p, loop_start)
+	begin_scope(p)
 	block(p)
+	end_scope(p)
 
 	// close the loop var's upvalue if it was captured
 	// ensures each iteration's closure gets its own snapshot

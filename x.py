@@ -151,6 +151,9 @@ def test(recompile: bool):
         print(f"Error when running unit tests: {e}", file=sys.stderr)
         exit(1)
 
+    if recompile:
+        shutil.copy(f"bin/rel/{OUT}", "bin/test/")
+
     print("")
 
     print("Running end-to-end tests:")
