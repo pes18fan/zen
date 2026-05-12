@@ -20,14 +20,13 @@ You can prevent automatic semicolon insertion by using a backslash.
 
 zen has the following primitive datatypes:
 
-- `number`: A real number represented as a 64-bit floating point.
+- `number`: A real number represented as a 64-bit floating point. Numbers also
+    support exponential notation (e.g `1e2` for `100`).
 - `bool`: A boolean value i.e. true or false.
 - `string`: A sequence of text, enclosed by either double or single quotes.
-- `list`: An ordered sequence of data.
-- `function`: A callable chunk of code.
-- `nil`: A value that represents the presence of no value.
-
-You can create your own datatypes via classes.
+- `nil`: A value that represents the absence of a value. It is the default
+    value for uninitialized variables and the implicit return value for functions
+    that do not return anything.
 
 ## Variables
 
@@ -48,9 +47,8 @@ nice = 68 // ERROR!
 > Like in Python, zen uses aliasing. Basically, what that means is that doing
 > something like `b = a` causes `b` and `a` to both refer to the same object in
 > memory, rather than creating a new copy. So, any changes to `a` will also be
-> reflected in `b`. This issue is specifically present for lists and class 
-> instances. To avoid it, use the `copy()` global function described around 
-> the end of this documentation.
+> reflected in `b`. This can cause unexpected results, specifically in the case
+> of lists and class instances. For more information, see the section on lists.
 
 ## Exiting early
 
@@ -235,7 +233,7 @@ print string.upcase("hello")
 print "hello" |> string.upcase()
 ```
 
-The last expression in a pipe sequence can be accessed using the `it` keyword.
+The previous expression in a pipeline can be accessed using the `it` keyword.
 
 ```zen
 print "68"
@@ -245,7 +243,7 @@ print "68"
 
 ## Lists
 
-zen has lists; called dynamic arrays in other languages, to store values.
+A list is a ordered, indexable sequence of values.
 
 Lists can be created using a list literal:
 
@@ -448,8 +446,10 @@ for you to use.
 - `str(x)`: Convert any value into a string.
 - `parse(s)`: Attempt to parse a string `s` into a floating point number.
 - `copy(x)`: Return a copy of `x`.
-- `dirname()`: Return the directory containing the running program, or an empty string if running a REPL.
-- `filename()`: Return the name of the running program, or an empty string if running a REPL.
+- `dirname()`: Return the directory containing the running program, or an empty 
+    string if running a REPL.
+- `filename()`: Return the name of the running program, or an empty string if 
+    running a REPL.
 
 ### module `time`
 
@@ -489,7 +489,8 @@ for you to use.
 ### module `string`
 
 - `chomp(s)`: Trim whitespace from both sides of a string `s`.
-- `replace(s, o, n)`: Replace all instances of a substring `o` in a string `s` with the substring `n`.
+- `replace(s, o, n)`: Replace all instances of a substring `o` in a string `s`
+    with the substring `n`.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
