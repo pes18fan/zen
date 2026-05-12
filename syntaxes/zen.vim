@@ -22,6 +22,7 @@ syn keyword zenBuiltin puts len parse
 
 " Strings (Matches "..." and handles escaped quotes \")
 syn region zenString start=/"/ skip=/\\./ end=/"/
+syn region zenString start=/'/ skip=/\\./ end=/'/
 
 " Numbers (Matches integers and floats)
 syn match zenNumber "\v<\d+(\.\d+)?>\ze"
@@ -31,6 +32,7 @@ syn match zenOperator "\v\+"
 syn match zenOperator "\v-"
 syn match zenOperator "\v\*"
 syn match zenOperator "\v/"
+syn match zenOperator "\v\%"
 syn match zenOperator "\v\="
 syn match zenOperator "\v\=\="
 syn match zenOperator "\v\<"
