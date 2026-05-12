@@ -297,32 +297,6 @@ copy_value :: proc(gc: ^GC, value: Value) -> Value {
 	return nil_val()
 }
 
-// Copy a value if it is shared i.e. its refcount is more than 1 (more than one
-// variable refers to it.)
-copy_if_shared :: proc(gc: ^GC, value: Value) -> Value {
-	if !is_obj(value) {return value}
-
-	obj := as_obj(value)
-	str, was_allocation := stringify_object(obj)
-	defer if was_allocation {delete(str)}
-	if obj.refcount <= 1 {
-		return value
-	}
-
-	obj.refcount -= 1
-	assert(obj.refcount >= 0, "refcount cannot be less than zero\n")
-	dbg_printfln(
-		"%p copy shared object %s, refcount %d -> %d",
-		obj,
-		str,
-		obj.refcount + 1,
-		obj.refcount,
-	)
-	new_obj := copy_value(gc, value)
-	as_obj(new_obj).refcount = 1
-	return new_obj
-}
-
 /* Print out `value` in a human-readable format. */
 print_value :: proc(value: Value) {
 	str, was_allocation := stringify_value(value)
