@@ -11,7 +11,7 @@ ProcError = subprocess.CalledProcessError
 DEBUG_FLAGS = "-debug -o:none"
 RELEASE_FLAGS = "-o:speed"
 CHAOTIC_FLAGS = f"{RELEASE_FLAGS} -define:CHAOTIC=true"
-PACKAGE = "zen/"
+TARGET = "zen"
 
 OUT = "zen"
 DBG_OUT = "dzen"
@@ -100,7 +100,7 @@ def create_debug_build():
 
         os.makedirs("bin/dbg", exist_ok=True)
         subprocess.run(
-            f"{OC} build {PACKAGE} -out:bin/dbg/{DBG_OUT} {DEBUG_FLAGS}".split(), check=True
+            f"{OC} build {TARGET} -out:bin/dbg/{DBG_OUT} {DEBUG_FLAGS}".split(), check=True
         )
     except ProcError as e:
         print(f"Error while creating debug build: {e}", file=sys.stderr)
@@ -115,7 +115,7 @@ def create_release_build():
         os.makedirs("bin/rel", exist_ok=True)
         os.makedirs("bin/test", exist_ok=True)
         subprocess.run(
-            f"{OC} build {PACKAGE} -out:bin/rel/{OUT} {RELEASE_FLAGS}".split(), check=True
+            f"{OC} build {TARGET} -out:bin/rel/{OUT} {RELEASE_FLAGS}".split(), check=True
         )
         shutil.copy(f"bin/rel/{OUT}", "bin/test/")
     except ProcError as e:
@@ -131,7 +131,7 @@ def create_chaotic_build():
         os.makedirs("bin/chaotic", exist_ok=True)
         subprocess.run(
             f"{OC} build {
-                PACKAGE} -out:bin/chaotic/{OUT} {RELEASE_FLAGS} -define:CHAOTIC=true".split(),
+                TARGET} -out:bin/chaotic/{OUT} {RELEASE_FLAGS} -define:CHAOTIC=true".split(),
             check=True,
         )
     except ProcError as e:
@@ -144,7 +144,7 @@ def test():
 
     print("Running unit tests:")
     try:
-        subprocess.run(f"{OC} test ../../{PACKAGE}".split(),
+        subprocess.run(f"{OC} test ../../{TARGET}".split(),
                        cwd="bin/test/", check=True)
     except ProcError as e:
         print(f"Error when running unit tests: {e}", file=sys.stderr)
@@ -182,7 +182,7 @@ def generate_docs():
     os.makedirs("doc/", exist_ok=True)
     with open("doc/docs.txt", "w+") as doc_file:
         try:
-            subprocess.run(f"{OC} doc {PACKAGE}".split(),
+            subprocess.run(f"{OC} doc {TARGET}".split(),
                            stdout=doc_file, check=True)
         except ProcError as e:
             print(f"Error when generating docs: {e}", file=sys.stderr)
