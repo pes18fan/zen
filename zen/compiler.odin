@@ -30,7 +30,6 @@ Parser :: struct {
 	previous:         Token,
 	had_error:        bool,
 	panic_mode:       bool,
-	compiling_chunk:  ^Chunk,
 	current_compiler: ^Compiler,
 	current_class:    ^ClassCompiler,
 	globals:          ^Table,
@@ -176,7 +175,7 @@ current_chunk :: proc(p: ^Parser) -> ^Chunk {
 /* Report an error at the provided token with a message. */
 @(private = "file")
 error_at :: proc(p: ^Parser, token: ^Token, message: string) {
-	if p.panic_mode do return
+	if p.panic_mode {return}
 	p.panic_mode = true
 	color_red(os.stderr, "compile error ")
 
@@ -497,6 +496,7 @@ end_scope :: proc(p: ^Parser) {
 		if curr.locals[curr.local_count - 1].is_captured {
 			emit_opcode(p, .OP_CLOSE_UPVALUE)
 		} else {
+			dbg_println("popped: ", curr.locals[curr.local_count - 1].name)
 			emit_pop(p)
 		}
 		p.current_compiler.local_count -= 1
@@ -697,7 +697,10 @@ only parsed as 64-bit floats, which is subject to change.
 number :: proc(p: ^Parser, can_assign: bool) {
 	value, ok := strconv.parse_f64(p.previous.lexeme)
 	if !ok {
-		error(p, fmt.tprintf("Failed to parse '%s' into f64.", p.previous.lexeme))
+		error(
+			p,
+			fmt.tprintf("'%s' is not a valid 64-bit floating point number.", p.previous.lexeme),
+		)
 	}
 
 	emit_constant(p, number_val(value))

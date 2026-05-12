@@ -507,7 +507,7 @@ tok_ident :: proc(l: ^Lexer) -> Token {
 
 /* Consume a number. */
 @(private = "file")
-tok_number :: proc(l: ^Lexer) -> Token {
+tok_number :: proc(l: ^Lexer) -> Maybe(Token) {
 	// Consume digits.
 	for is_digit(peek(l)) {
 		advance(l)
@@ -519,6 +519,22 @@ tok_number :: proc(l: ^Lexer) -> Token {
 
 		for is_digit(peek(l)) {
 			advance(l)
+		}
+	}
+
+	// Consume the exponential part, if it exists.
+	// `xey` means `x` times 10 to the power of `y`
+	if peek(l) == 'e' && is_digit(peek_next(l)) {
+		advance(l)
+
+		for is_digit(peek(l)) {
+			advance(l)
+		}
+
+		// You cannot have a fractional part here.
+		if peek(l) == '.' {
+			syntax_error(l, "Invalid number.")
+			return nil
 		}
 	}
 

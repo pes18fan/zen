@@ -472,11 +472,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			}
 		case .OP_SET_PROPERTY:
 			{
-				if is_module(vm_peek(vm, 1)) {
-					vm_panic(vm, "Cannot change the values of a module.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
 				if !is_instance(vm_peek(vm, 1)) {
 					vm_panic(vm, "Only instances have fields.")
 					return .INTERPRET_RUNTIME_ERROR
@@ -821,6 +816,10 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						}
 					}
 
+					// FIXME: the underlying string doesn't actually get set
+					// because the pointer to it cannot be mutated without
+					// causing crashes when freeing the objects
+					// only easy way to fix is with an AST, gotta work on that!!
 					res := strings.to_string(sb)
 					vm_push(vm, obj_val(copy_string(vm.gc, res)))
 				}
