@@ -496,7 +496,6 @@ end_scope :: proc(p: ^Parser) {
 		if curr.locals[curr.local_count - 1].is_captured {
 			emit_opcode(p, .OP_CLOSE_UPVALUE)
 		} else {
-			dbg_println("popped: ", curr.locals[curr.local_count - 1].name)
 			emit_pop(p)
 		}
 		p.current_compiler.local_count -= 1
