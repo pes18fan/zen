@@ -137,8 +137,9 @@ def create_chaotic_build():
         exit(1)
 
 
-def test():
-    create_release_build()
+def test(recompile: bool):
+    if recompile:
+        create_release_build()
 
     print("Running unit tests:")
     try:
@@ -242,7 +243,10 @@ def main():
 
     # Test all command
     test_parser = subparsers.add_parser("test", help="run all tests")
-    test_parser.set_defaults(func=test)
+    test_parser.add_argument(
+        "--recompile", action="store_true", help="recompile the compiler before testing"
+    )
+    test_parser.set_defaults(func=lambda args: test(args.recompile))
 
     # Run program command
     run_parser = subparsers.add_parser("run", help="run the debug build")
