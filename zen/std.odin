@@ -706,7 +706,7 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 /* Return the sum of the values in the list. */
 sum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_list(args[0]) {
-		vm_panic(vm, "Cannot fold a %v.", type_of_value(args[0]))
+		vm_panic(vm, "Cannot sum up a %v.", type_of_value(args[0]))
 		return nil_val(), false
 	}
 
