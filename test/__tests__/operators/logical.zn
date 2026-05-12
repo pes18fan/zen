@@ -1,0 +1,23 @@
+puts(true and true)   // expect: true
+puts(true and false)  // expect: false
+puts(false and true)  // expect: false
+puts(false and false) // expect: false
+
+puts(true or true)   // expect: true
+puts(true or false)  // expect: true
+puts(false or true)  // expect: true
+puts(false or false) // expect: false
+
+// right side not evaluated if left determines result (short circuiting)
+var x = 0
+false and (x = 1)
+puts(x) // expect: 0
+
+true or (x = 2)
+puts(x) // expect: 0
+
+// Values returned by and/or other than booleans
+puts(1 and 2)    // expect: 2
+puts(nil and 1)  // expect: nil
+puts(nil or 1)   // expect: 1
+puts(false or 2) // expect: 2

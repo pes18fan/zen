@@ -1,0 +1,6 @@
+use "string"
+
+val result = "hello" |> string.upcase()
+if result == "HELLO" {
+    puts("match") // expect: match
+}

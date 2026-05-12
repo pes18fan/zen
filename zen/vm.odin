@@ -41,31 +41,34 @@ VM :: struct {
      * can import each other as modules, and so it is necessary to disallow
      * cyclic imports. Value is the file path for a file and "REPL" for a REPL
      * since you can't import REPLs. */
-	path:          string,
+	path:             string,
 
 	/* Just the path, except with the file extension and other path stuff stripped
      * out, like in a module name. For instance, for a path "a/b/c.zn", the name
      * will be just "c". Used for working with user-defined modules, but NOT
      * for distinguishing them. For a REPL, this string is "REPL". */
-	name:          string,
+	name:             string,
 
 	/* The chunk being interpreted. */
-	chunk:         ^Chunk,
+	chunk:            ^Chunk,
 
 	/* The stack of values. */
-	stack:         [STACK_MAX]Value,
-	stack_top:     int,
+	stack:            [STACK_MAX]Value,
+	stack_top:        int,
 
 	/* Call frames present in the chunk. */
-	frames:        [FRAMES_MAX]CallFrame,
-	frame_count:   int,
+	frames:           [FRAMES_MAX]CallFrame,
+	frame_count:      int,
+
+	/* Table of compile-time global variables; necessary for the REPL. */
+	compiler_globals: Table,
 
 	/* Linked list of all open upvalues. */
-	open_upvalues: ^ObjUpvalue,
-	gc:            ^GC,
+	open_upvalues:    ^ObjUpvalue,
+	gc:               ^GC,
 
 	/* Arguments passed to the program. */
-	args:          ^ObjList,
+	args:             ^ObjList,
 }
 
 /* The result of the interpreting. */
@@ -165,12 +168,13 @@ reset_stack :: proc(vm: ^VM) {
 /* Returns a newly created VM. */
 init_VM :: proc() -> VM {
 	vm := VM {
-		name          = "",
-		path          = "",
-		chunk         = nil,
-		open_upvalues = nil,
-		stack_top     = -1,
-		frame_count   = 0,
+		name             = "",
+		path             = "",
+		chunk            = nil,
+		open_upvalues    = nil,
+		compiler_globals = init_table(),
+		stack_top        = -1,
+		frame_count      = 0,
 	}
 
 	return vm
@@ -178,7 +182,7 @@ init_VM :: proc() -> VM {
 
 /* Free's the VM's memory. */
 free_VM :: proc(vm: ^VM) {
-	// nothing dynamic to free actually
+	free_table(&vm.compiler_globals)
 }
 
 /* Reads a byte from the chunk and increments the instruction pointer. */
@@ -341,10 +345,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			vm_push(vm, mem.ptr_offset(frame.slots, slot)^)
 		case .OP_SET_LOCAL:
 			slot := read_byte(frame)
-
-			location := mem.ptr_offset(frame.slots, slot)
-			update_refcounts_on_assignment(vm, location)
-			location^ = vm_peek(vm, 0)
+			mem.ptr_offset(frame.slots, slot)^ = vm_peek(vm, 0)
 		case .OP_GET_GLOBAL:
 			name := read_string(frame)
 
@@ -358,35 +359,20 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			vm_push(vm, value)
 		case .OP_DEFINE_GLOBAL:
 			name := read_string(frame)
-
-			// assignee is `nil` because this is a brand new variable
-			update_refcounts_on_assignment(vm, nil)
-
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			vm_pop(vm)
 		case .OP_DEFINE_GLOBAL_LONG:
 			name := read_string_long(frame)
-			update_refcounts_on_assignment(vm, nil)
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 			vm_pop(vm)
 		case .OP_SET_GLOBAL:
 			name := read_string(frame)
-
-			// PERF: double table operations add overhead on global variable
-			// assignment cuz of the addition of CoW for value semantics, will
-			// be fixed after zen transitions to using an AST
-			key, _ := table_get(&vm.gc.globals, name)
-			update_refcounts_on_assignment(vm, &key)
 
 			/* No runtime check is done for variable existence since that is
                  * done at compile time. */
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 		case .OP_SET_GLOBAL_LONG:
 			name := read_string_long(frame)
-
-			key, _ := table_get(&vm.gc.globals, name)
-			update_refcounts_on_assignment(vm, &key)
-
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 		case .OP_GET_UPVALUE:
 			{
@@ -396,12 +382,8 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 		case .OP_SET_UPVALUE:
 			{
 				slot := read_byte(frame)
-
-				location := frame.closure.upvalues[slot].location
-				update_refcounts_on_assignment(vm, location)
-
 				// Take the value on top of the stack and store it into the slot.
-				location^ = vm_peek(vm, 0)
+				frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
 			}
 		/* This opcode is used both to get properties of an instance and to get
          * values in a module. */
@@ -491,20 +473,10 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			}
 		case .OP_SET_PROPERTY:
 			{
-				if is_module(vm_peek(vm, 1)) {
-					vm_panic(vm, "Cannot change the values of a module.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
 				if !is_instance(vm_peek(vm, 1)) {
 					vm_panic(vm, "Only instances have fields.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
-
-				/* Copy the instance if it is shared. */
-				value := vm_pop(vm) // Field value.
-				vm_push(vm, copy_if_shared(vm.gc, vm_pop(vm)))
-				vm_push(vm, value) // Field value.
 
 				/* Get the instance, which is at this moment the 2nd to the top
 				 * value on the stack. */
@@ -514,7 +486,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				table_set(&instance.fields, read_string(frame), vm_peek(vm, 0))
 
 				/* Pop the value that we just stored as a field. */
-				value = vm_pop(vm)
+				value := vm_pop(vm)
 
 				/* Pop the instance off the stack. */
 				vm_pop(vm)
@@ -535,7 +507,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
-				vm_push(vm, copy_if_shared(vm.gc, vm_pop(vm)))
 				instance := as_instance(vm_peek(vm, 1))
 				table_set(&instance.fields, read_string_long(frame), vm_peek(vm, 0))
 
@@ -549,7 +520,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			superclass := as_class(vm_pop(vm))
 
 			/* Look up the method in the superclass and push it to the
-		     * stack as an ObjBoundMethod. */
+				 * stack as an ObjBoundMethod. */
 			if !bind_method(vm, superclass, name) {
 				return .INTERPRET_RUNTIME_ERROR
 			}
@@ -564,43 +535,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			vm_push(vm, pipeline_it)
 		case .OP_SET_IT:
 			pipeline_it = vm_pop(vm)
-		case .OP_INCREMENT_REFCOUNT:
-			if is_obj(vm_peek(vm, 0)) {
-
-				val := vm_pop(vm)
-				obj := as_obj(val)
-
-				obj.refcount += 1
-
-				str, was_allocation := stringify_object(obj)
-				defer if was_allocation {delete(str)}
-				dbg_printfln(
-					"%p assign %s, refcount %d -> %d",
-					obj,
-					str,
-					obj.refcount - 1,
-					obj.refcount,
-				)
-
-				vm_push(vm, obj_val(obj))
-			}
-		case .OP_DECREMENT_REFCOUNT:
-			if is_obj(vm_peek(vm, 0)) {
-				val := vm_pop(vm)
-				obj := as_obj(val)
-				obj.refcount -= 1
-
-				str, was_allocation := stringify_object(obj)
-				defer if was_allocation {delete(str)}
-				dbg_printfln(
-					"%p %s out of scope, refcount %d -> %d",
-					obj,
-					str,
-					obj.refcount + 1,
-					obj.refcount,
-				)
-				vm_push(vm, obj_val(obj))
-			}
 		case .OP_EQUAL:
 			b := vm_pop(vm)
 			a := vm_pop(vm)
@@ -826,7 +760,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				}
 
 				if is_list(a) {
-					list := as_list(copy_if_shared(vm.gc, a))
+					list := as_list(a)
 
 					if int(index) >= list.items.count {
 						vm_panic(
@@ -1275,33 +1209,6 @@ vm_pop :: #force_inline proc(vm: ^VM) -> Value #no_bounds_check {
 /* Peek at a certain distance from the top of the stack. */
 vm_peek :: #force_inline proc(vm: ^VM, distance: int) -> Value #no_bounds_check {
 	return vm.stack[vm.stack_top - distance]
-}
-
-/* Update refcounts on assignment of objects. */
-update_refcounts_on_assignment :: proc(vm: ^VM, assignee: ^Value) {
-	if assignee != nil && is_obj(assignee^) {
-		obj := as_obj(assignee^)
-		obj.refcount -= 1
-		assert(obj.refcount >= 0, "refcount cannot be less than zero\n")
-
-		str, was_alloc := stringify_object(obj)
-		defer if was_alloc {delete(str)}
-		dbg_printfln("%p unassign %s, refcount %d -> %d", obj, str, obj.refcount + 1, obj.refcount)
-
-		assignee^ = obj_val(obj)
-	}
-
-	if is_obj(vm_peek(vm, 0)) {
-		new_val := vm_pop(vm)
-		obj := as_obj(new_val)
-		obj.refcount += 1
-
-		str, was_alloc := stringify_object(obj)
-		defer if was_alloc {delete(str)}
-		dbg_printfln("%p assign %s, refcount %d -> %d", obj, str, obj.refcount - 1, obj.refcount)
-
-		vm_push(vm, obj_val(obj))
-	}
 }
 
 /* Returns true if provided value is falsey. */

@@ -1,0 +1,5 @@
+func double(x) => x * 2
+func add_one(x) => x + 1
+
+puts(5 |> double() |> add_one()) // expect: 11
+puts(3 |> add_one() |> double()) // expect: 8

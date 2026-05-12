@@ -1,0 +1,19 @@
+use "time"
+
+func make_counter() {
+    var n = 0
+    return func() {
+        n = n + 1
+        return n
+    }
+}
+
+var start = time.clock_ms()
+var counter = make_counter()
+var i = 0
+while i < 1000000 {
+    counter()
+    i = i + 1
+}
+puts(counter())
+puts(time.clock_ms() - start)

@@ -139,8 +139,9 @@ def create_chaotic_build():
         exit(1)
 
 
-def test():
-    create_release_build()
+def test(recompile: bool):
+    if recompile:
+        create_release_build()
 
     print("Running unit tests:")
     try:
@@ -161,8 +162,9 @@ def test():
         exit(1)
 
 
-def benchmark():
-    create_release_build()
+def benchmark(recompile: bool):
+    if recompile:
+        create_release_build()
 
     print("Starting up the benchmark runner..")
     try:
@@ -228,10 +230,6 @@ def main():
     )
     chaotic_parser.set_defaults(func=create_chaotic_build)
 
-    # benchmark
-    bench_parser = subparsers.add_parser("bench", help="run benchmarks")
-    bench_parser.set_defaults(func=benchmark)
-
     # clean
     clean_parser = subparsers.add_parser("clean", help="clean build artifacts")
     clean_parser.set_defaults(func=clean)
@@ -244,7 +242,17 @@ def main():
 
     # Test all command
     test_parser = subparsers.add_parser("test", help="run all tests")
-    test_parser.set_defaults(func=test)
+    test_parser.add_argument(
+        "--recompile", action="store_true", help="recompile the compiler before testing"
+    )
+    test_parser.set_defaults(func=lambda args: test(args.recompile))
+
+    # benchmark
+    bench_parser = subparsers.add_parser("bench", help="run benchmarks")
+    bench_parser.add_argument(
+        "--recompile", action="store_true", help="recompile the compiler before benchmarking"
+    )
+    bench_parser.set_defaults(func=lambda args: benchmark(args.recompile))
 
     # Run program command
     run_parser = subparsers.add_parser("run", help="run the debug build")

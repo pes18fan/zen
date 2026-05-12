@@ -1,0 +1,8 @@
+puts(not true)   // expect: false
+puts(not false)  // expect: true
+puts(not nil)    // expect: true
+puts(not 0)      // expect: false
+puts(not "")     // expect: false
+puts(-5)         // expect: -5
+puts(-(-5))      // expect: 5
+puts(-(3 * 2))   // expect: -6

@@ -1,0 +1,21 @@
+func make_counter() {
+    var count = 0
+    func increment() {
+        count = count + 1
+        return count
+    }
+    return increment
+}
+
+var counter = make_counter()
+puts(counter()) // expect: 1
+puts(counter()) // expect: 2
+puts(counter()) // expect: 3
+
+// Two independent counters do not share state
+var a = make_counter()
+var b = make_counter()
+puts(a()) // expect: 1
+puts(b()) // expect: 1
+puts(a()) // expect: 2
+puts(b()) // expect: 2

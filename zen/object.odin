@@ -20,21 +20,7 @@ ObjType :: enum {
 /* An object allocated on the heap. */
 Obj :: struct {
 	type:      ObjType,
-
-	/* Whether the object is reachable. Usually false, but set to true during
-     * GC runs if the object is reachable; any objects having this as false
-     * during that time get freed. */
 	is_marked: bool,
-
-	/* How many names is this object bound to? Used for CoW (Copy-on-Write)
-     * semantics, which allows variables to reference each other as much
-     * as they wish and copy exactly once if they get modified. 0 if the object
-     * isn't bound to any name, 1 if one variable references it, more than 1
-     * if multiple variables reference it. Reset to 1 if a variable with a higher
-     * value is modified.
-     *
-     * The refcount is NOT used for GC. */
-	refcount:  int,
 	next:      ^Obj,
 }
 
@@ -278,7 +264,6 @@ allocate_obj :: proc(gc: ^GC, $T: typeid, type: ObjType) -> ^Obj {
 	obj := new(T)
 	obj.type = type
 	obj.is_marked = false
-	obj.refcount = 0
 
 	obj.next = gc.objects
 	gc.objects = obj

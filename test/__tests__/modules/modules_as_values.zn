@@ -1,0 +1,5 @@
+use "math"
+
+val m = math
+puts(m.floor(3.7)) // expect: 3
+puts(typeof(math)) // expect: module

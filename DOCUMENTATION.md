@@ -506,6 +506,8 @@ for you to use.
 > [!NOTE]
 > All these functions mutate the list in-place and return the mutated list.
 
+- `sum(l)`: Reduce a list of numbers to its sum.
+
 ## The chaotic stuff
 
 You can get these additional cursed features by compiling `zen` while defining

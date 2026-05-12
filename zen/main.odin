@@ -83,9 +83,8 @@ repl :: proc(vm: ^VM) -> int {
 		ic.ic_history_add(raw)
 
 		line := fmt.tprintf("%s\n", line_str)
-		ic.ic_free(rawptr(raw))
-
 		interpret(vm, vm.gc, line)
+		ic.ic_free(rawptr(raw))
 	}
 
 	return 0

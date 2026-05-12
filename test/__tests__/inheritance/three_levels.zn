@@ -1,0 +1,20 @@
+// DRAFT
+// Not run cuz it starts an infinite loop for some reason
+class A {
+    method() { return "A" }
+    a_only() { return "a_only" }
+}
+
+class B < A {
+    method() { return "B" }
+    b_only() { return "b_only" }
+}
+
+class C < B {
+    method() { return "C" }
+}
+
+val c = C()
+puts(c.method())  // expect: C
+puts(c.b_only())  // expect: b_only
+puts(c.a_only())  // expect: a_only

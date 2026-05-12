@@ -1,14 +1,15 @@
+puts(typeof(nil)) // expect: nil
 puts(typeof(1)) // expect: number
-puts(typeof(1.5)) // expect: number
+puts(typeof(3.14)) // expect: number
 puts(typeof(true)) // expect: boolean
 puts(typeof(false)) // expect: boolean
-puts(typeof(nil)) // expect: nil
 puts(typeof("hello")) // expect: string
+puts(typeof([])) // expect: list
 puts(typeof([1, 2])) // expect: list
 
 class Foo {}
 puts(typeof(Foo)) // expect: class
 puts(typeof(Foo())) // expect: instance
 
-func a() {}
-puts(typeof(a)) // expect: function
+func bar() {}
+puts(typeof(bar)) // expect: function

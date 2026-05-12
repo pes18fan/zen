@@ -1,0 +1,24 @@
+// DRAFT
+// Goes into an infinite loop...
+use "list"
+
+class Builder {
+    init() { 
+        this.parts = [] 
+    }
+
+    add(part) {
+        list.push(this.parts, part)
+        return this
+    }
+
+    build() => return this.parts
+}
+
+val b = Builder()
+val result = b
+    .add("a")
+    .add("b")
+    .add("c")
+    .build()
+puts(result) // expect: [a, b, c]

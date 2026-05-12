@@ -1,0 +1,13 @@
+func outer() {
+    var x = "outer"
+    func middle() {
+        var y = "middle"
+        func inner() {
+            return x + " " + y
+        }
+        return inner
+    }
+    return middle
+}
+
+puts(outer()()()) // expect: outer middle

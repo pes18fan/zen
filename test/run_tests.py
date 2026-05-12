@@ -32,6 +32,7 @@ tests = 0
 passed = 0
 failed = 0
 failed_paths = []
+draft_paths = []
 
 
 def print_header():
@@ -102,6 +103,7 @@ def read_expected_output(path):
         for line in file:
             if "// DRAFT" in line.strip():
                 is_draft = True
+                draft_paths.append(path)
                 break
 
             if "// expect:" in line.strip():
@@ -148,12 +150,14 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         exit(0)
 
-    print("\n")
-    print(f"Total tests: {tests}")
+    print()
+    print(f"Total tests run: {tests}")
+    print("Draft tests not run:")
+    for path in draft_paths:
+        print(f"\t{path}")
+    print()
     if failed > 0:
         print(f"{COL_RED}FAILED{RESET}: {failed} tests failed.")
-
-        print()
         print("Failed tests:")
         for path in failed_paths:
             print(f"\t{path}")

@@ -1,0 +1,5 @@
+var ran = false
+while false {
+    ran = true
+}
+puts(ran) // expect: false

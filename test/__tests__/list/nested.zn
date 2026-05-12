@@ -1,0 +1,8 @@
+var matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+puts(matrix[0][0]) // expect: 1
+puts(matrix[1][2]) // expect: 6
+puts(matrix[2][1]) // expect: 8
+
+matrix[0][1] = 99
+puts(matrix[0][1]) // expect: 99
+puts(matrix[0][0]) // expect: 1

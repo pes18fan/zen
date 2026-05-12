@@ -1,0 +1,11 @@
+puts(1 + 2)       // expect: 3
+puts(10 - 3)      // expect: 7
+puts(4 * 5)       // expect: 20
+puts(15 / 3)      // expect: 5
+puts(10 % 3)      // expect: 1
+puts(6 % 3)       // expect: 0
+puts(2 + 3 * 4)   // expect: 14
+puts((2 + 3) * 4) // expect: 20
+puts(-5 + 3)      // expect: -2
+puts(-(3 + 2))    // expect: -5
+puts(10 / 4)      // expect: 2.500

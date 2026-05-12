@@ -66,6 +66,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 			append(&module_functions, ModuleFunction{"pop", pop_native, 1})
 			append(&module_functions, ModuleFunction{"remove_last", remove_last_native, 1})
 			append(&module_functions, ModuleFunction{"sort", sort_native, 1})
+			append(&module_functions, ModuleFunction{"sum", sum_native, 1})
 		}
 	case .STRING:
 		{
@@ -572,7 +573,6 @@ push_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
-	args[0] = copy_if_shared(vm.gc, args[0])
 	list := as_list(args[0])
 	item := args[1]
 
@@ -587,7 +587,6 @@ remove_last_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bo
 		return nil_val(), false
 	}
 
-	args[0] = copy_if_shared(vm.gc, args[0])
 	list := as_list(args[0])
 
 	if list.items.count == 0 {
@@ -606,7 +605,6 @@ pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
-	args[0] = copy_if_shared(vm.gc, args[0])
 	list := as_list(args[0])
 
 	if list.items.count == 0 {
@@ -662,8 +660,27 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
-	args[0] = copy_if_shared(vm.gc, args[0])
 	list := as_list(args[0])
 	_sort(&list.items.values, 0, list.items.count - 1)
 	return args[0], true
+}
+
+/* Return the sum of the values in the list. */
+sum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_list(args[0]) {
+		vm_panic(vm, "Cannot fold a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	list := as_list(args[0])
+	sum: f64 = 0
+	for value in list.items.values {
+		if !is_number(value) {
+			vm_panic(vm, "Can only sum up a list of numbers.")
+			return nil_val(), false
+		}
+		sum += as_number(value)
+	}
+
+	return number_val(sum), true
 }

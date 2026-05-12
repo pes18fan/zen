@@ -168,10 +168,6 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return constant_instruction("OP_DEFINE_GLOBAL", c, offset)
 	case .OP_DEFINE_GLOBAL_LONG:
 		return long_constant_instruction("OP_DEFINE_GLOBAL_LONG", c, offset)
-	case .OP_INCREMENT_REFCOUNT:
-		return simple_instruction("OP_INCREMENT_REFCOUNT", offset)
-	case .OP_DECREMENT_REFCOUNT:
-		return simple_instruction("OP_DECREMENT_REFCOUNT", offset)
 	case .OP_EQUAL:
 		return simple_instruction("OP_EQUAL", offset)
 	case .OP_SET_GLOBAL:

@@ -1,0 +1,4 @@
+val s = ""
+puts(len(s))     // expect: 0
+puts(s + "hi")   // expect: hi
+puts("hi" + s)   // expect: hi

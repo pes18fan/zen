@@ -5,3 +5,4 @@ var i = list.pop(l)
 
 puts(i) // expect: 2
 puts(len(l)) // expect: 1
+puts(l) // expect: [1]

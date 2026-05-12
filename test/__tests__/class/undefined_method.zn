@@ -1,0 +1,6 @@
+// DRAFT
+// another infinite loop??????
+class Foo {
+    bar() { return 1; }
+}
+Foo().baz() // ERR: Undefined property 'baz'.

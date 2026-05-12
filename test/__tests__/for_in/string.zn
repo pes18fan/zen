@@ -1,9 +1,16 @@
 // Iterating over a string gives individual characters
+use "list"
+
+var chars = []
 for c in "hello" {
     puts(c)
+    list.push(chars, c)
 }
 // expect: h
 // expect: e
 // expect: l
 // expect: l
 // expect: o
+
+puts(chars) // expect: [h, e, l, l, o]
+puts(len(chars))    // expect: 5

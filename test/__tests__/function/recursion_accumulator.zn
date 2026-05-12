@@ -1,0 +1,8 @@
+func sum_to(n) {
+    if n <= 0 { return 0; }
+    return n + sum_to(n - 1)
+}
+
+puts(sum_to(5))   // expect: 15
+puts(sum_to(10))  // expect: 55
+// puts(sum_to(100)) expects 5050 (can't run tho cuz stack overflows)
