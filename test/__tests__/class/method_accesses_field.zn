@@ -1,0 +1,13 @@
+class Rectangle {
+    init(w, h) {
+        this.width = w
+        this.height = h
+    }
+
+    area() => this.width * this.height
+    perimeter() => 2 * (this.width + this.height)
+}
+
+val r = Rectangle(3, 4)
+puts(r.area())      // expect: 12
+puts(r.perimeter()) // expect: 14

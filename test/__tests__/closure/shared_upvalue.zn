@@ -1,0 +1,19 @@
+// Multiple closures sharing an upvalue
+var f
+var g
+
+{
+    var x = 0
+    f = func() {
+        x = x + 1
+        return x
+    }
+    g = func() {
+        return x
+    }
+}
+
+puts(f())   // expect: 1
+puts(g())   // expect: 1
+puts(f())   // expect: 2
+puts(g())   // expect: 2

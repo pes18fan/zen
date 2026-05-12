@@ -1,0 +1,12 @@
+puts(1 < 2)   // expect: true
+puts(2 < 1)   // expect: false
+puts(1 <= 1)  // expect: true
+puts(2 <= 1)  // expect: false
+puts(2 > 1)   // expect: true
+puts(1 > 2)   // expect: false
+puts(1 >= 1)  // expect: true
+puts(1 >= 2)  // expect: false
+puts(1 == 1)  // expect: true
+puts(1 == 2)  // expect: false
+puts(1 != 2)  // expect: true
+puts(1 != 1)  // expect: false

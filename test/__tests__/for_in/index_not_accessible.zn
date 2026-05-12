@@ -1,0 +1,5 @@
+// DRAFT
+// Not sure how I should go about making __idx (and __iter) inaccessible
+for x in [1, 2, 3] {
+    puts(__idx) // ERR: Undefined variable '__idx'
+}

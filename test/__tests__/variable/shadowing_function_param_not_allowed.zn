@@ -1,0 +1,6 @@
+func test(x) {
+    puts(x)  // expect: original
+    var x = "shadowed"
+    puts(x)  // ERR: A variable with this name in this scope already exists.
+}
+test("original")

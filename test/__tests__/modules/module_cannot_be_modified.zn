@@ -1,0 +1,3 @@
+use "math"
+
+math.floor = nil // ERR: Can only set a final variable once.

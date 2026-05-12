@@ -1,3 +1,6 @@
+puts(parse("0"))   // expect: 0
+puts(parse("-1"))   // expect: -1
 puts(parse("123.45")) // expect: 123.450
 puts(parse("3.14")) // expect: 3.140
 puts(parse("7.5")) // expect: 7.500
+puts(parse("1e2"))  // expect: 100

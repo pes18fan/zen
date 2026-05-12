@@ -1,0 +1,5 @@
+var a
+var b
+puts(a = b = 5) // expect: 5
+puts(a)         // expect: 5
+puts(b)         // expect: 5

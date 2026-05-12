@@ -1,0 +1,9 @@
+func apply(f, x) {
+    return f(x)
+}
+
+func double(x) => x * 2
+func square(x) => x * x
+
+puts(apply(double, 5)) // expect: 10
+puts(apply(square, 5)) // expect: 25

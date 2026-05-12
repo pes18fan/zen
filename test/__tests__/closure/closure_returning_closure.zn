@@ -1,0 +1,10 @@
+func make_adder(x) {
+    return func(y) => x + y
+}
+
+val add5 = make_adder(5)
+val add10 = make_adder(10)
+
+puts(add5(3))  // expect: 8
+puts(add10(3)) // expect: 13
+puts(add5(add10(1))) // expect: 16

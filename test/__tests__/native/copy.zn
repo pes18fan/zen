@@ -1,6 +1,7 @@
+use "list"
+
 var a = [1, 2, 3]
 var b = copy(a)
-use "list"
 list.push(b, 4)
 puts(a) // expect: [1, 2, 3]
 puts(b) // expect: [1, 2, 3, 4]

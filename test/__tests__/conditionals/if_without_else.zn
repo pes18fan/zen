@@ -1,0 +1,10 @@
+var x = 0
+if false {
+    x = 1
+}
+puts(x) // expect: 0
+
+if true {
+    x = 2
+}
+puts(x) // expect: 2

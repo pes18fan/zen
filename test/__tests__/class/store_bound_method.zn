@@ -1,0 +1,11 @@
+class Adder {
+    init(n) { 
+        this.n = n; 
+    }
+    add(x) => this.n + x
+}
+
+val a = Adder(5)
+val add5 = a.add
+puts(add5(3))  // expect: 8
+puts(add5(10)) // expect: 15

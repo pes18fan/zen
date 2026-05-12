@@ -1,0 +1,14 @@
+var x = 2
+var result = ""
+switch x {
+    1 => {
+        result = "one"
+        result = result + "!"
+    }
+    2 => {
+        result = "two"
+        result = result + "!"
+    }
+    else => result = "other"
+}
+puts(result) // expect: two!

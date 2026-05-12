@@ -1,0 +1,8 @@
+var count = 0
+while true {
+    count = count + 1
+    if count == 5 {
+        break
+    }
+}
+puts(count) // expect: 5

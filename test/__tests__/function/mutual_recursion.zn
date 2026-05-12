@@ -1,0 +1,17 @@
+// DRAFT
+// Currently not possible because variables are evaluated top-down, a variable
+// defined first cannot reference a variable defined afterward.
+func is_even(n) {
+    if n == 0 { return true; }
+    return is_odd(n - 1)
+}
+
+func is_odd(n) {
+    if n == 0 { return false; }
+    return is_even(n - 1)
+}
+
+puts(is_even(4)) // expect: true
+puts(is_odd(4))  // expect: false
+puts(is_even(7)) // expect: false
+puts(is_odd(7))  // expect: true

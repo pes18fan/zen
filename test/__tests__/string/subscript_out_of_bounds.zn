@@ -1,0 +1,2 @@
+var s = "hi"
+puts(s[5]) // ERR: Index out of bounds

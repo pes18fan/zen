@@ -1,0 +1,7 @@
+puts(1 == "1")     // expect: false
+puts(1 == true)    // expect: false
+puts(0 == false)   // expect: false
+puts(nil == false) // expect: false
+puts(nil == 0)     // expect: false
+puts("" == false)  // expect: false
+puts(nil == nil)   // expect: true

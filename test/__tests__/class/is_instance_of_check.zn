@@ -1,0 +1,5 @@
+class Foo {}
+class Bar {}
+
+val foo = Foo()
+puts(str(foo))    // expect: <instance of Foo>

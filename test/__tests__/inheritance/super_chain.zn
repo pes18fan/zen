@@ -1,0 +1,15 @@
+// DRAFT
+// Not run cuz it starts an infinite loop for some reason
+class A {
+    greet() { return "A" }
+}
+
+class B < A {
+    greet() { return super.greet() + "B" }
+}
+
+class C < B {
+    greet() { return super.greet() + "C" }
+}
+
+puts(C().greet()) // expect: ABC

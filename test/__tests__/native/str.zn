@@ -1,8 +1,9 @@
+puts(str(nil)) // expect: nil
 puts(str(1)) // expect: 1
 puts(str(3.14)) // expect: 3.140
 puts(str(true)) // expect: true
 puts(str(false)) // expect: false
-puts(str(nil)) // expect: nil
+puts(str([]))   // expect: []
 puts(str([1, 2, 3])) // expect: [1, 2, 3]
 
 class A {}

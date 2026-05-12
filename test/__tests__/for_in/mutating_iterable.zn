@@ -1,0 +1,11 @@
+// __tests__/for_in/mutation_during_iteration.zn
+use "list"
+
+var l = [1, 2, 3]
+var count = 0
+for x in l {
+    list.push(l, x * 10)
+    count = count + 1
+    if count == 3 { break; }
+}
+puts(count) // expect: 3
