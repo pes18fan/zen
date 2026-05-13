@@ -891,6 +891,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				if values_equal(value, frame.slots^) {
 					break
 				}
+				vm_pop(vm)
 			}
 			assert(vm.stack_top >= 0, "stack must not become empty before program end") // There should be at least the function left here
 			vm_pop(vm) // Pop the function itself.
@@ -904,8 +905,8 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			vm_push(vm, obj_val(new_class(vm.gc, name)))
 
 			/* If the current file is being imported AND the class being
-                 * compiled is set as public with the `pub` keyword, add the 
-                 * declared class into the module that's importing it. */
+             * compiled is set as public with the `pub` keyword, add the 
+             * declared class into the module that's importing it. */
 			importing_module, ok := importer.?
 			if public && ok {
 				module := importing_module.module
@@ -1154,7 +1155,7 @@ interpret :: proc(
 
 		return .INTERPRET_OK
 	} else {
-		fn, cmp_ok := compile(gc, tokens, &gc.globals)
+		fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
 		if !cmp_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}

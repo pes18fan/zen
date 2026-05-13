@@ -903,7 +903,6 @@ ast_rules: [TokenType]AstParseRule = {
 	.RSQUIRLY      = {nil, nil, .NONE},
 	.LSQUARE       = {ast_parse_list, ast_parse_subscript, .CALL},
 	.RSQUARE       = {nil, nil, .NONE},
-	.BACKSLASH     = {nil, nil, .NONE},
 	.COMMA         = {nil, nil, .NONE},
 	.DOT           = {nil, ast_parse_dot, .CALL},
 	.MINUS         = {ast_parse_unary, ast_parse_binary, .TERM},

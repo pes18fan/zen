@@ -120,7 +120,6 @@ rules := [TokenType]ParseRule {
 	TokenType.THIS          = ParseRule{this_, nil, .NONE},
 	TokenType.TRUE          = ParseRule{literal, nil, .NONE},
 	TokenType.EOF           = ParseRule{nil, nil, .NONE},
-	TokenType.BACKSLASH     = ParseRule{nil, nil, .NONE},
 	TokenType.NEWLINE       = ParseRule{nil, nil, .NONE},
 	TokenType.FAT_ARROW     = ParseRule{nil, nil, .NONE},
 	TokenType.CLASS         = ParseRule{nil, nil, .NONE},

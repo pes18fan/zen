@@ -126,6 +126,8 @@ compile_statement :: proc(cg: ^Codegen, stmt: Stmt) -> bool {
 		cg.current_line = s.token.line
 		unimplemented()
 	}
+
+	unimplemented()
 }
 
 compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
