@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:os"
 import tt "core:testing"
 
 /* A `Token` or nil. */
@@ -30,6 +31,14 @@ expect_tokens_equal :: proc(
 	}
 
 	return true, nil, nil
+}
+
+@(private = "file")
+print_tokens :: proc(f: ^os.File, tokens: []Token) {
+	for token in tokens {
+		fmt.fprintfln(f, "\t%v", token)
+	}
+	fmt.fprintln(f)
 }
 
 /* A basic test of the lexer. */
@@ -111,7 +120,7 @@ func test() {
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
 	if !are_equal {
-		tt.fail_now(t, fmt.tprintf("want %s, got %s", wanted, recieved))
+		tt.fail_now(t, fmt.tprintf("want %v, got %v", wanted, recieved))
 	}
 }
 
@@ -120,7 +129,8 @@ func test() {
 test_lexer_chained_calls :: proc(t: ^tt.T) {
 	source := `some_string
     .reverse()
-    .capitalize();`
+    .capitalize()
+    `
 
 	lx := init_lexer(source)
 	got, ok := lex(&lx)
@@ -144,6 +154,39 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
 	if !are_equal {
-		tt.fail_now(t, fmt.tprintf("want %s, got %s", wanted, recieved))
+		tt.fail_now(t, fmt.tprintf("want %v, got %v", wanted, recieved))
+	}
+}
+
+/* Test single-line block ASI for the lexer. */
+@(test)
+test_lexer_oneline_block :: proc(t: ^tt.T) {
+	source := `func a(x) { return x * 2 }`
+
+	lx := init_lexer(source)
+	got, ok := lex(&lx)
+	if !ok {
+		tt.fail_now(t, "lexer error")
+	}
+	defer delete(got)
+
+	want := []Token {
+		Token{type = .FUNC, lexeme = "func", line = 1},
+		Token{type = .IDENT, lexeme = "a", line = 1},
+		Token{type = .LPAREN, lexeme = "(", line = 1},
+		Token{type = .IDENT, lexeme = "x", line = 1},
+		Token{type = .RPAREN, lexeme = ")", line = 1},
+		Token{type = .LSQUIRLY, lexeme = "{", line = 1},
+		Token{type = .RETURN, lexeme = "return", line = 1},
+		Token{type = .IDENT, lexeme = "x", line = 1},
+		Token{type = .STAR, lexeme = "*", line = 1},
+		Token{type = .NUMBER, lexeme = "2", line = 1},
+		Token{type = .SEMI, lexeme = ";", line = 1},
+		Token{type = .RSQUIRLY, lexeme = "}", line = 1},
+	}
+
+	are_equal, wanted, recieved := expect_tokens_equal(want, got)
+	if !are_equal {
+		tt.fail_now(t, fmt.tprintf("want %v, got %v", wanted, recieved))
 	}
 }

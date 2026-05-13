@@ -1,6 +1,5 @@
 package zen
 
-import "core:fmt"
 import "core:slice"
 import tt "core:testing"
 
@@ -67,19 +66,22 @@ test_chunk_write_lines :: proc(t: ^tt.T) {
 		20,
 	}
 
-	if len(got) != len(want) {
-		tt.fail_now(
-			t,
-			fmt.tprintf("encode_lines(%v) = \ngot %v, \nwant %v", chunk.lines, got, want),
-		)
-	}
-
-	if !slice.equal(got, want) {
-		tt.fail_now(
-			t,
-			fmt.tprintf("encode_lines(%v) = \ngot %v, \nwant %v", chunk.lines, got, want),
-		)
-	}
+	tt.expectf(
+		t,
+		len(got) == len(want),
+		"encode_lines(%v) = \ngot %v, \nwant %v",
+		chunk.lines,
+		got,
+		want,
+	)
+	tt.expectf(
+		t,
+		slice.equal(got, want),
+		"encode_lines(%v) = \ngot %v, \nwant %v",
+		chunk.lines,
+		got,
+		want,
+	)
 }
 
 /* Test if the RLE encoded line numbers are properly decoded. */
