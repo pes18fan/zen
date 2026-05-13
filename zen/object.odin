@@ -380,8 +380,6 @@ allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
 	switch s in gc.mark_roots_arg {
 	case ^VM:
 		vm = s
-	case ^Parser:
-		vm = as_vm(s.prev_mark_roots)
 	case ^Codegen:
 		vm = as_vm(s.prev_mark_roots)
 	}

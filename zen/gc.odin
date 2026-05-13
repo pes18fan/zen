@@ -48,7 +48,6 @@ GC :: struct {
 /* Source for the roots for the root marking step in the GC. */
 RootSource :: union {
 	^Codegen,
-	^Parser,
 	^VM,
 }
 
@@ -58,9 +57,9 @@ is_vm :: #force_inline proc(source: RootSource) -> bool {
 	return ok
 }
 
-/* Check if the root source is the parser. */
-is_parser :: #force_inline proc(source: RootSource) -> bool {
-	_, ok := source.(^Parser)
+/* Check if the root source is codegen. */
+is_codegen :: #force_inline proc(source: RootSource) -> bool {
+	_, ok := source.(^Codegen)
 	return ok
 }
 
@@ -70,8 +69,8 @@ as_vm :: #force_inline proc(source: RootSource) -> ^VM {
 }
 
 /* Cast the `source` to a parser pointer. */
-as_parser :: #force_inline proc(source: RootSource) -> ^Parser {
-	return source.(^Parser)
+as_parser :: #force_inline proc(source: RootSource) -> ^Codegen {
+	return source.(^Codegen)
 }
 
 /* Initialize the GC and all its values. */
@@ -107,11 +106,9 @@ free_gc :: proc(gc: ^GC) {
 /* Push a value on the stack temporarily. */
 temp_push :: proc(gc: ^GC, value: Value) {
 	switch s in gc.mark_roots_arg {
-	case ^Parser:
-		/* The parser stores the previous mark_roots_arg of the GC, which is
-            the VM, so we temporarily restore it. */
-		vm_push(as_vm(s.prev_mark_roots), value)
 	case ^Codegen:
+		/* The codegen struct stores the previous mark_roots_arg of the GC, which is
+            the VM, so we temporarily restore it. */
 		vm_push(as_vm(s.prev_mark_roots), value)
 	case ^VM:
 		vm_push(as_vm(s), value)
@@ -122,9 +119,6 @@ temp_push :: proc(gc: ^GC, value: Value) {
 temp_pop :: proc(gc: ^GC) -> Value {
 	value: Value
 	switch s in gc.mark_roots_arg {
-	case ^Parser:
-		value = vm_pop(as_vm(s.prev_mark_roots))
-		gc.mark_roots_arg = s
 	case ^Codegen:
 		value = vm_pop(as_vm(s.prev_mark_roots))
 		gc.mark_roots_arg = s
@@ -226,8 +220,6 @@ mark_roots :: proc(gc: ^GC, source: RootSource) {
 	mark_table(gc, &gc.globals)
 
 	switch s in source {
-	case ^Parser:
-		mark_compiler_roots(gc, s.current_compiler)
 	case ^Codegen:
 		mark_compiler_roots(gc, s.current_compiler)
 	case ^VM:

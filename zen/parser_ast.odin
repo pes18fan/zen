@@ -160,9 +160,8 @@ PrintStmt :: struct {
 }
 
 ReturnStmt :: struct {
-	token:   Token,
-	keyword: Token,
-	value:   Expr,
+	token: Token,
+	value: Expr,
 }
 
 SwitchCase :: struct {
@@ -489,15 +488,19 @@ ast_parse_precedence :: proc(p: ^AstParser, precedence: AstPrecedence) -> Expr {
 // Statement parsers
 
 parse_statement :: proc(p: ^AstParser) -> Stmt {
+	when CHAOTIC {
+		if ast_match(p, .IFNT) {
+			return parse_if_stmt(p, true)
+		} else if ast_match(p, .WHILENT) {
+			return parse_while_stmt(p, true)
+		}
+	}
+
 	switch {
 	case ast_match(p, .IF):
 		return parse_if_stmt(p, false)
-	case ast_match(p, .IFNT):
-		return parse_if_stmt(p, true)
 	case ast_match(p, .WHILE):
 		return parse_while_stmt(p, false)
-	case ast_match(p, .WHILENT):
-		return parse_while_stmt(p, true)
 	case ast_match(p, .BREAK):
 		return parse_break_stmt(p)
 	case ast_match(p, .CONTINUE):
@@ -633,7 +636,6 @@ parse_print_stmt :: proc(p: ^AstParser) -> ^PrintStmt {
 parse_return_stmt :: proc(p: ^AstParser) -> ^ReturnStmt {
 	stmt := new(ReturnStmt)
 	stmt.token = ast_previous(p)
-	stmt.keyword = stmt.token
 	if !ast_match(p, .SEMI) {
 		stmt.value = parse_expression(p)
 		ast_consume_semi(p, "return value")
@@ -655,6 +657,7 @@ parse_switch_stmt :: proc(p: ^AstParser) -> ^SwitchStmt {
 	stmt := new(SwitchStmt)
 	stmt.token = ast_previous(p)
 	cases := make([dynamic]SwitchCase)
+	has_else_clause := false
 
 	if ast_match(p, .LSQUIRLY) {
 		// No condition
@@ -665,6 +668,7 @@ parse_switch_stmt :: proc(p: ^AstParser) -> ^SwitchStmt {
 
 	for !ast_match(p, .RSQUIRLY) && !ast_is_at_end(p) {
 		if ast_match(p, .ELSE) {
+			has_else_clause = true
 			ast_consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
 			stmt.else_branch = parse_statement(p)
 			if ast_check(p, .SEMI) {ast_advance(p)}
@@ -679,8 +683,12 @@ parse_switch_stmt :: proc(p: ^AstParser) -> ^SwitchStmt {
 		if ast_check(p, .SEMI) {ast_advance(p)}
 		append(&cases, case_node)
 	}
-	stmt.cases = cases[:]
 
+	if !has_else_clause {
+		ast_error(p, ast_peek(p), "Switch statement must have an 'else' clause.")
+	}
+
+	stmt.cases = cases[:]
 	return stmt
 }
 
@@ -967,7 +975,7 @@ init_parser :: proc(tokens: []Token) -> AstParser {
 }
 
 ast_error :: proc(p: ^AstParser, token: Token, message: string) {
-	if p.panic_mode do return
+	if p.panic_mode {return}
 	p.panic_mode = true
 
 	color_red(os.stderr, "parse error ")
@@ -1029,11 +1037,28 @@ ast_synchronize :: proc(p: ^AstParser) {
 	p.panic_mode = false
 
 	for !ast_is_at_end(p) {
-		if ast_previous(p).type == .SEMI do return
+		if ast_previous(p).type == .SEMI {return}
 
 		#partial switch ast_peek(p).type {
-		case .CLASS, .FUNC, .VAR, .VAL, .FOR, .IF, .WHILE, .PRINT, .RETURN, .PUB, .USE:
+		case .BREAK,
+		     .CONTINUE,
+		     .CLASS,
+		     .FUNC,
+		     .EXIT,
+		     .FOR,
+		     .IF,
+		     .IFNT,
+		     .WHILE,
+		     .WHILENT,
+		     .PRINT,
+		     .RETURN,
+		     .SWITCH,
+		     .PUB,
+		     .USE,
+		     .VAR,
+		     .VAL:
 			return
+		case: // do nothing.
 		}
 
 		ast_advance(p)
