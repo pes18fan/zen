@@ -6,7 +6,7 @@ import "core:os"
 import "core:path/filepath"
 import ic "isocline"
 
-VERSION :: "0.0.1-beta"
+VERSION :: #load("../.zen_version")
 
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)
@@ -101,8 +101,8 @@ read_file :: proc(path: string) -> (string, bool) {
 	return string(data[:]), true
 }
 
-/* A module that imports another. It may be nil, so it is generally passed around
-as a Maybe type. */
+/* A module that imports another. A module can import nothing if it so chooses,
+so ImportingModule is generally passed around as a Maybe type. */
 ImportingModule :: struct {
 	path:   string,
 	name:   string,
@@ -149,7 +149,7 @@ print_help :: proc(stream: ^os.File) {
 
 	color_green(stream, "zen ")
 	fmt.fprintfln(stream, "%s", VERSION)
-	fmt.fprintln(stream, "Compiler for the zen programming language.")
+	fmt.fprintln(stream, "Interpreter for the zen programming language.")
 	fmt.fprintln(stream)
 
 	color_green(stream, "Usage:")
