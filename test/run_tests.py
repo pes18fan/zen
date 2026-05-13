@@ -27,12 +27,16 @@ class OS:
 
 
 test_folder = "__tests__"
-compiler = "../bin/test/zen.exe" if OS.is_windows() else "../bin/test/zen"
+interpreter = "../bin/test/zen.exe" if OS.is_windows() else "../bin/test/zen"
 tests = 0
 passed = 0
 failed = 0
 failed_paths = []
 draft_paths = []
+
+if not os.path.exists(interpreter):
+    print(f"{COL_RED}ERROR:{RESET} interpreter not found in {interpreter}")
+    exit(1)
 
 
 def print_header():
@@ -61,7 +65,8 @@ def test(folder):
 
             print(f"Testing {TEXT_BOLD}{file_path}{RESET}: ", end="")
 
-            output, error, status = capture_output(f"{compiler} {file_path}")
+            output, error, status, timed_out = capture_output(
+                f"{interpreter} {file_path}")
 
             if status == 0:
                 if multiline_output_match(output, expect):
@@ -74,6 +79,13 @@ def test(folder):
                     failed_paths.append(file_path)
                     failed += 1
             else:
+                if timed_out:
+                    print(f"{COL_RED}FAILED{RESET} with timeout")
+                    print("Timeout expired after 2 seconds, likely infinite loop")
+                    failed_paths.append(file_path)
+                    failed += 1
+                    continue
+
                 if wants_err:
                     if expected_err in error.strip():
                         print(f"{COL_GREEN}PASSED{RESET} with expected error")
@@ -132,12 +144,15 @@ def multiline_output_match(actual_output, expected_output):
     )
 
 
-def capture_output(command):
+# return values: stdout, stderr, returncode, timeout
+def capture_output(command: str) -> (str, str, int, bool):
     try:
         result = subprocess.run(
-            command, shell=True, text=True, capture_output=True
+            command, shell=True, text=True, capture_output=True, timeout=2
         )
-        return result.stdout, result.stderr, result.returncode
+        return result.stdout, result.stderr, result.returncode, False
+    except subprocess.TimeoutExpired:
+        return "", "", 1, True
     except Exception as e:
         return "", str(e), 1
 

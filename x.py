@@ -117,7 +117,7 @@ def create_release_build():
         subprocess.run(
             f"{OC} build {TARGET} -out:bin/rel/{OUT} {RELEASE_FLAGS}".split(), check=True
         )
-        shutil.copy(f"bin/rel/{OUT}", "bin/test/")
+        shutil.copy(f"bin/rel/{OUT}", f"bin/test/{OUT}")
     except ProcError as e:
         print(f"Error while creating release build: {e}", file=sys.stderr)
         exit(1)
@@ -145,8 +145,7 @@ def test(recompile: bool):
 
     print("Running unit tests:")
     try:
-        subprocess.run(f"{OC} test ../../{TARGET}".split(),
-                       cwd="bin/test/", check=True)
+        subprocess.run(f"{OC} test {TARGET}".split(), check=True)
     except ProcError as e:
         print(f"Error when running unit tests: {e}", file=sys.stderr)
         exit(1)

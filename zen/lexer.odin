@@ -13,7 +13,6 @@ TokenType :: enum {
 	RSQUIRLY,
 	LSQUARE,
 	RSQUARE,
-	BACKSLASH,
 	COMMA,
 	DOT,
 	MINUS,
@@ -194,102 +193,116 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 	defer delete(tokens)
 	length := len(tokens)
 	result := make([dynamic]Token)
-	in_list := false
+
+	list_stack := make([dynamic]byte)
+	block_stack := make([dynamic]byte)
+	defer {
+		delete(list_stack)
+		delete(block_stack)
+	}
 
 	for token, idx in tokens {
-		/* A flag to check if currently in a list; this affects semicolon insertion. */
-		if token.type == .LSQUARE {
-			in_list = true
+		semi := Token {
+			type   = .SEMI,
+			lexeme = ";",
+			line   = token.line,
 		}
 
-		if token.type == .RSQUARE {
-			in_list = false
-		}
+		#partial switch token.type {
+		case .NEWLINE:
+			{
 
-		/* Insert a semi after a line's final token. */
-		if token.type == .NEWLINE {
-			semi := Token {
-				type   = .SEMI,
-				lexeme = ";",
-				line   = token.line,
-			}
-
-			/* If the very first token is a newline, ignore it and continue. */
-			if idx == 0 {
-				continue
-			}
-
-			/* No need to check if idx is too big for us to do a tokens[idx + 1],
-			 * since the last token will always be EOF and a newline will be at
-			 * most the second to last token. */
-
-			/* If the previous token is a backslash, the user is explicitly
-			 * continuing the current line, so move on. */
-			if tokens[idx - 1].type == .BACKSLASH {
-				continue
-			}
-
-			/* Check the first and last points; append only if the previous
-			  * token IS one of some particular types and if the next token IS 
-			  * NOT one of some particular types. */
-			#partial switch tokens[idx - 1].type {
-			case .IDENT,
-			     .STRING,
-			     .NUMBER,
-			     .TRUE,
-			     .THIS,
-			     .FALSE,
-			     .NIL,
-			     .BREAK,
-			     .CONTINUE,
-			     .RETURN,
-			     .RPAREN,
-			     .RSQUIRLY,
-			     .RSQUARE,
-			     .EXIT,
-			     .IT:
-				#partial switch tokens[idx + 1].type {
-				case .IN,
-				     .OR,
-				     .AND,
-				     .DOT,
-				     .PLUS,
-				     .MINUS,
-				     .STAR,
-				     .SLASH,
-				     .PERCENT,
-				     .EQUAL,
-				     .EQUAL_EQUAL,
-				     .BANG_EQUAL,
-				     .LESS,
-				     .LESS_EQUAL,
-				     .GREATER,
-				     .GREATER_EQUAL,
-				     .BAR_GREATER,
-				     .COMMA,
-				     .FAT_ARROW:
+				/* If the very first token is a newline, ignore it and continue. */
+				if idx == 0 {
 					continue
-				case:
-					/* Don't add a semicolon when just before the end of a list.
-                     * This prevents a semicolon from being added after "b"
-                     * element in a situation like this:
-                     *
-                     * var lst = [
-                     * "a",
-                     * "b"
-                     * ]
-                     */
-					if tokens[idx + 1].type == .RSQUARE {
-						continue
-					}
+				}
 
-					append(&result, semi)
+				/* No need to check if idx is too big for us to do a tokens[idx + 1],
+			    since the last token will always be EOF and a newline will be at
+			    most the second to last token. */
+
+				/* Check the first and last points; append only if the previous
+			    token IS one of some particular types AND if the next token IS 
+			    NOT one of some particular types. */
+				#partial switch tokens[idx - 1].type {
+				case .IDENT,
+				     .STRING,
+				     .NUMBER,
+				     .TRUE,
+				     .THIS,
+				     .FALSE,
+				     .NIL,
+				     .BREAK,
+				     .CONTINUE,
+				     .RETURN,
+				     .RPAREN,
+				     .RSQUIRLY,
+				     .RSQUARE,
+				     .EXIT,
+				     .IT:
+					#partial switch tokens[idx + 1].type {
+					case .IN,
+					     .OR,
+					     .AND,
+					     .DOT,
+					     .PLUS,
+					     .MINUS,
+					     .STAR,
+					     .SLASH,
+					     .PERCENT,
+					     .EQUAL,
+					     .EQUAL_EQUAL,
+					     .BANG_EQUAL,
+					     .LESS,
+					     .LESS_EQUAL,
+					     .GREATER,
+					     .GREATER_EQUAL,
+					     .BAR_GREATER,
+					     .COMMA,
+					     .FAT_ARROW:
+						continue
+					case:
+						/* 
+                        Don't add a semicolon when inside a list.
+                        This prevents a semicolon from being added after "b"
+                        element in a situation like this:
+                        
+                        var lst = [
+                            "a",
+                            "b"
+                        ]
+                        */
+						if len(list_stack) > 0 && len(block_stack) == 0 {
+							continue
+						}
+
+						append(&result, semi)
+					}
 				}
 			}
-		} else {
-			if token.type != .BACKSLASH {
-				append(&result, token)
+		case .LSQUARE:
+			append(&list_stack, 1)
+			append(&result, token)
+		case .LSQUIRLY:
+			append(&block_stack, 1)
+			append(&result, token)
+		case .RSQUARE:
+			assert(len(list_stack) >= 0, "cannot have less than 0 lists")
+			pop(&list_stack)
+			append(&result, token)
+		case .RSQUIRLY:
+			/* For the corner case of blocks in one line, e.g. `{ statement }` */
+			if len(block_stack) > 0 &&
+			   tokens[idx - 1].line == token.line &&
+			   tokens[idx - 1].type != .LSQUIRLY {
+				append(&result, semi)
 			}
+
+			assert(len(block_stack) >= 0, "cannot have less than 0 blocks")
+			pop(&block_stack)
+			append(&result, token)
+		case:
+			append(&result, token)
 		}
 	}
 
@@ -606,8 +619,6 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 		return make_token(l, .MINUS)
 	case '+':
 		return make_token(l, .PLUS)
-	case '\\':
-		return make_token(l, .BACKSLASH)
 	case '/':
 		return make_token(l, .SLASH)
 	case '%':
@@ -647,7 +658,7 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 }
 
 /*
-Lex the tokens. If an ILLEGAL token is found, it is returned as the error.
+Lex the tokens. If an error occurs, `success` is false.
 */
 lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
 	toks := make([dynamic]Token)

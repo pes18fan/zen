@@ -1,5 +1,3 @@
-// DRAFT
-// Goes into an infinite loop...
 use "list"
 
 class Builder {
@@ -12,7 +10,7 @@ class Builder {
         return this
     }
 
-    build() => return this.parts
+    build() => this.parts
 }
 
 val b = Builder()

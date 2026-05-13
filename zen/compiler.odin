@@ -33,7 +33,7 @@ Parser :: struct {
 	current_compiler: ^Compiler,
 	current_class:    ^ClassCompiler,
 	globals:          ^Table,
-	pipeline_state:   PipelineState,
+	pipeline_active:  bool,
 	gc:               ^GC,
 	prev_mark_roots:  RootSource,
 }
@@ -546,7 +546,7 @@ binary :: proc(p: ^Parser, can_assign: bool) {
 @(private = "file")
 call :: proc(p: ^Parser, can_assign: bool) {
 	arg_count: u8 = 0
-	if p.pipeline_state == .ACTIVE {
+	if p.pipeline_active {
 		emit_opcode(p, .OP_GET_IT)
 		arg_count += 1
 	}
@@ -624,7 +624,7 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		/* Check if the receiver is a module. */
 		arg_count: u8 = 0
 
-		if p.pipeline_state == .ACTIVE {
+		if p.pipeline_active {
 			emit_opcode(p, .OP_GET_IT)
 			arg_count += 1
 		}
@@ -891,7 +891,7 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 			zstring(p, can_assign)
 
 			/* This might be removed. */
-			if p.pipeline_state == .ACTIVE {
+			if p.pipeline_active {
 				emit_opcode(p, .OP_GET_IT)
 				arg_count += 1
 			}
@@ -968,7 +968,7 @@ this_ :: proc(p: ^Parser, can_assign: bool) {
 /* Parse the `it` keyword, used in pipelines. */
 @(private = "file")
 it_ :: proc(p: ^Parser, can_assign: bool) {
-	if p.pipeline_state == .NONE {
+	if !p.pipeline_active {
 		error(p, "Cannot use 'it' outside of a pipeline.")
 	}
 
@@ -1045,7 +1045,16 @@ string_constant :: proc(p: ^Parser, text: string) -> int {
 @(private = "file")
 identifiers_equal :: proc(a: ^Token, b: ^Token) -> bool {
 	if len(a.lexeme) != len(b.lexeme) {return false}
-	return a.lexeme == b.lexeme
+	if a.lexeme == b.lexeme {
+		// HACK: temporary fix for making the internal __iter and __idx variables
+		// of the for-in loop inaccessible (which itself is a bit of a hack)
+		// must be fixed in the AST version
+		if len(a.lexeme) >= 2 && a.lexeme[0:2] == "__" {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 /* 
@@ -1272,12 +1281,12 @@ expression :: proc(p: ^Parser) {
 		parse_precedence(p, .ASSIGNMENT)
 
 		if !match(p, .BAR_GREATER) {
-			p.pipeline_state = .NONE
+			p.pipeline_active = false
 			break
 		}
 
-		if p.pipeline_state == .NONE {
-			p.pipeline_state = .ACTIVE
+		if !p.pipeline_active {
+			p.pipeline_active = true
 		}
 
 		emit_opcode(p, .OP_SET_IT)
@@ -1329,13 +1338,15 @@ function :: proc(p: ^Parser, type: FunctionType, public: bool = false) {
 	consume(p, .RPAREN, "Expect ')' after function parameters.")
 
 	if match(p, .FAT_ARROW) {
-		arrow_function(p, anonymous = type == .LAMBDA)
+		arrow_function(p)
+		if type != .LAMBDA {
+			consume_semi(p, "arrow function")
+		}
 	} else if match(p, .LSQUIRLY) {
 		block(p)
 	} else {
 		error(p, "Expect '=>' or '{' after function parameter list.")
 	}
-
 
 	function := end_compiler(p)
 
@@ -1390,12 +1401,8 @@ Parse the return value of an arrow function.
 As simple as parsing the expression and inserting a return instruction.
 */
 @(private = "file")
-arrow_function :: proc(p: ^Parser, anonymous: bool) {
+arrow_function :: proc(p: ^Parser) {
 	expression(p)
-	if !anonymous {
-		consume_semi(p, "arrow function")
-	}
-
 	emit_opcode(p, .OP_RETURN)
 
 	p.current_compiler.function.has_returned = true
@@ -1476,7 +1483,7 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 	consume(p, .LSQUIRLY, "Expect '{' before class body.")
 
 	/* Compile methods until the final curly brace. The EOF check ensures that
-	   the compiler doesn't get stuck in an infinite loop if the closing loop
+	   the compiler doesn't get stuck in an infinite loop if the closing brace
 	   is forgotten.
 
 	   Note that currently, classes can only have method declarations; fields
@@ -1489,6 +1496,10 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 		/* Consume the semi after the method that gets added by automatic
 		   semicolon insertion. */
 		match(p, .SEMI)
+
+		if p.panic_mode {
+			synchronize(p)
+		}
 	}
 
 	consume(p, .RSQUIRLY, "Expect '}' after class body.")
@@ -1929,9 +1940,7 @@ while_statement :: proc(p: ^Parser, whilent: bool = false) {
 	}
 
 	emit_pop(p)
-
 	block(p)
-
 	emit_loop(p, loop_start)
 
 	patch_jump(p, exit_jump)
@@ -1984,7 +1993,9 @@ for_statement :: proc(p: ^Parser) {
 	}
 
 	begin_loop(p, loop_start)
+	begin_scope(p)
 	block(p)
+	end_scope(p)
 
 	if loop_variable_slot != -1 {
 		loop_var := &p.current_compiler.locals[loop_variable_slot]
@@ -2057,7 +2068,9 @@ for_in_statement :: proc(p: ^Parser) {
 	emit_pop(p) // iter[idx].
 
 	begin_loop(p, loop_start)
+	begin_scope(p)
 	block(p)
+	end_scope(p)
 
 	// close the loop var's upvalue if it was captured
 	// ensures each iteration's closure gets its own snapshot
@@ -2092,17 +2105,20 @@ synchronize :: proc(p: ^Parser) {
 		case .BREAK,
 		     .CONTINUE,
 		     .FUNC,
+		     .CLASS,
+		     .EXIT,
 		     .FOR,
 		     .IF,
 		     .IFNT,
-		     .VAR,
-		     .VAL,
 		     .PRINT,
+		     .PUB,
 		     .SWITCH,
 		     .RETURN,
 		     .WHILE,
 		     .WHILENT,
-		     .USE:
+		     .USE,
+		     .VAR,
+		     .VAL:
 			return
 		case: // Do nothing.
 		}
@@ -2191,7 +2207,8 @@ statement :: proc(p: ^Parser) {
 		error(p, "You can't have an `else` without an `if`.")
 	case:
 		expression_statement(p)
-	}}
+	}
+}
 
 /* Restore the GC to its previous state, i.e. change the roots. */
 restore_gc :: proc(p: ^Parser) {
@@ -2263,6 +2280,7 @@ end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
 	return fn
 }
 
+
 /* 
 Compile the provided slice of tokens into a bytecode chunk. 
 The compile function also takes in a pointer to a globals table with each key
@@ -2291,7 +2309,7 @@ compile :: proc(gc: ^GC, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction,
 		current_compiler = nil,
 		current_class    = nil,
 		globals          = globals,
-		pipeline_state   = .NONE,
+		pipeline_active  = false,
 		gc               = gc,
 		prev_mark_roots  = gc.mark_roots_arg,
 	}

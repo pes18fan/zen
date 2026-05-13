@@ -1,5 +1,3 @@
-// DRAFT
-// Not run cuz it starts an infinite loop for some reason
 class A {
     method() { return "A" }
     a_only() { return "a_only" }

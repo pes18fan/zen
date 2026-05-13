@@ -65,6 +65,8 @@ VM :: struct {
 
 	/* Linked list of all open upvalues. */
 	open_upvalues:    ^ObjUpvalue,
+
+	/* Pointer to the GC. */
 	gc:               ^GC,
 
 	/* Arguments passed to the program. */
@@ -871,61 +873,54 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			slot := read_byte(frame)
 			close_upvalues(vm, mem.ptr_offset(frame.slots, int(slot))) // don't pop here
 		case .OP_RETURN:
-			{
-				result := vm_pop(vm) // Retrieve the return value from the stack.
+			result := vm_pop(vm) // Retrieve the return value from the stack.
 
-				// Close any upvalues that were captured inside the returning function.
-				close_upvalues(vm, frame.slots)
-				vm.frame_count -= 1
+			// Close any upvalues that were captured inside the returning function.
+			close_upvalues(vm, frame.slots)
+			vm.frame_count -= 1
 
-				if vm.frame_count == 0 {
-					vm_pop(vm)
-					return .INTERPRET_OK
-				}
-
-				/* Pop off all of the local variables and arguments of the
-				 * function. */
-				for i := vm.stack_top; i >= 0; i -= 1 {
-					value := vm.stack[i]
-					if values_equal(value, frame.slots^) {
-						break
-					}
-					vm_pop(vm)
-				}
-				assert(vm.stack_top >= 0, "vm stack should not be empty\n") // There should be at least the function left here
-				vm_pop(vm) // Pop the function itself.
-
-				vm_push(vm, result) // Push the return value back to the stack.
-				frame = &vm.frames[vm.frame_count - 1]
+			if vm.frame_count == 0 {
+				vm_pop(vm)
+				return .INTERPRET_OK
 			}
+
+			/* Pop off all of the local variables and arguments of the
+			   function. */
+			for i := vm.stack_top; i >= 0; i -= 1 {
+				value := vm.stack[i]
+				if values_equal(value, frame.slots^) {
+					break
+				}
+			}
+			assert(vm.stack_top >= 0, "stack must not become empty before program end") // There should be at least the function left here
+			vm_pop(vm) // Pop the function itself.
+
+			vm_push(vm, result) // Push the return value back to the stack.
+			frame = &vm.frames[vm.frame_count - 1]
 		case .OP_CLASS:
-			{
-				public := bool(read_byte(frame))
-				name := read_string(frame)
+			public := bool(read_byte(frame))
+			name := read_string(frame)
 
-				vm_push(vm, obj_val(new_class(vm.gc, name)))
+			vm_push(vm, obj_val(new_class(vm.gc, name)))
 
-				/* If the current file is being imported AND the class being
+			/* If the current file is being imported AND the class being
                  * compiled is set as public with the `pub` keyword, add the 
                  * declared class into the module that's importing it. */
-				importing_module, ok := importer.?
-				if public && ok {
-					module := importing_module.module
-					table_set(&module.values, name, vm_peek(vm, 0))
-				}
+			importing_module, ok := importer.?
+			if public && ok {
+				module := importing_module.module
+				table_set(&module.values, name, vm_peek(vm, 0))
 			}
 		case .OP_CLASS_LONG:
-			{
-				public := bool(read_byte(frame))
-				name := read_string_long(frame)
+			public := bool(read_byte(frame))
+			name := read_string_long(frame)
 
-				vm_push(vm, obj_val(new_class(vm.gc, name)))
+			vm_push(vm, obj_val(new_class(vm.gc, name)))
 
-				importing_module, ok := importer.?
-				if public && ok {
-					module := importing_module.module
-					table_set(&module.values, name, vm_peek(vm, 0))
-				}
+			importing_module, ok := importer.?
+			if public && ok {
+				module := importing_module.module
+				table_set(&module.values, name, vm_peek(vm, 0))
 			}
 		case .OP_INHERIT:
 			{
@@ -1295,7 +1290,6 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 
 			// Add a 1 to the stack indexing to exclude the native function itself
 			result, ok := native(vm, arg_count, vm.stack[vm.stack_top - arg_count + 1:])
-
 			if !ok {
 				return false
 			}

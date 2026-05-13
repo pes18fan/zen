@@ -322,7 +322,7 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
         it is closed. */
 	case .UPVALUE:
 		mark_value(gc, (^ObjUpvalue)(object).closed)
-	/* Strings and native functions have no references to other
+	/* Strings, native functions and futures have no references to other
         objects. */
 	case .NATIVE, .STRING:
 		return

@@ -206,7 +206,7 @@ panic_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
-	vm_panic(vm, "%s", as_cstring(args[0]))
+	vm_panic(vm, "%s", as_ostring(args[0]))
 	return nil_val(), false
 }
 
@@ -314,7 +314,7 @@ parse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 		return nil_val(), false
 	}
 
-	n, ok := strconv.parse_f64(as_cstring(args[0]))
+	n, ok := strconv.parse_f64(as_ostring(args[0]))
 	if !ok {
 		vm_panic(vm, "Cannot parse '%s' to a real number.", as_string(args[0]).chars)
 		return nil_val(), false
@@ -383,6 +383,7 @@ ln_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 			"Argument for 'ln' must be a positive real number, not %v.",
 			type_of_value(args[0]),
 		)
+		return nil_val(), false
 	}
 
 	n := as_number(args[0])
@@ -530,7 +531,7 @@ reverse_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 		return nil_val(), false
 	}
 
-	str, err := strings.reverse(as_cstring(args[0]))
+	str, err := strings.reverse(as_ostring(args[0]))
 	if err != nil {
 		vm_panic(vm, "Failed to run reverse(): %s", os.error_string(err))
 		return nil_val(), false
@@ -668,7 +669,7 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 /* Return the sum of the values in the list. */
 sum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_list(args[0]) {
-		vm_panic(vm, "Cannot fold a %v.", type_of_value(args[0]))
+		vm_panic(vm, "Cannot sum up a %v.", type_of_value(args[0]))
 		return nil_val(), false
 	}
 
