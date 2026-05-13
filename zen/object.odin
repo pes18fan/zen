@@ -37,7 +37,7 @@ ObjFunction :: struct {
 }
 
 /* A function available to use in programs written into the compiler itself. */
-NativeFn :: #type proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool)
+NativeFn :: #type proc(vm: ^VM, arg_count: int, args: []Value) -> (value: Value, success: bool)
 
 /* A native function implemented in Odin itself. */
 ObjNative :: struct {
@@ -213,7 +213,7 @@ as_string :: #force_inline proc(value: Value) -> ^ObjString {
 	return (^ObjString)(as_obj(value))
 }
 
-as_cstring :: #force_inline proc(value: Value) -> string {
+as_ostring :: #force_inline proc(value: Value) -> string {
 	return (^ObjString)(as_string(value)).chars
 }
 
@@ -450,7 +450,8 @@ stringify_object :: proc(obj: ^Obj) -> (res: string, was_allocation: bool) {
 	case .NATIVE:
 		return "<native func>", false
 	case .STRING:
-		return as_cstring(obj_val(obj)), false
+		// return fmt.tprintf("\"%s\"", as_ostring(obj_val(obj))), false
+		return as_ostring(obj_val(obj)), false
 	case .UPVALUE:
 		return "upvalue", false
 	}

@@ -33,7 +33,7 @@ Parser :: struct {
 	current_compiler: ^Compiler,
 	current_class:    ^ClassCompiler,
 	globals:          ^Table,
-	pipeline_state:   PipelineState,
+	pipeline_active:  bool,
 	gc:               ^GC,
 	prev_mark_roots:  RootSource,
 }
@@ -409,71 +409,6 @@ free_loops :: proc(p: ^Parser) {
 	}
 }
 
-/*
-Return a new Compiler struct.
-
-The globals table is inherited from previous runs of the compiler so that
-final variables' "finality" can be preserved in the global scope.
-
-Also makes sure that the current_compiler is set to the new compiler.
-*/
-init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
-	c^ = Compiler {
-		enclosing   = p.current_compiler,
-		type        = type,
-		local_count = 0,
-		loop_count  = 0,
-		scope_depth = 0,
-		function    = nil,
-		globals     = p.globals,
-	}
-
-	/* DON'T FORGET to set current_compiler to the new compiler!
-	Took me WAAAAAAAAAAY too long to figure out I was missing this. */
-	p.current_compiler = c
-	c.function = new_function(p.gc)
-
-	if type != .SCRIPT && type != .LAMBDA {
-		c.function.name = copy_string(p.gc, p.previous.lexeme)
-	} else if type == .LAMBDA {
-		c.function.name = copy_string(p.gc, "lambda")
-	}
-
-	/* The first slot is the function itself. */
-	local := &p.current_compiler.locals[p.current_compiler.local_count]
-	c.local_count += 1
-	local.depth = 0
-	local.is_captured = false /* You cannot capture the slot zero value. */
-
-	/* If the function is a method, the first slot is repurposed to store that
-	 * method's receiver instead. */
-	if type != .FUNCTION {
-		local.name.lexeme = "this"
-	} else {
-		local.name.lexeme = ""
-	}
-}
-
-/* Emit a return instruction and decode the RLE-encoded lines. */
-@(private = "file")
-end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
-	fn := p.current_compiler.function
-	if !fn.has_returned {
-		emit_return(p)
-	}
-
-	if config.dump_disassembly {
-		if !p.had_error {
-			disassemble(current_chunk(p), fn.name != nil ? fn.name.chars : "<script>")
-		}
-	}
-
-	free_loops(p)
-	p.current_compiler = p.current_compiler.enclosing
-
-	return fn
-}
-
 /* Begin a new scope when compiling. */
 @(private = "file")
 begin_scope :: proc(p: ^Parser) {
@@ -547,7 +482,7 @@ binary :: proc(p: ^Parser, can_assign: bool) {
 @(private = "file")
 call :: proc(p: ^Parser, can_assign: bool) {
 	arg_count: u8 = 0
-	if p.pipeline_state == .ACTIVE {
+	if p.pipeline_active {
 		emit_opcode(p, .OP_GET_IT)
 		arg_count += 1
 	}
@@ -625,7 +560,7 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		/* Check if the receiver is a module. */
 		arg_count: u8 = 0
 
-		if p.pipeline_state == .ACTIVE {
+		if p.pipeline_active {
 			emit_opcode(p, .OP_GET_IT)
 			arg_count += 1
 		}
@@ -892,7 +827,7 @@ named_variable :: proc(p: ^Parser, name: Token, can_assign: bool) {
 			zstring(p, can_assign)
 
 			/* This might be removed. */
-			if p.pipeline_state == .ACTIVE {
+			if p.pipeline_active {
 				emit_opcode(p, .OP_GET_IT)
 				arg_count += 1
 			}
@@ -969,7 +904,7 @@ this_ :: proc(p: ^Parser, can_assign: bool) {
 /* Parse the `it` keyword, used in pipelines. */
 @(private = "file")
 it_ :: proc(p: ^Parser, can_assign: bool) {
-	if p.pipeline_state == .NONE {
+	if !p.pipeline_active {
 		error(p, "Cannot use 'it' outside of a pipeline.")
 	}
 
@@ -1333,12 +1268,12 @@ expression :: proc(p: ^Parser) {
 		parse_precedence(p, .ASSIGNMENT)
 
 		if !match(p, .BAR_GREATER) {
-			p.pipeline_state = .NONE
+			p.pipeline_active = false
 			break
 		}
 
-		if p.pipeline_state == .NONE {
-			p.pipeline_state = .ACTIVE
+		if !p.pipeline_active {
+			p.pipeline_active = true
 		}
 
 		emit_opcode(p, .OP_SET_IT)
@@ -1390,13 +1325,15 @@ function :: proc(p: ^Parser, type: FunctionType, public: bool = false) {
 	consume(p, .RPAREN, "Expect ')' after function parameters.")
 
 	if match(p, .FAT_ARROW) {
-		arrow_function(p, anonymous = type == .LAMBDA)
+		arrow_function(p)
+		if type != .LAMBDA {
+			consume_semi(p, "arrow function")
+		}
 	} else if match(p, .LSQUIRLY) {
 		block(p)
 	} else {
 		error(p, "Expect '=>' or '{' after function parameter list.")
 	}
-
 
 	function := end_compiler(p)
 
@@ -1451,12 +1388,8 @@ Parse the return value of an arrow function.
 As simple as parsing the expression and inserting a return instruction.
 */
 @(private = "file")
-arrow_function :: proc(p: ^Parser, anonymous: bool) {
+arrow_function :: proc(p: ^Parser) {
 	expression(p)
-	if !anonymous {
-		consume_semi(p, "arrow function")
-	}
-
 	emit_opcode(p, .OP_RETURN)
 
 	p.current_compiler.function.has_returned = true
@@ -1537,7 +1470,7 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 	consume(p, .LSQUIRLY, "Expect '{' before class body.")
 
 	/* Compile methods until the final curly brace. The EOF check ensures that
-	   the compiler doesn't get stuck in an infinite loop if the closing loop
+	   the compiler doesn't get stuck in an infinite loop if the closing brace
 	   is forgotten.
 
 	   Note that currently, classes can only have method declarations; fields
@@ -1550,6 +1483,10 @@ class_declaration :: proc(p: ^Parser, public: bool = false) {
 		/* Consume the semi after the method that gets added by automatic
 		   semicolon insertion. */
 		match(p, .SEMI)
+
+		if p.panic_mode {
+			synchronize(p)
+		}
 	}
 
 	consume(p, .RSQUIRLY, "Expect '}' after class body.")
@@ -1991,11 +1928,7 @@ while_statement :: proc(p: ^Parser, whilent: bool = false) {
 	}
 
 	emit_pop(p)
-
-	begin_scope(p)
 	block(p)
-	end_scope(p)
-
 	emit_loop(p, loop_start)
 
 	patch_jump(p, exit_jump)
@@ -2160,17 +2093,20 @@ synchronize :: proc(p: ^Parser) {
 		case .BREAK,
 		     .CONTINUE,
 		     .FUNC,
+		     .CLASS,
+		     .EXIT,
 		     .FOR,
 		     .IF,
 		     .IFNT,
-		     .VAR,
-		     .VAL,
 		     .PRINT,
+		     .PUB,
 		     .SWITCH,
 		     .RETURN,
 		     .WHILE,
 		     .WHILENT,
-		     .USE:
+		     .USE,
+		     .VAR,
+		     .VAL:
 			return
 		case: // Do nothing.
 		}
@@ -2259,12 +2195,79 @@ statement :: proc(p: ^Parser) {
 		error(p, "You can't have an `else` without an `if`.")
 	case:
 		expression_statement(p)
-	}}
+	}
+}
 
 /* Restore the GC to its previous state, i.e. change the roots. */
 restore_gc :: proc(p: ^Parser) {
 	p.gc.mark_roots_arg = p.prev_mark_roots
 }
+
+/*
+Return a new Compiler struct.
+
+The globals table is inherited from previous runs of the compiler so that
+final variables' "finality" can be preserved in the global scope.
+
+Also makes sure that the current_compiler is set to the new compiler.
+*/
+init_compiler :: proc(c: ^Compiler, p: ^Parser, type: FunctionType) {
+	c^ = Compiler {
+		enclosing   = p.current_compiler,
+		type        = type,
+		local_count = 0,
+		loop_count  = 0,
+		scope_depth = 0,
+		function    = nil,
+		globals     = p.globals,
+	}
+
+	/* DON'T FORGET to set current_compiler to the new compiler!
+	Took me WAAAAAAAAAAY too long to figure out I was missing this. */
+	p.current_compiler = c
+	c.function = new_function(p.gc)
+
+	if type != .SCRIPT && type != .LAMBDA {
+		c.function.name = copy_string(p.gc, p.previous.lexeme)
+	} else if type == .LAMBDA {
+		c.function.name = copy_string(p.gc, "lambda")
+	}
+
+	/* The first slot is the function itself. */
+	local := &p.current_compiler.locals[p.current_compiler.local_count]
+	c.local_count += 1
+	local.depth = 0
+	local.is_captured = false /* You cannot capture the slot zero value. */
+
+	/* If the function is a method, the first slot is repurposed to store that
+	 * method's receiver instead. */
+	if type != .FUNCTION {
+		local.name.lexeme = "this"
+	} else {
+		local.name.lexeme = ""
+	}
+}
+
+/* Emit a return instruction and decode the RLE-encoded lines. */
+@(private = "file")
+end_compiler :: proc(p: ^Parser) -> ^ObjFunction {
+	fn := p.current_compiler.function
+	if !fn.has_returned {
+		emit_return(p)
+	}
+
+	if config.dump_disassembly {
+		if !p.had_error {
+			disassemble(current_chunk(p), fn.name != nil ? fn.name.chars : "<script>")
+		}
+	}
+
+	free_loops(p)
+	p.current_compiler = p.current_compiler.enclosing
+
+	return fn
+}
+
 
 /* 
 Compile the provided slice of tokens into a bytecode chunk. 
@@ -2294,7 +2297,7 @@ compile :: proc(gc: ^GC, tokens: []Token, globals: ^Table) -> (fn: ^ObjFunction,
 		current_compiler = nil,
 		current_class    = nil,
 		globals          = globals,
-		pipeline_state   = .NONE,
+		pipeline_active  = false,
 		gc               = gc,
 		prev_mark_roots  = gc.mark_roots_arg,
 	}

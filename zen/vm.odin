@@ -65,6 +65,8 @@ VM :: struct {
 
 	/* Linked list of all open upvalues. */
 	open_upvalues:    ^ObjUpvalue,
+
+	/* Pointer to the GC. */
 	gc:               ^GC,
 
 	/* Arguments passed to the program. */
@@ -896,33 +898,29 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			vm_push(vm, result) // Push the return value back to the stack.
 			frame = &vm.frames[vm.frame_count - 1]
 		case .OP_CLASS:
-			{
-				public := bool(read_byte(frame))
-				name := read_string(frame)
+			public := bool(read_byte(frame))
+			name := read_string(frame)
 
-				vm_push(vm, obj_val(new_class(vm.gc, name)))
+			vm_push(vm, obj_val(new_class(vm.gc, name)))
 
-				/* If the current file is being imported AND the class being
+			/* If the current file is being imported AND the class being
                  * compiled is set as public with the `pub` keyword, add the 
                  * declared class into the module that's importing it. */
-				importing_module, ok := importer.?
-				if public && ok {
-					module := importing_module.module
-					table_set(&module.values, name, vm_peek(vm, 0))
-				}
+			importing_module, ok := importer.?
+			if public && ok {
+				module := importing_module.module
+				table_set(&module.values, name, vm_peek(vm, 0))
 			}
 		case .OP_CLASS_LONG:
-			{
-				public := bool(read_byte(frame))
-				name := read_string_long(frame)
+			public := bool(read_byte(frame))
+			name := read_string_long(frame)
 
-				vm_push(vm, obj_val(new_class(vm.gc, name)))
+			vm_push(vm, obj_val(new_class(vm.gc, name)))
 
-				importing_module, ok := importer.?
-				if public && ok {
-					module := importing_module.module
-					table_set(&module.values, name, vm_peek(vm, 0))
-				}
+			importing_module, ok := importer.?
+			if public && ok {
+				module := importing_module.module
+				table_set(&module.values, name, vm_peek(vm, 0))
 			}
 		case .OP_INHERIT:
 			{
