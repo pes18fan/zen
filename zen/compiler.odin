@@ -1043,8 +1043,8 @@ compile_declaration :: proc(cg: ^Codegen, decl: Decl) -> bool {
 	case ^PubDecl:
 		cg.current_token = d.token
 		#partial switch inner in d.decl {
-	case ^VarDecl:
-	case ^FuncDecl:
+		case ^VarDecl:
+		case ^FuncDecl:
 			compile_func_declaration(cg, inner, public = true) or_return
 		case ^ClassDecl:
 			compile_class_declaration(cg, inner, public = true) or_return

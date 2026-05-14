@@ -5,9 +5,7 @@ import "core:os"
 import "core:strconv"
 import "core:strings"
 
-//---------------------------------------------------------
 // AST Node Definitions
-//---------------------------------------------------------
 
 Expr :: union {
 	^AssignExpr,
@@ -55,9 +53,7 @@ Decl :: union {
 	Stmt,
 }
 
-//---------------------------------------------------------
 // Declarations
-//---------------------------------------------------------
 
 VarBinding :: struct {
 	name:        Token,
@@ -99,9 +95,7 @@ PubDecl :: struct {
 	decl:  Decl,
 }
 
-//---------------------------------------------------------
 // Statements
-//---------------------------------------------------------
 
 BlockStmt :: struct {
 	token:        Token,
@@ -186,9 +180,7 @@ WhileStmt :: struct {
 	body:       ^BlockStmt,
 }
 
-//---------------------------------------------------------
 // Expressions
-//---------------------------------------------------------
 
 AssignExpr :: struct {
 	token: Token,
@@ -305,7 +297,7 @@ VariableExpr :: struct {
 	name:  Token,
 }
 
-AstPrecedence :: enum {
+Precedence :: enum {
 	NONE,
 	PIPELINE, // |>
 	ASSIGNMENT, // =
@@ -320,179 +312,181 @@ AstPrecedence :: enum {
 	PRIMARY,
 }
 
-AstParsePrefixFn :: #type proc(p: ^AstParser, can_assign: bool) -> Expr
-AstParseInfixFn :: #type proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr
+ParsePrefixFn :: #type proc(p: ^Parser, can_assign: bool) -> Expr
+ParseInfixFn :: #type proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr
 
-AstParseRule :: struct {
-	prefix:     AstParsePrefixFn,
-	infix:      AstParseInfixFn,
-	precedence: AstPrecedence,
+ParseRule :: struct {
+	prefix:     ParsePrefixFn,
+	infix:      ParseInfixFn,
+	precedence: Precedence,
 }
 
-parse :: proc(p: ^AstParser) -> (decls: []Decl, success: bool) {
+/* Create a list of parsed declarations forming an abstract syntax tree, from
+a list of tokens stored in a parser. */
+parse :: proc(p: ^Parser) -> (decls: []Decl, success: bool) {
 	declarations := make([dynamic]Decl)
-	for !ast_is_at_end(p) {
+	for !is_at_end(p) {
 		decl := parse_declaration(p)
 		append(&declarations, decl)
 
 		if p.panic_mode {
-			ast_synchronize(p)
+			synchronize(p)
 		}
 	}
 
 	return declarations[:], !p.had_error
 }
 
-parse_declaration :: proc(p: ^AstParser) -> Decl {
+parse_declaration :: proc(p: ^Parser) -> Decl {
 	switch {
-	case ast_match(p, .VAR, .VAL):
+	case match(p, .VAR, .VAL):
 		return parse_var_decl(p)
-	case ast_match(p, .CLASS):
+	case match(p, .CLASS):
 		return parse_class_decl(p)
-	case ast_match(p, .USE):
+	case match(p, .USE):
 		return parse_module_decl(p)
-	case ast_match(p, .FUNC):
+	case match(p, .FUNC):
 		return parse_func_decl(p, "function")
-	case ast_match(p, .PUB):
+	case match(p, .PUB):
 		return parse_pub_decl(p)
 	}
 	return parse_statement(p)
 }
 
-parse_var_decl :: proc(p: ^AstParser) -> ^VarDecl {
+parse_var_decl :: proc(p: ^Parser) -> ^VarDecl {
 	decl := new(VarDecl)
-	decl.token = ast_previous(p)
+	decl.token = previous(p)
 	decl.is_final = decl.token.type == .VAL
 	bindings := make([dynamic]VarBinding)
 
 	for {
 		binding: VarBinding
-		binding.name = ast_consume(p, .IDENT, "Expect variable name.")
-		if ast_match(p, .EQUAL) {
+		binding.name = consume(p, .IDENT, "Expect variable name.")
+		if match(p, .EQUAL) {
 			binding.initializer = parse_expression(p)
 		}
 		append(&bindings, binding)
 
-		if !ast_match(p, .COMMA) {break}
+		if !match(p, .COMMA) {break}
 	}
 	decl.bindings = bindings[:]
 
-	ast_consume_semi(p, "variable declaration")
+	consume_semi(p, "variable declaration")
 	return decl
 }
 
-parse_class_decl :: proc(p: ^AstParser) -> ^ClassDecl {
+parse_class_decl :: proc(p: ^Parser) -> ^ClassDecl {
 	decl := new(ClassDecl)
-	decl.token = ast_previous(p)
-	decl.name = ast_consume(p, .IDENT, "Expect class name.")
+	decl.token = previous(p)
+	decl.name = consume(p, .IDENT, "Expect class name.")
 	methods := make([dynamic]^FuncDecl)
 
-	if ast_match(p, .LESS) {
-		decl.superclass = ast_consume(p, .IDENT, "Expect superclass name.")
+	if match(p, .LESS) {
+		decl.superclass = consume(p, .IDENT, "Expect superclass name.")
 	}
 
-	ast_consume(p, .LSQUIRLY, "Expect '{' before class body.")
-	for !ast_check(p, .RSQUIRLY) && !ast_is_at_end(p) {
+	consume(p, .LSQUIRLY, "Expect '{' before class body.")
+	for !check(p, .RSQUIRLY) && !is_at_end(p) {
 		append(&methods, parse_method(p))
-		if ast_match(p, .SEMI) {}
+		if match(p, .SEMI) {}
 	}
 	decl.methods = methods[:]
 
-	ast_consume(p, .RSQUIRLY, "Expect '}' after class body.")
+	consume(p, .RSQUIRLY, "Expect '}' after class body.")
 	return decl
 }
 
-parse_method :: proc(p: ^AstParser) -> ^FuncDecl {
-	name := ast_consume(p, .IDENT, "Expect method name.")
+parse_method :: proc(p: ^Parser) -> ^FuncDecl {
+	name := consume(p, .IDENT, "Expect method name.")
 	return parse_func_body(p, name)
 }
 
-parse_module_decl :: proc(p: ^AstParser) -> ^ModuleDecl {
+parse_module_decl :: proc(p: ^Parser) -> ^ModuleDecl {
 	decl := new(ModuleDecl)
-	decl.token = ast_previous(p)
-	decl.path = ast_consume(p, .STRING, "Expect module path.")
+	decl.token = previous(p)
+	decl.path = consume(p, .STRING, "Expect module path.")
 	return decl
 }
 
-parse_func_decl :: proc(p: ^AstParser, kind: string) -> ^FuncDecl {
-	token := ast_previous(p)
-	name := ast_consume(p, .IDENT, fmt.tprintf("Expect %s name.", kind))
+parse_func_decl :: proc(p: ^Parser, kind: string) -> ^FuncDecl {
+	token := previous(p)
+	name := consume(p, .IDENT, fmt.tprintf("Expect %s name.", kind))
 	decl := parse_func_body(p, name)
 	decl.token = token
 	return decl
 }
 
-parse_func_body :: proc(p: ^AstParser, name: Token) -> ^FuncDecl {
+parse_func_body :: proc(p: ^Parser, name: Token) -> ^FuncDecl {
 	decl := new(FuncDecl)
-	decl.token = ast_previous(p) // NOTE: this should probably be the keyword and not the name
+	decl.token = previous(p) // NOTE: this should probably be the keyword and not the name
 	decl.name = name
 	params := make([dynamic]Token)
 
-	ast_consume(p, .LPAREN, "Expect '(' after function name.")
-	if !ast_check(p, .RPAREN) {
+	consume(p, .LPAREN, "Expect '(' after function name.")
+	if !check(p, .RPAREN) {
 		for {
-			append(&params, ast_consume(p, .IDENT, "Expect parameter name."))
-			if !ast_match(p, .COMMA) {break}
+			append(&params, consume(p, .IDENT, "Expect parameter name."))
+			if !match(p, .COMMA) {break}
 		}
 	}
 	decl.params = params[:]
-	ast_consume(p, .RPAREN, "Expect ')' after function parameters.")
+	consume(p, .RPAREN, "Expect ')' after function parameters.")
 
-	if ast_match(p, .FAT_ARROW) {
+	if match(p, .FAT_ARROW) {
 		decl.body = parse_expression(p)
 	} else {
-		ast_consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
+		consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
 		decl.body = parse_block(p)
 	}
 
 	return decl
 }
 
-parse_pub_decl :: proc(p: ^AstParser) -> ^PubDecl {
+parse_pub_decl :: proc(p: ^Parser) -> ^PubDecl {
 	decl := new(PubDecl)
-	decl.token = ast_previous(p)
-	if ast_match(p, .FUNC) {
+	decl.token = previous(p)
+	if match(p, .FUNC) {
 		decl.decl = parse_func_decl(p, "function")
-	} else if ast_match(p, .CLASS) {
+	} else if match(p, .CLASS) {
 		decl.decl = parse_class_decl(p)
 	} else {
-		ast_error(p, ast_peek(p), "Only functions or classes can be set as public.")
+		error(p, peek(p), "Only functions or classes can be set as public.")
 	}
 	return decl
 }
 
 
-ast_get_rule :: proc(type: TokenType) -> ^AstParseRule {
-	return &ast_rules[type]
+get_rule :: proc(type: TokenType) -> ^ParseRule {
+	return &rules[type]
 }
 
-ast_parse_precedence :: proc(p: ^AstParser, precedence: AstPrecedence) -> Expr {
-	ast_advance(p)
+parse_precedence :: proc(p: ^Parser, precedence: Precedence) -> Expr {
+	advance(p)
 
-	if ast_is_at_end(p) {
-		ast_error(p, ast_previous(p), "Expect expression.")
+	if is_at_end(p) {
+		error(p, previous(p), "Expect expression.")
 		return nil
 	}
 
-	prefix_rule := ast_get_rule(ast_previous(p).type).prefix
+	prefix_rule := get_rule(previous(p).type).prefix
 	if prefix_rule == nil {
-		ast_error(p, ast_previous(p), "Expect expression.")
+		error(p, previous(p), "Expect expression.")
 		return nil
 	}
 
 	can_assign := precedence <= .ASSIGNMENT
 	expr := prefix_rule(p, can_assign)
 
-	for precedence <= ast_get_rule(ast_peek(p).type).precedence {
-		ast_advance(p)
-		infix_rule := ast_get_rule(ast_previous(p).type).infix
+	for precedence <= get_rule(peek(p).type).precedence {
+		advance(p)
+		infix_rule := get_rule(previous(p).type).infix
 		if infix_rule != nil {
 			expr = infix_rule(p, expr, can_assign)
 		}
 	}
 
-	if can_assign && ast_match(p, .EQUAL) {
-		ast_error(p, ast_previous(p), "Invalid assignment target.")
+	if can_assign && match(p, .EQUAL) {
+		error(p, previous(p), "Invalid assignment target.")
 	}
 
 	return expr
@@ -500,258 +494,258 @@ ast_parse_precedence :: proc(p: ^AstParser, precedence: AstPrecedence) -> Expr {
 
 // Statement parsers
 
-parse_statement :: proc(p: ^AstParser) -> Stmt {
+parse_statement :: proc(p: ^Parser) -> Stmt {
 	when CHAOTIC {
-		if ast_match(p, .IFNT) {
+		if match(p, .IFNT) {
 			return parse_if_stmt(p, true)
-		} else if ast_match(p, .WHILENT) {
+		} else if match(p, .WHILENT) {
 			return parse_while_stmt(p, true)
 		}
 	}
 
 	switch {
-	case ast_match(p, .IF):
+	case match(p, .IF):
 		return parse_if_stmt(p, false)
-	case ast_match(p, .WHILE):
+	case match(p, .WHILE):
 		return parse_while_stmt(p, false)
-	case ast_match(p, .BREAK):
+	case match(p, .BREAK):
 		return parse_break_stmt(p)
-	case ast_match(p, .CONTINUE):
+	case match(p, .CONTINUE):
 		return parse_continue_stmt(p)
-	case ast_match(p, .FOR):
+	case match(p, .FOR):
 		return parse_for_stmt(p)
-	case ast_match(p, .LSQUIRLY):
+	case match(p, .LSQUIRLY):
 		return parse_block(p)
-	case ast_match(p, .PRINT):
+	case match(p, .PRINT):
 		return parse_print_stmt(p)
-	case ast_match(p, .RETURN):
+	case match(p, .RETURN):
 		return parse_return_stmt(p)
-	case ast_match(p, .EXIT):
+	case match(p, .EXIT):
 		return parse_exit_stmt(p)
-	case ast_match(p, .SWITCH):
+	case match(p, .SWITCH):
 		return parse_switch_stmt(p)
-	case ast_match(p, .SEMI):
+	case match(p, .SEMI):
 		stmt := new(EmptyStmt)
-		stmt.token = ast_previous(p)
+		stmt.token = previous(p)
 		return stmt
 	}
 
 	return parse_expression_stmt(p)
 }
 
-parse_if_stmt :: proc(p: ^AstParser, is_ifnt: bool) -> ^IfStmt {
+parse_if_stmt :: proc(p: ^Parser, is_ifnt: bool) -> ^IfStmt {
 	stmt := new(IfStmt)
-	stmt.token = ast_previous(p)
+	stmt.token = previous(p)
 	stmt.is_ifnt = is_ifnt
 	stmt.condition = parse_expression(p)
 
-	ast_consume(p, .LSQUIRLY, "Expect '{' after condition.")
+	consume(p, .LSQUIRLY, "Expect '{' after condition.")
 	stmt.then_branch = parse_block(p)
 
-	if ast_match(p, .ELSE) {
-		ast_consume(p, .LSQUIRLY, "Expect '{' after else.")
+	if match(p, .ELSE) {
+		consume(p, .LSQUIRLY, "Expect '{' after else.")
 		stmt.else_branch = parse_block(p)
 	}
 	return stmt
 }
 
-parse_while_stmt :: proc(p: ^AstParser, is_whilent: bool) -> ^WhileStmt {
+parse_while_stmt :: proc(p: ^Parser, is_whilent: bool) -> ^WhileStmt {
 	stmt := new(WhileStmt)
-	stmt.token = ast_previous(p)
+	stmt.token = previous(p)
 	stmt.is_whilent = is_whilent
 	stmt.condition = parse_expression(p)
 
-	ast_consume(p, .LSQUIRLY, "Expect '{' after condition.")
+	consume(p, .LSQUIRLY, "Expect '{' after condition.")
 	stmt.body = parse_block(p)
 	return stmt
 }
 
-parse_break_stmt :: proc(p: ^AstParser) -> ^BreakStmt {
+parse_break_stmt :: proc(p: ^Parser) -> ^BreakStmt {
 	stmt := new(BreakStmt)
-	stmt.token = ast_previous(p)
-	ast_consume_semi(p, "break")
+	stmt.token = previous(p)
+	consume_semi(p, "break")
 	return stmt
 }
 
-parse_continue_stmt :: proc(p: ^AstParser) -> ^ContinueStmt {
+parse_continue_stmt :: proc(p: ^Parser) -> ^ContinueStmt {
 	stmt := new(ContinueStmt)
-	stmt.token = ast_previous(p)
-	ast_consume_semi(p, "continue")
+	stmt.token = previous(p)
+	consume_semi(p, "continue")
 	return stmt
 }
 
-parse_for_stmt :: proc(p: ^AstParser) -> Stmt {
-	token := ast_previous(p)
+parse_for_stmt :: proc(p: ^Parser) -> Stmt {
+	token := previous(p)
 	// Differentiate between for-in and classic for loop
-	if ast_check(p, .IDENT) && p.tokens[p.current + 1].type == .IN {
+	if check(p, .IDENT) && p.tokens[p.current + 1].type == .IN {
 		stmt := new(ForInStmt)
 		stmt.token = token
-		stmt.var_name = ast_advance(p)
-		ast_advance(p) // consume IN
+		stmt.var_name = advance(p)
+		advance(p) // consume IN
 		stmt.iterable = parse_expression(p)
-		ast_consume(p, .LSQUIRLY, "Expect '{' after iterable.")
+		consume(p, .LSQUIRLY, "Expect '{' after iterable.")
 		stmt.body = parse_block(p)
 		return stmt
 	}
 
 	stmt := new(ForStmt)
 	stmt.token = token
-	if ast_match(p, .SEMI) {
+	if match(p, .SEMI) {
 		empty := new(EmptyStmt)
-		empty.token = ast_previous(p)
+		empty.token = previous(p)
 		stmt.initializer = empty
-	} else if ast_match(p, .VAR, .VAL) {
+	} else if match(p, .VAR, .VAL) {
 		stmt.initializer = parse_var_decl(p)
 	} else {
 		stmt.initializer = parse_expression_stmt(p)
 	}
 
-	if !ast_match(p, .SEMI) {
+	if !match(p, .SEMI) {
 		stmt.condition = parse_expression(p)
-		ast_consume_semi(p, "loop condition")
+		consume_semi(p, "loop condition")
 	}
 
-	if !ast_match(p, .LSQUIRLY) {
+	if !match(p, .LSQUIRLY) {
 		stmt.increment = parse_expression(p)
-		ast_consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
+		consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
 	}
 
 	stmt.body = parse_block(p)
 	return stmt
 }
 
-parse_block :: proc(p: ^AstParser) -> ^BlockStmt {
+parse_block :: proc(p: ^Parser) -> ^BlockStmt {
 	stmt := new(BlockStmt)
-	stmt.token = ast_previous(p)
+	stmt.token = previous(p)
 	declarations := make([dynamic]Decl)
 
-	for !ast_check(p, .RSQUIRLY) && !ast_is_at_end(p) {
+	for !check(p, .RSQUIRLY) && !is_at_end(p) {
 		decl := parse_declaration(p)
 		if p.panic_mode {
-			ast_synchronize(p)
+			synchronize(p)
 		} else {
 			append(&declarations, decl)
 		}
 	}
 	stmt.declarations = declarations[:]
-	ast_consume(p, .RSQUIRLY, "Expect '}' after block.")
+	consume(p, .RSQUIRLY, "Expect '}' after block.")
 
 	return stmt
 }
 
-parse_print_stmt :: proc(p: ^AstParser) -> ^PrintStmt {
+parse_print_stmt :: proc(p: ^Parser) -> ^PrintStmt {
 	stmt := new(PrintStmt)
-	stmt.token = ast_previous(p)
+	stmt.token = previous(p)
 	stmt.expr = parse_expression(p)
-	ast_consume_semi(p, "value")
+	consume_semi(p, "value")
 	return stmt
 }
 
-parse_return_stmt :: proc(p: ^AstParser) -> ^ReturnStmt {
+parse_return_stmt :: proc(p: ^Parser) -> ^ReturnStmt {
 	stmt := new(ReturnStmt)
-	stmt.token = ast_previous(p)
-	if !ast_match(p, .SEMI) {
+	stmt.token = previous(p)
+	if !match(p, .SEMI) {
 		stmt.value = parse_expression(p)
-		ast_consume_semi(p, "return value")
+		consume_semi(p, "return value")
 	}
 	return stmt
 }
 
-parse_exit_stmt :: proc(p: ^AstParser) -> ^ExitStmt {
+parse_exit_stmt :: proc(p: ^Parser) -> ^ExitStmt {
 	stmt := new(ExitStmt)
-	stmt.token = ast_previous(p)
-	if !ast_match(p, .SEMI) {
+	stmt.token = previous(p)
+	if !match(p, .SEMI) {
 		stmt.code = parse_expression(p)
-		ast_consume_semi(p, "exit code")
+		consume_semi(p, "exit code")
 	}
 	return stmt
 }
 
-parse_switch_stmt :: proc(p: ^AstParser) -> ^SwitchStmt {
+parse_switch_stmt :: proc(p: ^Parser) -> ^SwitchStmt {
 	stmt := new(SwitchStmt)
-	stmt.token = ast_previous(p)
+	stmt.token = previous(p)
 	cases := make([dynamic]SwitchCase)
 	has_else_clause := false
 
-	if ast_match(p, .LSQUIRLY) {
+	if match(p, .LSQUIRLY) {
 		// No condition
 	} else {
 		stmt.condition = parse_expression(p)
-		ast_consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
+		consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
 	}
 
-	for !ast_match(p, .RSQUIRLY) && !ast_is_at_end(p) {
-		if ast_match(p, .ELSE) {
+	for !match(p, .RSQUIRLY) && !is_at_end(p) {
+		if match(p, .ELSE) {
 			has_else_clause = true
-			ast_consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
+			consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
 			stmt.else_branch = parse_statement(p)
-			if ast_check(p, .SEMI) {ast_advance(p)}
-			ast_consume(p, .RSQUIRLY, "'else' must be the last case.")
+			if check(p, .SEMI) {advance(p)}
+			consume(p, .RSQUIRLY, "'else' must be the last case.")
 			break
 		}
 
 		case_node: SwitchCase
 		case_node.condition = parse_expression(p)
-		ast_consume(p, .FAT_ARROW, "Expect '=>' after case.")
+		consume(p, .FAT_ARROW, "Expect '=>' after case.")
 		case_node.body = parse_statement(p)
-		if ast_check(p, .SEMI) {ast_advance(p)}
+		if check(p, .SEMI) {advance(p)}
 		append(&cases, case_node)
 	}
 
 	if !has_else_clause {
-		ast_error(p, ast_peek(p), "Switch statement must have an 'else' clause.")
+		error(p, peek(p), "Switch statement must have an 'else' clause.")
 	}
 
 	stmt.cases = cases[:]
 	return stmt
 }
 
-parse_expression_stmt :: proc(p: ^AstParser) -> ^ExprStmt {
+parse_expression_stmt :: proc(p: ^Parser) -> ^ExprStmt {
 	stmt := new(ExprStmt)
 	stmt.expr = parse_expression(p)
-	stmt.token = ast_previous(p)
-	ast_consume_semi(p, "expression")
+	stmt.token = previous(p)
+	consume_semi(p, "expression")
 	return stmt
 }
 
 // Expression parsers
 
-parse_expression :: proc(p: ^AstParser) -> Expr {
-	return ast_parse_precedence(p, .PIPELINE)
+parse_expression :: proc(p: ^Parser) -> Expr {
+	return parse_precedence(p, .PIPELINE)
 }
 
 //---------------------------------------------------------
 // Prefix Rules
 //---------------------------------------------------------
 
-ast_parse_grouping :: proc(p: ^AstParser, can_assign: bool) -> Expr {
-	token := ast_previous(p)
+parse_grouping :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	token := previous(p)
 	expr := parse_expression(p)
-	ast_consume(p, .RPAREN, "Expect ')' after expression.")
+	consume(p, .RPAREN, "Expect ')' after expression.")
 	grouping := new(GroupingExpr)
 	grouping.token = token
 	grouping.expression = expr
 	return grouping
 }
 
-ast_parse_list :: proc(p: ^AstParser, can_assign: bool) -> Expr {
+parse_list :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	list := new(ListExpr)
-	list.token = ast_previous(p)
+	list.token = previous(p)
 	elements := make([dynamic]Expr)
-	if !ast_check(p, .RSQUARE) {
+	if !check(p, .RSQUARE) {
 		for {
 			append(&elements, parse_expression(p))
-			if !ast_match(p, .COMMA) {break}
+			if !match(p, .COMMA) {break}
 		}
 	}
 	list.elements = elements[:]
-	ast_consume(p, .RSQUARE, "Expect ']' after list elements.")
+	consume(p, .RSQUARE, "Expect ']' after list elements.")
 	return list
 }
 
-ast_parse_unary :: proc(p: ^AstParser, can_assign: bool) -> Expr {
-	operator := ast_previous(p)
-	right := ast_parse_precedence(p, .UNARY)
+parse_unary :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	operator := previous(p)
+	right := parse_precedence(p, .UNARY)
 	unary := new(UnaryExpr)
 	unary.token = operator
 	unary.operator = operator
@@ -797,9 +791,9 @@ add_escape_sequences :: proc(str: string) -> string {
 	return strings.clone(strings.to_string(sb))
 }
 
-ast_parse_literal :: proc(p: ^AstParser, can_assign: bool) -> Expr {
+parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	literal := new(LiteralExpr)
-	literal.token = ast_previous(p)
+	literal.token = previous(p)
 
 	#partial switch literal.token.type {
 	case .STRING:
@@ -807,7 +801,7 @@ ast_parse_literal :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	case .NUMBER:
 		value, ok := strconv.parse_f64(literal.token.lexeme)
 		if !ok {
-			ast_error(
+			error(
 				p,
 				literal.token,
 				fmt.tprintf(
@@ -824,7 +818,7 @@ ast_parse_literal :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	case .NIL:
 		literal.value = nil
 	case:
-		ast_error(
+		error(
 			p,
 			literal.token,
 			fmt.tprintf(
@@ -837,14 +831,14 @@ ast_parse_literal :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	return literal
 }
 
-ast_parse_variable :: proc(p: ^AstParser, can_assign: bool) -> Expr {
-	name := ast_previous(p)
+parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	name := previous(p)
 
 	// No-paren string call: `puts "hello"`
 	// Only valid as a call, not as an assignment target
-	if ast_match(p, .STRING) {
+	if match(p, .STRING) {
 		str_literal := new(LiteralExpr)
-		str_literal.token = ast_previous(p)
+		str_literal.token = previous(p)
 		str_literal.value = add_escape_sequences(
 			str_literal.token.lexeme[1:len(str_literal.token.lexeme) - 1],
 		)
@@ -857,7 +851,7 @@ ast_parse_variable :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 		// Therefore, `token` for this case is the function name and `rparen`
 		// is the string.
 		call.token = name
-		call.rdelimiter = ast_previous(p)
+		call.rdelimiter = previous(p)
 		call.arguments = make([]Expr, 1)
 
 		// The no-paren function call is a bit limited as only functions assigned
@@ -871,7 +865,7 @@ ast_parse_variable :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 		return call
 	}
 
-	if can_assign && ast_match(p, .EQUAL) {
+	if can_assign && match(p, .EQUAL) {
 		value := parse_expression(p)
 		assign := new(AssignExpr)
 		assign.token = name
@@ -885,11 +879,11 @@ ast_parse_variable :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	return var_expr
 }
 
-ast_parse_super :: proc(p: ^AstParser, can_assign: bool) -> Expr {
+parse_super :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	super_expr := new(SuperExpr)
-	super_expr.token = ast_previous(p)
-	ast_consume(p, .DOT, "Expect '.' after 'super'.")
-	super_expr.method = ast_consume(p, .IDENT, "Expect superclass method name.")
+	super_expr.token = previous(p)
+	consume(p, .DOT, "Expect '.' after 'super'.")
+	super_expr.method = consume(p, .IDENT, "Expect superclass method name.")
 
 	invoked := false
 	method_args := make([dynamic]Expr, 0, 1)
@@ -898,16 +892,16 @@ ast_parse_super :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	}
 
 	// was the retrieved method immediately invoked?
-	if ast_match(p, .LPAREN) {
+	if match(p, .LPAREN) {
 		invoked = true
-		if !ast_check(p, .RPAREN) {
+		if !check(p, .RPAREN) {
 			for {
 				append(&method_args, parse_expression(p))
-				if !ast_match(p, .COMMA) {break}
+				if !match(p, .COMMA) {break}
 			}
 		}
 		super_expr.method_args = method_args[:]
-		ast_consume(p, .RPAREN, "Expect ')' after method parameters.")
+		consume(p, .RPAREN, "Expect ')' after method parameters.")
 	} else {
 		super_expr.method_args = nil
 	}
@@ -915,21 +909,21 @@ ast_parse_super :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	return super_expr
 }
 
-ast_parse_this :: proc(p: ^AstParser, can_assign: bool) -> Expr {
+parse_this :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	this_expr := new(ThisExpr)
-	this_expr.token = ast_previous(p)
+	this_expr.token = previous(p)
 	return this_expr
 }
 
-ast_parse_it :: proc(p: ^AstParser, can_assign: bool) -> Expr {
+parse_it :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	it_expr := new(ItExpr)
-	it_expr.token = ast_previous(p)
+	it_expr.token = previous(p)
 	return it_expr
 }
 
-ast_parse_lambda :: proc(p: ^AstParser, can_assign: bool) -> Expr {
+parse_lambda :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	lambda := new(LambdaExpr)
-	lambda.token = ast_previous(p)
+	lambda.token = previous(p)
 	lambda.func_decl = parse_func_body(p, Token{type = .IDENT, lexeme = "lambda"})
 	return lambda
 }
@@ -938,11 +932,11 @@ ast_parse_lambda :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 // Infix Rules
 //---------------------------------------------------------
 
-ast_parse_binary :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
-	operator := ast_previous(p)
-	rule := ast_get_rule(operator.type)
+parse_binary :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+	operator := previous(p)
+	rule := get_rule(operator.type)
 	// Add 1 to precedence for left-associative operators
-	right := ast_parse_precedence(p, cast(AstPrecedence)(cast(int)rule.precedence + 1))
+	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
 
 	binary := new(BinaryExpr)
 	binary.token = operator
@@ -952,10 +946,10 @@ ast_parse_binary :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
 	return binary
 }
 
-ast_parse_logical :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
-	operator := ast_previous(p)
-	rule := ast_get_rule(operator.type)
-	right := ast_parse_precedence(p, cast(AstPrecedence)(cast(int)rule.precedence + 1))
+parse_logical :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+	operator := previous(p)
+	rule := get_rule(operator.type)
+	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
 
 	logical := new(LogicalExpr)
 	logical.token = operator
@@ -965,10 +959,10 @@ ast_parse_logical :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
 	return logical
 }
 
-ast_parse_pipe :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
-	operator := ast_previous(p)
-	rule := ast_get_rule(operator.type)
-	right := ast_parse_precedence(p, cast(AstPrecedence)(cast(int)rule.precedence + 1))
+parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+	operator := previous(p)
+	rule := get_rule(operator.type)
+	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
 
 	pipe := new(PipeExpr)
 	pipe.token = operator
@@ -978,28 +972,28 @@ ast_parse_pipe :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
 	return pipe
 }
 
-ast_parse_call :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
+parse_call :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	call := new(CallExpr)
-	call.token = ast_previous(p) // The '(' token
+	call.token = previous(p) // The '(' token
 	call.callee = left
 	arguments := make([dynamic]Expr)
 
-	if !ast_check(p, .RPAREN) {
+	if !check(p, .RPAREN) {
 		for {
 			append(&arguments, parse_expression(p))
-			if !ast_match(p, .COMMA) {break}
+			if !match(p, .COMMA) {break}
 		}
 	}
 	call.arguments = arguments[:]
-	call.rdelimiter = ast_consume(p, .RPAREN, "Expect ')' after arguments.")
+	call.rdelimiter = consume(p, .RPAREN, "Expect ')' after arguments.")
 	return call
 }
 
-ast_parse_dot :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
-	dot := ast_previous(p) // The '.' token
-	property := ast_consume(p, .IDENT, "Expect property name after '.'.")
-	if can_assign && ast_match(p, .EQUAL) {
-		equals := ast_previous(p)
+parse_dot :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+	dot := previous(p) // The '.' token
+	property := consume(p, .IDENT, "Expect property name after '.'.")
+	if can_assign && match(p, .EQUAL) {
+		equals := previous(p)
 		value := parse_expression(p)
 		set_expr := new(SetExpr)
 		set_expr.token = equals // The '=' token
@@ -1015,11 +1009,11 @@ ast_parse_dot :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
 	return get_expr
 }
 
-ast_parse_subscript :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
-	bracket := ast_previous(p) // The '[' token
+parse_subscript :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+	bracket := previous(p) // The '[' token
 	index := parse_expression(p)
-	ast_consume(p, .RSQUARE, "Expect ']' after index.")
-	if can_assign && ast_match(p, .EQUAL) {
+	consume(p, .RSQUARE, "Expect ']' after index.")
+	if can_assign && match(p, .EQUAL) {
 		value := parse_expression(p)
 		sub_set := new(SubscriptSetExpr)
 		sub_set.token = bracket
@@ -1039,57 +1033,57 @@ ast_parse_subscript :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr
 // Rule Table
 //---------------------------------------------------------
 
-ast_rules: [TokenType]AstParseRule = {
-	.LPAREN        = {ast_parse_grouping, ast_parse_call, .CALL},
+rules: [TokenType]ParseRule = {
+	.LPAREN        = {parse_grouping, parse_call, .CALL},
 	.RPAREN        = {nil, nil, .NONE},
 	.LSQUIRLY      = {nil, nil, .NONE},
 	.RSQUIRLY      = {nil, nil, .NONE},
-	.LSQUARE       = {ast_parse_list, ast_parse_subscript, .CALL},
+	.LSQUARE       = {parse_list, parse_subscript, .CALL},
 	.RSQUARE       = {nil, nil, .NONE},
 	.COMMA         = {nil, nil, .NONE},
-	.DOT           = {nil, ast_parse_dot, .CALL},
-	.MINUS         = {ast_parse_unary, ast_parse_binary, .TERM},
-	.PLUS          = {nil, ast_parse_binary, .TERM},
+	.DOT           = {nil, parse_dot, .CALL},
+	.MINUS         = {parse_unary, parse_binary, .TERM},
+	.PLUS          = {nil, parse_binary, .TERM},
 	.SEMI          = {nil, nil, .NONE},
-	.SLASH         = {nil, ast_parse_binary, .FACTOR},
-	.STAR          = {nil, ast_parse_binary, .FACTOR},
-	.PERCENT       = {nil, ast_parse_binary, .FACTOR},
+	.SLASH         = {nil, parse_binary, .FACTOR},
+	.STAR          = {nil, parse_binary, .FACTOR},
+	.PERCENT       = {nil, parse_binary, .FACTOR},
 	.NEWLINE       = {nil, nil, .NONE},
-	.BANG_EQUAL    = {nil, ast_parse_binary, .EQUALITY},
-	.BAR_GREATER   = {nil, ast_parse_pipe, .PIPELINE},
+	.BANG_EQUAL    = {nil, parse_binary, .EQUALITY},
+	.BAR_GREATER   = {nil, parse_pipe, .PIPELINE},
 	.EQUAL         = {nil, nil, .NONE},
-	.EQUAL_EQUAL   = {nil, ast_parse_binary, .EQUALITY},
+	.EQUAL_EQUAL   = {nil, parse_binary, .EQUALITY},
 	.FAT_ARROW     = {nil, nil, .NONE},
-	.GREATER       = {nil, ast_parse_binary, .COMPARISON},
-	.GREATER_EQUAL = {nil, ast_parse_binary, .COMPARISON},
-	.LESS          = {nil, ast_parse_binary, .COMPARISON},
-	.LESS_EQUAL    = {nil, ast_parse_binary, .COMPARISON},
-	.IDENT         = {ast_parse_variable, nil, .NONE},
-	.STRING        = {ast_parse_literal, nil, .NONE},
-	.NUMBER        = {ast_parse_literal, nil, .NONE},
-	.AND           = {nil, ast_parse_logical, .AND},
+	.GREATER       = {nil, parse_binary, .COMPARISON},
+	.GREATER_EQUAL = {nil, parse_binary, .COMPARISON},
+	.LESS          = {nil, parse_binary, .COMPARISON},
+	.LESS_EQUAL    = {nil, parse_binary, .COMPARISON},
+	.IDENT         = {parse_variable, nil, .NONE},
+	.STRING        = {parse_literal, nil, .NONE},
+	.NUMBER        = {parse_literal, nil, .NONE},
+	.AND           = {nil, parse_logical, .AND},
 	.BREAK         = {nil, nil, .NONE},
 	.CONTINUE      = {nil, nil, .NONE},
 	.CLASS         = {nil, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
 	.EXIT          = {nil, nil, .NONE},
-	.FALSE         = {ast_parse_literal, nil, .NONE},
+	.FALSE         = {parse_literal, nil, .NONE},
 	.FOR           = {nil, nil, .NONE},
-	.FUNC          = {ast_parse_lambda, nil, .NONE},
+	.FUNC          = {parse_lambda, nil, .NONE},
 	.IF            = {nil, nil, .NONE},
 	.IFNT          = {nil, nil, .NONE},
 	.IN            = {nil, nil, .NONE},
-	.IT            = {ast_parse_it, nil, .NONE},
-	.NIL           = {ast_parse_literal, nil, .NONE},
-	.NOT           = {ast_parse_unary, nil, .NONE},
-	.OR            = {nil, ast_parse_logical, .OR},
+	.IT            = {parse_it, nil, .NONE},
+	.NIL           = {parse_literal, nil, .NONE},
+	.NOT           = {parse_unary, nil, .NONE},
+	.OR            = {nil, parse_logical, .OR},
 	.PRINT         = {nil, nil, .NONE},
 	.PUB           = {nil, nil, .NONE},
 	.RETURN        = {nil, nil, .NONE},
 	.SWITCH        = {nil, nil, .NONE},
-	.SUPER         = {ast_parse_super, nil, .NONE},
-	.THIS          = {ast_parse_this, nil, .NONE},
-	.TRUE          = {ast_parse_literal, nil, .NONE},
+	.SUPER         = {parse_super, nil, .NONE},
+	.THIS          = {parse_this, nil, .NONE},
+	.TRUE          = {parse_literal, nil, .NONE},
 	.USE           = {nil, nil, .NONE},
 	.WHILE         = {nil, nil, .NONE},
 	.WHILENT       = {nil, nil, .NONE},
@@ -1098,18 +1092,18 @@ ast_rules: [TokenType]AstParseRule = {
 	.EOF           = {nil, nil, .NONE},
 }
 
-AstParser :: struct {
+Parser :: struct {
 	tokens:     []Token,
 	current:    int,
 	had_error:  bool,
 	panic_mode: bool,
 }
 
-init_parser :: proc(tokens: []Token) -> AstParser {
-	return AstParser{tokens = tokens, current = 0, had_error = false, panic_mode = false}
+init_parser :: proc(tokens: []Token) -> Parser {
+	return Parser{tokens = tokens, current = 0, had_error = false, panic_mode = false}
 }
 
-ast_error :: proc(p: ^AstParser, token: Token, message: string) {
+error :: proc(p: ^Parser, token: Token, message: string) {
 	if p.panic_mode {return}
 	p.panic_mode = true
 
@@ -1126,55 +1120,55 @@ ast_error :: proc(p: ^AstParser, token: Token, message: string) {
 	p.had_error = true
 }
 
-ast_peek :: proc(p: ^AstParser) -> Token {
+peek :: proc(p: ^Parser) -> Token {
 	return p.tokens[p.current]
 }
 
-ast_previous :: proc(p: ^AstParser) -> Token {
+previous :: proc(p: ^Parser) -> Token {
 	return p.tokens[p.current - 1]
 }
 
-ast_is_at_end :: proc(p: ^AstParser) -> bool {
-	return ast_peek(p).type == .EOF
+is_at_end :: proc(p: ^Parser) -> bool {
+	return peek(p).type == .EOF
 }
 
-ast_check :: proc(p: ^AstParser, type: TokenType) -> bool {
-	if ast_is_at_end(p) {return false}
-	return ast_peek(p).type == type
+check :: proc(p: ^Parser, type: TokenType) -> bool {
+	if is_at_end(p) {return false}
+	return peek(p).type == type
 }
 
-ast_advance :: proc(p: ^AstParser) -> Token {
-	if !ast_is_at_end(p) {p.current += 1}
-	return ast_previous(p)
+advance :: proc(p: ^Parser) -> Token {
+	if !is_at_end(p) {p.current += 1}
+	return previous(p)
 }
 
-ast_match :: proc(p: ^AstParser, types: ..TokenType) -> bool {
+match :: proc(p: ^Parser, types: ..TokenType) -> bool {
 	for type in types {
-		if ast_check(p, type) {
-			ast_advance(p)
+		if check(p, type) {
+			advance(p)
 			return true
 		}
 	}
 	return false
 }
 
-ast_consume :: proc(p: ^AstParser, type: TokenType, message: string) -> Token {
-	if ast_check(p, type) {return ast_advance(p)}
-	ast_error(p, ast_peek(p), message)
-	return ast_peek(p)
+consume :: proc(p: ^Parser, type: TokenType, message: string) -> Token {
+	if check(p, type) {return advance(p)}
+	error(p, peek(p), message)
+	return peek(p)
 }
 
-ast_consume_semi :: proc(p: ^AstParser, message: string) {
-	ast_consume(p, .SEMI, fmt.tprintf("Expect ';' after %s.", message))
+consume_semi :: proc(p: ^Parser, message: string) {
+	consume(p, .SEMI, fmt.tprintf("Expect ';' after %s.", message))
 }
 
-ast_synchronize :: proc(p: ^AstParser) {
+synchronize :: proc(p: ^Parser) {
 	p.panic_mode = false
 
-	for !ast_is_at_end(p) {
-		if ast_previous(p).type == .SEMI {return}
+	for !is_at_end(p) {
+		if previous(p).type == .SEMI {return}
 
-		#partial switch ast_peek(p).type {
+		#partial switch peek(p).type {
 		case .BREAK,
 		     .CONTINUE,
 		     .CLASS,
@@ -1196,7 +1190,7 @@ ast_synchronize :: proc(p: ^AstParser) {
 		case: // do nothing.
 		}
 
-		ast_advance(p)
+		advance(p)
 	}
 }
 
@@ -1403,25 +1397,27 @@ ast_string :: proc(decls: []Decl) -> string {
 	defer strings.builder_destroy(&b)
 
 	for decl in decls {
-		ast_print_decl(&b, decl, 0)
+		print_decl(&b, decl, 0)
 	}
 	return strings.clone(strings.to_string(b))
 }
 
-ast_print_indent :: proc(b: ^strings.Builder, indent: int) {
+@(private = "file")
+print_indent :: proc(b: ^strings.Builder, indent: int) {
 	for i := 0; i < indent; i += 1 {
 		strings.write_string(b, "  ")
 	}
 }
 
-ast_print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
+@(private = "file")
+print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
 	if decl == nil {
 		return
 	}
 
 	switch d in decl {
 	case ^ClassDecl:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(class %s", d.name.lexeme)
 		if d.superclass != nil {
 			superclass: Token = d.superclass.?
@@ -1429,12 +1425,12 @@ ast_print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
 		}
 		strings.write_string(b, "\n")
 		for method in d.methods {
-			ast_print_decl(b, method, indent + 1)
+			print_decl(b, method, indent + 1)
 		}
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^FuncDecl:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(func %s (", d.name.lexeme)
 		for param, i in d.params {
 			if i > 0 {strings.write_string(b, " ")}
@@ -1444,25 +1440,25 @@ ast_print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
 
 		#partial switch body in d.body {
 		case ^BlockStmt:
-			ast_print_stmt(b, body, indent + 1)
+			print_stmt(b, body, indent + 1)
 		case Expr:
-			ast_print_indent(b, indent + 1)
+			print_indent(b, indent + 1)
 			strings.write_string(b, "=>\n")
-			ast_print_expr(b, body, indent + 2)
+			print_expr(b, body, indent + 2)
 		}
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ModuleDecl:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(use %s)\n", d.path.lexeme)
 	case ^PubDecl:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(pub\n")
-		ast_print_decl(b, d.decl, indent + 1)
-		ast_print_indent(b, indent)
+		print_decl(b, d.decl, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^VarDecl:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		kind := d.is_final ? "val" : "var"
 		fmt.sbprintf(b, "(%s ", kind)
 		for binding, i in d.bindings {
@@ -1471,219 +1467,221 @@ ast_print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
 			if binding.initializer != nil {
 				init: Expr = binding.initializer
 				strings.write_string(b, " =\n")
-				ast_print_expr(b, init, indent + 1)
+				print_expr(b, init, indent + 1)
 			}
 		}
 		strings.write_string(b, ")\n")
 	case Stmt:
-		ast_print_stmt(b, d, indent)
+		print_stmt(b, d, indent)
 	case:
 		fmt.sbprintf(b, "<Unknown Decl %T>\n", d)
 	}
 }
 
-ast_print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
+@(private = "file")
+print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
 	if stmt == nil {
 		return
 	}
 
 	switch s in stmt {
 	case ^BlockStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(block\n")
 		for d in s.declarations {
-			ast_print_decl(b, d, indent + 1)
+			print_decl(b, d, indent + 1)
 		}
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^BreakStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(break)\n")
 	case ^ContinueStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(continue)\n")
 	case ^EmptyStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(empty)\n")
 	case ^ExitStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(exit")
 		if s.code != nil {
 			code: Expr = s.code
 			strings.write_string(b, "\n")
-			ast_print_expr(b, code, indent + 1)
-			ast_print_indent(b, indent)
+			print_expr(b, code, indent + 1)
+			print_indent(b, indent)
 		}
 		strings.write_string(b, ")\n")
 	case ^ExprStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(expr\n")
-		ast_print_expr(b, s.expr, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, s.expr, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ForInStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(for-in %s\n", s.var_name.lexeme)
-		ast_print_expr(b, s.iterable, indent + 1)
-		ast_print_stmt(b, s.body, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, s.iterable, indent + 1)
+		print_stmt(b, s.body, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ForStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(for\n")
 		if true {
-			ast_print_indent(b, indent + 1)
+			print_indent(b, indent + 1)
 			strings.write_string(b, "init:\n")
 			#partial switch init in s.initializer {
 			case ^VarDecl:
-				ast_print_decl(b, init, indent + 2)
+				print_decl(b, init, indent + 2)
 			case ^ExprStmt:
-				ast_print_stmt(b, init, indent + 2)
+				print_stmt(b, init, indent + 2)
 			case ^EmptyStmt:
-				ast_print_stmt(b, init, indent + 2)
+				print_stmt(b, init, indent + 2)
 			}
 		}
 		if s.condition != nil {
 			cond: Expr = s.condition
-			ast_print_indent(b, indent + 1)
+			print_indent(b, indent + 1)
 			strings.write_string(b, "cond:\n")
-			ast_print_expr(b, cond, indent + 2)
+			print_expr(b, cond, indent + 2)
 		}
 		if s.increment != nil {
 			inc: Expr = s.increment
-			ast_print_indent(b, indent + 1)
+			print_indent(b, indent + 1)
 			strings.write_string(b, "inc:\n")
-			ast_print_expr(b, inc, indent + 2)
+			print_expr(b, inc, indent + 2)
 		}
-		ast_print_stmt(b, s.body, indent + 1)
-		ast_print_indent(b, indent)
+		print_stmt(b, s.body, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^IfStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		kind := s.is_ifnt ? "ifn't" : "if"
 		fmt.sbprintf(b, "(%s\n", kind)
-		ast_print_expr(b, s.condition, indent + 1)
-		ast_print_stmt(b, s.then_branch, indent + 1)
+		print_expr(b, s.condition, indent + 1)
+		print_stmt(b, s.then_branch, indent + 1)
 		if s.else_branch != nil {
 			else_b: ^BlockStmt = s.else_branch
-			ast_print_indent(b, indent + 1)
+			print_indent(b, indent + 1)
 			strings.write_string(b, "else:\n")
-			ast_print_stmt(b, else_b, indent + 2)
+			print_stmt(b, else_b, indent + 2)
 		}
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^PrintStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(print\n")
-		ast_print_expr(b, s.expr, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, s.expr, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ReturnStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(return")
 		if s.value != nil {
 			val: Expr = s.value
 			strings.write_string(b, "\n")
-			ast_print_expr(b, val, indent + 1)
-			ast_print_indent(b, indent)
+			print_expr(b, val, indent + 1)
+			print_indent(b, indent)
 		}
 		strings.write_string(b, ")\n")
 	case ^SwitchStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(switch")
 		if s.condition != nil {
 			cond: Expr = s.condition
 			strings.write_string(b, "\n")
-			ast_print_expr(b, cond, indent + 1)
+			print_expr(b, cond, indent + 1)
 		} else {
 			strings.write_string(b, " true\n")
 		}
 		for c in s.cases {
-			ast_print_indent(b, indent + 1)
+			print_indent(b, indent + 1)
 			strings.write_string(b, "case:\n")
-			ast_print_expr(b, c.condition, indent + 2)
-			ast_print_stmt(b, c.body, indent + 2)
+			print_expr(b, c.condition, indent + 2)
+			print_stmt(b, c.body, indent + 2)
 		}
 		if s.else_branch != nil {
-			ast_print_indent(b, indent + 1)
+			print_indent(b, indent + 1)
 			strings.write_string(b, "else:\n")
-			ast_print_stmt(b, s.else_branch, indent + 2)
+			print_stmt(b, s.else_branch, indent + 2)
 		}
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^WhileStmt:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		kind := "whilen't" if s.is_whilent else "while"
 		fmt.sbprintf(b, "(%s\n", kind)
-		ast_print_expr(b, s.condition, indent + 1)
-		ast_print_stmt(b, s.body, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, s.condition, indent + 1)
+		print_stmt(b, s.body, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case:
 		fmt.sbprintf(b, "<Unknown Stmt %T>\n", s)
 	}
 }
 
-ast_print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
+@(private = "file")
+print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 	if expr == nil {
 		return
 	}
 
 	switch e in expr {
 	case ^AssignExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(assign %s\n", e.name.lexeme)
-		ast_print_expr(b, e.value, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.value, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^BinaryExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(%s\n", e.operator.lexeme)
-		ast_print_expr(b, e.left, indent + 1)
-		ast_print_expr(b, e.right, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.left, indent + 1)
+		print_expr(b, e.right, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^CallExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(call\n")
-		ast_print_expr(b, e.callee, indent + 1)
+		print_expr(b, e.callee, indent + 1)
 		for arg in e.arguments {
-			ast_print_expr(b, arg, indent + 1)
+			print_expr(b, arg, indent + 1)
 		}
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^GetExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(get %s\n", e.property.lexeme)
-		ast_print_expr(b, e.receiver, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.receiver, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^GroupingExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(group\n")
-		ast_print_expr(b, e.expression, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.expression, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ItExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "it\n")
 	case ^LambdaExpr:
-		ast_print_indent(b, indent)
-		ast_print_decl(b, e.func_decl, indent)
+		print_indent(b, indent)
+		print_decl(b, e.func_decl, indent)
 	case ^ListExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(list\n")
 		if len(e.elements) == 0 {
-			ast_print_indent(b, indent + 1)
+			print_indent(b, indent + 1)
 			strings.write_string(b, "[]\n")
 		}
 		for el in e.elements {
-			ast_print_expr(b, el, indent + 1)
+			print_expr(b, el, indent + 1)
 		}
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^LiteralExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		if e.value == nil {
 			fmt.sbprintln(b, "nil")
 		} else if v, ok := e.value.(string); ok {
@@ -1692,55 +1690,55 @@ ast_print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 			fmt.sbprintfln(b, "%v", e.value)
 		}
 	case ^LogicalExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(logical %s\n", e.operator.lexeme)
-		ast_print_expr(b, e.left, indent + 1)
-		ast_print_expr(b, e.right, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.left, indent + 1)
+		print_expr(b, e.right, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^PipeExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(|>\n")
-		ast_print_expr(b, e.left, indent + 1)
-		ast_print_expr(b, e.right, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.left, indent + 1)
+		print_expr(b, e.right, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^SetExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(set %s\n", e.property.lexeme)
-		ast_print_expr(b, e.receiver, indent + 1)
-		ast_print_expr(b, e.value, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.receiver, indent + 1)
+		print_expr(b, e.value, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^SubscriptExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(subscript\n")
-		ast_print_expr(b, e.receiver, indent + 1)
-		ast_print_expr(b, e.index, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.receiver, indent + 1)
+		print_expr(b, e.index, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^SubscriptSetExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "(subscript-set\n")
-		ast_print_expr(b, e.receiver, indent + 1)
-		ast_print_expr(b, e.index, indent + 1)
-		ast_print_expr(b, e.value, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.receiver, indent + 1)
+		print_expr(b, e.index, indent + 1)
+		print_expr(b, e.value, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^SuperExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(super %s)\n", e.method.lexeme)
 	case ^ThisExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		strings.write_string(b, "this\n")
 	case ^UnaryExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(unary %s\n", e.operator.lexeme)
-		ast_print_expr(b, e.right, indent + 1)
-		ast_print_indent(b, indent)
+		print_expr(b, e.right, indent + 1)
+		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^VariableExpr:
-		ast_print_indent(b, indent)
+		print_indent(b, indent)
 		fmt.sbprintf(b, "(var %s)\n", e.name.lexeme)
 	case:
 		fmt.sbprintf(b, "<Unknown Expr %T>\n", e)
