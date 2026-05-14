@@ -1136,46 +1136,39 @@ interpret :: proc(
 		return .INTERPRET_OK
 	}
 
-	when AST {
-		p := init_parser(tokens)
-		decls, ps_ok := parse(&p)
-		if !ps_ok {
-			free_decls(decls)
-			return .INTERPRET_PARSE_ERROR
-		}
-		defer free_decls(decls)
+	p := init_parser(tokens)
+	decls, ps_ok := parse(&p)
+	if !ps_ok {
+		free_decls(decls)
+		return .INTERPRET_PARSE_ERROR
+	}
+	defer free_decls(decls)
 
-		/* Time the parser. */
-		if config.record_time {
-			time.stopwatch_stop(&sw)
-			fmt.eprintf("Parser: %v\n", time.stopwatch_duration(sw))
-			time.stopwatch_reset(&sw)
-			time.stopwatch_start(&sw)
-		}
+	/* Time the parser. */
+	if config.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("Parser: %v\n", time.stopwatch_duration(sw))
+		time.stopwatch_reset(&sw)
+		time.stopwatch_start(&sw)
+	}
 
-		if config.dump_ast {
-			// TODO: make the ast representation a bit nicer
-			str := ast_string(decls)
-			defer delete(str)
-			fmt.println(str)
+	if config.dump_ast {
+		// TODO: make the ast representation a bit nicer
+		str := ast_string(decls)
+		defer delete(str)
+		fmt.println(str)
 
-			return .INTERPRET_OK
-		}
+		return .INTERPRET_OK
+	}
 
-		// Collect global variables before codegen
-		if !config.repl {
-			collect_script_globals(&vm.compiler_globals, gc, decls)
-		}
+	// Collect global variables before codegen
+	if !config.repl {
+		collect_script_globals(&vm.compiler_globals, gc, decls)
+	}
 
-		fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
-		if !cg_ok {
-			return .INTERPRET_COMPILE_ERROR
-		}
-	} else {
-		fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
-		if !cmp_ok {
-			return .INTERPRET_COMPILE_ERROR
-		}
+	fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
+	if !cg_ok {
+		return .INTERPRET_COMPILE_ERROR
 	}
 
 	/* Time the compiler. */
