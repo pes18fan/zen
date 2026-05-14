@@ -1128,6 +1128,11 @@ interpret :: proc(
 	}
 
 	if config.dump_tokens {
+		fmt.println("TOKENS:")
+		for token in tokens {
+			fmt.printfln("  %v", token)
+		}
+
 		return .INTERPRET_OK
 	}
 
@@ -1140,53 +1145,65 @@ interpret :: proc(
 		}
 		defer free_decls(decls)
 
-		str := ast_print(decls)
-		defer delete(str)
-		fmt.println(str)
+		/* Time the parser. */
+		if config.record_time {
+			time.stopwatch_stop(&sw)
+			fmt.eprintf("Parser: %v\n", time.stopwatch_duration(sw))
+			time.stopwatch_reset(&sw)
+			time.stopwatch_start(&sw)
+		}
+
+		if config.dump_ast {
+			// TODO: make the ast representation a bit nicer
+			str := ast_string(decls)
+			defer delete(str)
+			fmt.println(str)
+
+			return .INTERPRET_OK
+		}
 
 		if !config.repl {
 			// TODO: do a pre-pass to collect globals in gc.globals
 		}
 
-		fn, cg_ok := codegen(gc, decls, &gc.globals)
+		fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
 		if !cg_ok {
 			return .INTERPRET_COMPILE_ERROR
-		}
 
-		return .INTERPRET_OK
+		}
 	} else {
 		fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
 		if !cmp_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
-
-		/* Time the compiler. */
-		if config.record_time {
-			time.stopwatch_stop(&sw)
-			fmt.eprintf("Compiler: %v\n", time.stopwatch_duration(sw))
-			time.stopwatch_reset(&sw)
-			time.stopwatch_start(&sw)
-		}
-
-		/* Time the VM. */
-		defer if config.record_time {
-			time.stopwatch_stop(&sw)
-			fmt.eprintf("\nVM: %v\n", time.stopwatch_duration(sw))
-		}
-
-		/* If the user only wants to compile the script, then we can stop here. */
-		if config.compile_only {
-			return .INTERPRET_OK
-		}
-
-		vm_push(vm, obj_val(fn))
-		closure := new_closure(gc, fn)
-		vm_pop(vm)
-		vm_push(vm, obj_val(closure))
-		call(vm, closure, 0) // The script itself is a function, so call it.
-
-		return run(vm, importer)
 	}
+
+	/* Time the compiler. */
+	if config.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("Compiler: %v\n", time.stopwatch_duration(sw))
+		time.stopwatch_reset(&sw)
+		time.stopwatch_start(&sw)
+	}
+
+	/* Time the VM. */
+	defer if config.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("\nVM: %v\n", time.stopwatch_duration(sw))
+	}
+
+	/* If the user only wants to compile the script, then we can stop here. */
+	if config.compile_only {
+		return .INTERPRET_OK
+	}
+
+	vm_push(vm, obj_val(fn))
+	closure := new_closure(gc, fn)
+	vm_pop(vm)
+	vm_push(vm, obj_val(closure))
+	call(vm, closure, 0) // The script itself is a function, so call it.
+
+	return run(vm, importer)
 }
 
 /* Push a value onto the stack. */
@@ -1266,7 +1283,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 					return call(vm, as_closure(initializer), arg_count)
 				} else if arg_count != 0 {
 					/* If there is no initializer, passing arguments to a class
-				 * call makes no sense and is thus an error. */
+                     * call makes no sense and is thus an error. */
 					vm_panic(vm, "Expected 0 arguments but got %d.", arg_count)
 					return false
 				}
@@ -1346,8 +1363,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 			return call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count))
 		} else {
 			panic_str := fmt.tprintf(
-				`Value '%s' does not exist on module '%s'.
-       If this module is a file, you may have forgotten the pub keyword.`,
+				"Value '%s' does not exist on module '%s'.",
 				name.chars,
 				module.name.chars,
 			)

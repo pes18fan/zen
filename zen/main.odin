@@ -18,6 +18,7 @@ Config :: struct {
 	compile_only:     bool,
 	dump_disassembly: bool,
 	dump_tokens:      bool,
+	dump_ast:         bool,
 	trace_exec:       bool,
 	stress_gc:        bool,
 	log_gc:           bool,
@@ -36,8 +37,9 @@ Config :: struct {
 
 config := Config {
 	compile_only     = false,
-	dump_disassembly = false,
 	dump_tokens      = false,
+	dump_ast         = false,
+	dump_disassembly = false,
 	trace_exec       = false,
 	stress_gc        = false,
 	log_gc           = false,
@@ -141,8 +143,9 @@ print_help :: proc(stream: ^os.File) {
 
     -t, --time          Record time taken to compile and run
     -C, --compile       Compile only, useful with -D
-    -D, --dump          Dump disassembled bytecode
     --dump-tokens       Dump tokens from lexer and exit
+    --dump-ast          Dump the abstract syntax tree from the parser and exit
+    -D, --dump          Dump disassembled bytecode
     -T, --trace         Trace script execution
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation`
@@ -204,6 +207,8 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 			config.dump_disassembly = true
 		case "--dump-tokens":
 			config.dump_tokens = true
+		case "--dump-ast":
+			config.dump_ast = true
 		case "--trace":
 			config.trace_exec = true
 		case "--time":

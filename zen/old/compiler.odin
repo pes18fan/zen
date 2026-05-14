@@ -242,7 +242,7 @@ error_at :: proc(p: ^Parser, token: ^Token, message: string) {
 	p.panic_mode = true
 	color_red(os.stderr, "compile error ")
 
-	if token.type == TokenType.EOF {
+	if token.type == .EOF {
 		fmt.eprintf("at end")
 	} else {
 		fmt.eprintf("at '%s'", token.lexeme)
@@ -620,9 +620,7 @@ dot :: proc(p: ^Parser, can_assign: bool) {
 		expression(p)
 		emit_op_with_constant(p, .OP_SET_PROPERTY, .OP_SET_PROPERTY_LONG, name)
 	} else if match(p, .LPAREN) {
-		/* Check if the receiver is a module. */
 		arg_count: u8 = 0
-
 		if p.pipeline_active {
 			emit_opcode(p, .OP_GET_IT)
 			arg_count += 1

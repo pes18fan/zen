@@ -2,6 +2,7 @@ package zen
 
 import "core:fmt"
 import "core:os"
+import "core:strconv"
 import "core:strings"
 
 //---------------------------------------------------------
@@ -65,7 +66,7 @@ VarBinding :: struct {
 
 VarDecl :: struct {
 	token:    Token,
-	is_val:   bool,
+	is_final: bool,
 	bindings: []VarBinding,
 }
 
@@ -81,14 +82,16 @@ ModuleDecl :: struct {
 	path:  Token,
 }
 
+FunctionBody :: union #no_nil {
+	^BlockStmt,
+	Expr,
+}
+
 FuncDecl :: struct {
 	token:  Token,
 	name:   Token,
 	params: []Token,
-	body:   union #no_nil {
-		^BlockStmt,
-		Expr,
-	},
+	body:   FunctionBody,
 }
 
 PubDecl :: struct {
@@ -203,14 +206,17 @@ BinaryExpr :: struct {
 CallExpr :: struct {
 	token:     Token,
 	callee:    Expr,
-	paren:     Token,
+
+	// rparen is a Maybe cuz we can have a paren-less call if the arg is just
+	// one string, e.g. `puts "hello!"`
+	rparen:    Maybe(Token),
 	arguments: []Expr,
 }
 
 GetExpr :: struct {
-	token:  Token,
-	object: Expr,
-	name:   Token,
+	token:    Token,
+	receiver: Expr,
+	property: Token,
 }
 
 GroupingExpr :: struct {
@@ -219,8 +225,7 @@ GroupingExpr :: struct {
 }
 
 ItExpr :: struct {
-	token:   Token,
-	keyword: Token,
+	token: Token,
 }
 
 LambdaExpr :: struct {
@@ -235,7 +240,17 @@ ListExpr :: struct {
 
 LiteralExpr :: struct {
 	token: Token,
-	value: Token,
+	value: PrimitiveValue,
+}
+
+/* 
+The four primitive values in zen: f64, string, bool and nil (Odin unions are
+nilable unless you specify otherwise)
+*/
+PrimitiveValue :: union {
+	f64,
+	string,
+	bool,
 }
 
 LogicalExpr :: struct {
@@ -253,36 +268,33 @@ PipeExpr :: struct {
 }
 
 SetExpr :: struct {
-	token:  Token,
-	object: Expr,
-	name:   Token,
-	value:  Expr,
+	token:    Token,
+	receiver: Expr,
+	property: Token,
+	value:    Expr,
 }
 
 SubscriptExpr :: struct {
-	token:   Token,
-	object:  Expr,
-	bracket: Token,
-	index:   Expr,
+	token:    Token,
+	receiver: Expr,
+	index:    Expr,
 }
 
 SubscriptSetExpr :: struct {
-	token:   Token,
-	object:  Expr,
-	bracket: Token,
-	index:   Expr,
-	value:   Expr,
+	token:    Token,
+	receiver: Expr,
+	index:    Expr,
+	value:    Expr,
 }
 
 SuperExpr :: struct {
-	token:   Token,
-	keyword: Token,
-	method:  Token,
+	token:       Token,
+	method:      Token,
+	method_args: []Expr, // nil if the method wasn't directly invoked
 }
 
 ThisExpr :: struct {
-	token:   Token,
-	keyword: Token,
+	token: Token,
 }
 
 UnaryExpr :: struct {
@@ -353,7 +365,7 @@ parse_declaration :: proc(p: ^AstParser) -> Decl {
 parse_var_decl :: proc(p: ^AstParser) -> ^VarDecl {
 	decl := new(VarDecl)
 	decl.token = ast_previous(p)
-	decl.is_val = decl.token.type == .VAL
+	decl.is_final = decl.token.type == .VAL
 	bindings := make([dynamic]VarBinding)
 
 	for {
@@ -414,7 +426,7 @@ parse_func_decl :: proc(p: ^AstParser, kind: string) -> ^FuncDecl {
 
 parse_func_body :: proc(p: ^AstParser, name: Token) -> ^FuncDecl {
 	decl := new(FuncDecl)
-	decl.token = ast_previous(p) // This might be the name or the keyword, let's keep it consistent
+	decl.token = ast_previous(p) // NOTE: this should probably be the keyword and not the name
 	decl.name = name
 	params := make([dynamic]Token)
 
@@ -426,7 +438,7 @@ parse_func_body :: proc(p: ^AstParser, name: Token) -> ^FuncDecl {
 		}
 	}
 	decl.params = params[:]
-	ast_consume(p, .RPAREN, "Expect ')' after parameters.")
+	ast_consume(p, .RPAREN, "Expect ')' after function parameters.")
 
 	if ast_match(p, .FAT_ARROW) {
 		decl.body = parse_expression(p)
@@ -434,7 +446,7 @@ parse_func_body :: proc(p: ^AstParser, name: Token) -> ^FuncDecl {
 			ast_advance(p)
 		}
 	} else {
-		ast_consume(p, .LSQUIRLY, "Expect '{' before function body.")
+		ast_consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
 		decl.body = parse_block(p)
 	}
 
@@ -622,6 +634,9 @@ parse_block :: proc(p: ^AstParser) -> ^BlockStmt {
 	}
 	stmt.declarations = declarations[:]
 	ast_consume(p, .RSQUIRLY, "Expect '}' after block.")
+
+	// This is added by ASI after blocks (dunno how to make that not happen yet)
+	ast_consume_semi(p, "Expect ';' after block.")
 	return stmt
 }
 
@@ -745,10 +760,81 @@ ast_parse_unary :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	return unary
 }
 
+/*
+Translate escape sequences in a string literal.
+
+This function allocates a string, but doesn't take ownership of the input; therefore
+the input will still need to be freed if necessary. 
+
+In this compiler, it is used to create an escape-sequenced string out of a slice 
+of the program input itself, which should **NOT** be freed until the program ends; 
+therefore it is not necessary for it to take ownership.
+
+So far, only the newline and tab sequences are supported.
+*/
+@(private = "file")
+add_escape_sequences :: proc(str: string) -> string {
+	sequences := make(map[byte]byte)
+	sequences['n'] = '\n'
+	sequences['t'] = '\t'
+	defer delete(sequences)
+
+	sb := strings.builder_make()
+	defer strings.builder_destroy(&sb)
+
+	escaped := false
+	for i := 0; i < len(str); i += 1 {
+		c := str[i]
+		if !escaped && c == '\\' && i + 1 < len(str) {
+			if replacement, ok := sequences[str[i + 1]]; ok {
+				strings.write_byte(&sb, replacement)
+				i += 1
+				continue
+			}
+		}
+		strings.write_byte(&sb, c)
+	}
+
+	return strings.clone(strings.to_string(sb))
+}
+
 ast_parse_literal :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	literal := new(LiteralExpr)
 	literal.token = ast_previous(p)
-	literal.value = ast_previous(p)
+
+	#partial switch literal.token.type {
+	case .STRING:
+		literal.value = add_escape_sequences(literal.token.lexeme[1:len(literal.token.lexeme) - 1])
+	case .NUMBER:
+		value, ok := strconv.parse_f64(literal.token.lexeme)
+		if !ok {
+			ast_error(
+				p,
+				literal.token,
+				fmt.tprintf(
+					"'%s' is not a valid 64-bit floating point number.",
+					literal.token.lexeme,
+				),
+			)
+		}
+		literal.value = value
+	case .TRUE:
+		literal.value = true
+	case .FALSE:
+		literal.value = false
+	case .NIL:
+		literal.value = nil
+	case:
+		ast_error(
+			p,
+			literal.token,
+			fmt.tprintf(
+				"'%s' is not a valid literal. This is a compiler bug.",
+				literal.token.lexeme,
+			),
+		)
+	}
+
 	return literal
 }
 
@@ -771,23 +857,42 @@ ast_parse_variable :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 ast_parse_super :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	super_expr := new(SuperExpr)
 	super_expr.token = ast_previous(p)
-	super_expr.keyword = super_expr.token
 	ast_consume(p, .DOT, "Expect '.' after 'super'.")
 	super_expr.method = ast_consume(p, .IDENT, "Expect superclass method name.")
+
+	invoked := false
+	method_args := make([dynamic]Expr)
+	defer if !invoked {
+		delete(method_args)
+	}
+
+	// was the retrieved method immediately invoked?
+	if ast_match(p, .LPAREN) {
+		invoked = true
+		if !ast_check(p, .RPAREN) {
+			for {
+				append(&method_args, parse_expression(p))
+				if !ast_match(p, .COMMA) {break}
+			}
+		}
+		super_expr.method_args = method_args[:]
+		ast_consume(p, .RPAREN, "Expect ')' after method parameters.")
+	} else {
+		super_expr.method_args = nil
+	}
+
 	return super_expr
 }
 
 ast_parse_this :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	this_expr := new(ThisExpr)
 	this_expr.token = ast_previous(p)
-	this_expr.keyword = this_expr.token
 	return this_expr
 }
 
 ast_parse_it :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	it_expr := new(ItExpr)
 	it_expr.token = ast_previous(p)
-	it_expr.keyword = it_expr.token
 	return it_expr
 }
 
@@ -855,26 +960,26 @@ ast_parse_call :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
 		}
 	}
 	call.arguments = arguments[:]
-	call.paren = ast_consume(p, .RPAREN, "Expect ')' after arguments.")
+	call.rparen = ast_consume(p, .RPAREN, "Expect ')' after arguments.")
 	return call
 }
 
 ast_parse_dot :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
 	token := ast_previous(p) // The '.' token
-	name := ast_consume(p, .IDENT, "Expect property name after '.'.")
+	property := ast_consume(p, .IDENT, "Expect property name after '.'.")
 	if can_assign && ast_match(p, .EQUAL) {
 		value := parse_expression(p)
 		set_expr := new(SetExpr)
 		set_expr.token = token
-		set_expr.object = left
-		set_expr.name = name
+		set_expr.receiver = left
+		set_expr.property = property
 		set_expr.value = value
 		return set_expr
 	}
 	get_expr := new(GetExpr)
 	get_expr.token = token
-	get_expr.object = left
-	get_expr.name = name
+	get_expr.receiver = left
+	get_expr.property = property
 	return get_expr
 }
 
@@ -886,16 +991,14 @@ ast_parse_subscript :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr
 		value := parse_expression(p)
 		sub_set := new(SubscriptSetExpr)
 		sub_set.token = bracket
-		sub_set.object = left
-		sub_set.bracket = bracket
+		sub_set.receiver = left
 		sub_set.index = index
 		sub_set.value = value
 		return sub_set
 	}
 	sub := new(SubscriptExpr)
 	sub.token = bracket
-	sub.object = left
-	sub.bracket = bracket
+	sub.receiver = left
 	sub.index = index
 	return sub
 }
@@ -1202,7 +1305,7 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.callee)
 		free(e)
 	case ^GetExpr:
-		free_expr(e.object)
+		free_expr(e.receiver)
 		free(e)
 	case ^GroupingExpr:
 		free_expr(e.expression)
@@ -1219,6 +1322,10 @@ free_expr :: proc(expr: Expr) {
 		delete(e.elements)
 		free(e)
 	case ^LiteralExpr:
+		if v, ok := e.value.(string); ok {
+			/* This was allocated when adding escape sequences */
+			delete(v)
+		}
 		free(e)
 	case ^LogicalExpr:
 		free_expr(e.left)
@@ -1229,15 +1336,15 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.right)
 		free(e)
 	case ^SetExpr:
-		free_expr(e.object)
+		free_expr(e.receiver)
 		free_expr(e.value)
 		free(e)
 	case ^SubscriptExpr:
-		free_expr(e.object)
+		free_expr(e.receiver)
 		free_expr(e.index)
 		free(e)
 	case ^SubscriptSetExpr:
-		free_expr(e.object)
+		free_expr(e.receiver)
 		free_expr(e.index)
 		free_expr(e.value)
 		free(e)
@@ -1257,7 +1364,7 @@ free_expr :: proc(expr: Expr) {
 // AST pretty-printer
 
 // allocates a string
-ast_print :: proc(decls: []Decl) -> string {
+ast_string :: proc(decls: []Decl) -> string {
 	b := strings.builder_make()
 	defer strings.builder_destroy(&b)
 
@@ -1274,6 +1381,10 @@ ast_print_indent :: proc(b: ^strings.Builder, indent: int) {
 }
 
 ast_print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
+	if decl == nil {
+		return
+	}
+
 	switch d in decl {
 	case ^ClassDecl:
 		ast_print_indent(b, indent)
@@ -1318,7 +1429,7 @@ ast_print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^VarDecl:
 		ast_print_indent(b, indent)
-		kind := d.is_val ? "val" : "var"
+		kind := d.is_final ? "val" : "var"
 		fmt.sbprintf(b, "(%s ", kind)
 		for binding, i in d.bindings {
 			if i > 0 {strings.write_string(b, " ")}
@@ -1338,6 +1449,10 @@ ast_print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
 }
 
 ast_print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
+	if stmt == nil {
+		return
+	}
+
 	switch s in stmt {
 	case ^BlockStmt:
 		ast_print_indent(b, indent)
@@ -1368,8 +1483,9 @@ ast_print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^ExprStmt:
 		ast_print_indent(b, indent)
-		strings.write_string(b, "(expr ")
+		strings.write_string(b, "(expr\n")
 		ast_print_expr(b, s.expr, indent + 1)
+		ast_print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ForInStmt:
 		ast_print_indent(b, indent)
@@ -1475,6 +1591,10 @@ ast_print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
 }
 
 ast_print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
+	if expr == nil {
+		return
+	}
+
 	switch e in expr {
 	case ^AssignExpr:
 		ast_print_indent(b, indent)
@@ -1500,8 +1620,8 @@ ast_print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^GetExpr:
 		ast_print_indent(b, indent)
-		fmt.sbprintf(b, "(get %s\n", e.name.lexeme)
-		ast_print_expr(b, e.object, indent + 1)
+		fmt.sbprintf(b, "(get %s\n", e.property.lexeme)
+		ast_print_expr(b, e.receiver, indent + 1)
 		ast_print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^GroupingExpr:
@@ -1526,7 +1646,7 @@ ast_print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^LiteralExpr:
 		ast_print_indent(b, indent)
-		fmt.sbprintf(b, "%s\n", e.value.lexeme)
+		fmt.sbprintf(b, "%v\n", e.value)
 	case ^LogicalExpr:
 		ast_print_indent(b, indent)
 		fmt.sbprintf(b, "(logical %s\n", e.operator.lexeme)
@@ -1543,22 +1663,22 @@ ast_print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^SetExpr:
 		ast_print_indent(b, indent)
-		fmt.sbprintf(b, "(set %s\n", e.name.lexeme)
-		ast_print_expr(b, e.object, indent + 1)
+		fmt.sbprintf(b, "(set %s\n", e.property.lexeme)
+		ast_print_expr(b, e.receiver, indent + 1)
 		ast_print_expr(b, e.value, indent + 1)
 		ast_print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^SubscriptExpr:
 		ast_print_indent(b, indent)
 		strings.write_string(b, "(subscript\n")
-		ast_print_expr(b, e.object, indent + 1)
+		ast_print_expr(b, e.receiver, indent + 1)
 		ast_print_expr(b, e.index, indent + 1)
 		ast_print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^SubscriptSetExpr:
 		ast_print_indent(b, indent)
 		strings.write_string(b, "(subscript-set\n")
-		ast_print_expr(b, e.object, indent + 1)
+		ast_print_expr(b, e.receiver, indent + 1)
 		ast_print_expr(b, e.index, indent + 1)
 		ast_print_expr(b, e.value, indent + 1)
 		ast_print_indent(b, indent)

@@ -677,12 +677,5 @@ lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
 
 	tokens = insert_semis(toks[:])
 
-	if config.dump_tokens {
-		fmt.printf("TOKENS:\n")
-		for token in tokens {
-			fmt.printf("  %v\n", token)
-		}
-	}
-
 	return tokens, true
 }

@@ -1,6 +1,10 @@
 package zen
 
 import "core:fmt"
+import "core:os"
+import "core:path/filepath"
+import "core:slice"
+import "core:strings"
 
 /* Maximum limit for a eight bit unsigned integer. */
 U8_MAX :: 255
@@ -21,9 +25,10 @@ Codegen :: struct {
 	current_compiler: ^Compiler,
 	current_class:    ^ClassCompiler,
 	current_token:    Token,
-	globals:          ^Table,
+	globals:          ^Table, // Hash table storing global variables.
 	gc:               ^GC,
 	prev_mark_roots:  RootSource,
+	pipeline_active:  bool,
 	had_error:        bool,
 }
 
@@ -37,7 +42,6 @@ Compiler :: struct {
 	enclosing:   ^Compiler, // The Compiler for the enclosing function.
 	function:    ^ObjFunction, // The function being compiled.
 	type:        FunctionType, // The type of function being compiled.
-	globals:     ^Table, // Hash table storing global variables.
 	locals:      [U8_COUNT]Local, // Array of local variables.
 	local_count: int, // Number of local variables.
 	upvalues:    [U8_COUNT]Upvalue, // Array of upvalues.
@@ -106,7 +110,17 @@ Loop :: struct {
 	breaks:      [dynamic]int,
 }
 
+/*
+The type of a module imported with `use`, may be a built-in module or one defined
+by the user i.e. an imported file. */
+ModuleType :: enum {
+	BUILTIN,
+	USER,
+}
 
+/* Returns the chunk that is currently being compiled. This function is just
+for convenience. */
+@(private = "file")
 current_chunk :: proc(cg: ^Codegen) -> ^Chunk {
 	return &cg.current_compiler.function.chunk
 }
@@ -140,29 +154,26 @@ string_constant :: proc(cg: ^Codegen, text: string) -> (int, ErrorMessage) {
 	return make_constant(cg, obj_val(copy_string(cg.gc, text)))
 }
 
-/* Write a byte to the chunk being compiled. */
+/* Write bytes to the chunk being compiled. */
 @(private = "file")
-emit_byte :: proc(cg: ^Codegen, byait: byte) {
-	write_chunk(current_chunk(cg), byait, cg.current_token.line)
+emit_byte :: proc(cg: ^Codegen, bytes: ..byte) {
+	for b in bytes {
+		write_chunk(current_chunk(cg), b, cg.current_token.line)
+	}
 }
 
-/* Write two bytes to the current chunk. */
+/* Write opcodes as bytes to the chunk being compiled. */
 @(private = "file")
-emit_bytes :: proc(cg: ^Codegen, byait1: byte, byait2: byte) {
-	emit_byte(cg, byait1)
-	emit_byte(cg, byait2)
-}
-
-/* Write an opcode as a byte to the chunk being compiled. */
-@(private = "file")
-emit_opcode :: proc(cg: ^Codegen, oc: OpCode) {
-	write_chunk(current_chunk(cg), byte(oc), cg.current_token.line)
+emit_opcode :: proc(cg: ^Codegen, opcodes: ..OpCode) {
+	for oc in opcodes {
+		write_chunk(current_chunk(cg), byte(oc), cg.current_token.line)
+	}
 }
 
 @(private = "file")
-emit_opcodes :: proc(cg: ^Codegen, oc1: OpCode, oc2: OpCode) {
-	emit_opcode(cg, oc1)
-	emit_opcode(cg, oc2)
+emit_instruction :: proc(cg: ^Codegen, oc: OpCode, operands: ..byte) {
+	emit_opcode(cg, oc)
+	emit_byte(cg, ..operands)
 }
 
 @(private = "file")
@@ -177,14 +188,22 @@ emit_constant :: proc(cg: ^Codegen, value: Value) -> ErrorMessage {
 	index := make_constant(cg, value) or_return
 
 	if index <= U8_MAX {
-		emit_bytes(cg, byte(OpCode.OP_CONSTANT), byte(index))
+		emit_instruction(cg, .OP_CONSTANT, byte(index))
 	} else {
-		emit_opcode(cg, .OP_CONSTANT_LONG)
-		emit_byte(cg, byte((index >> 8) & 0xff))
-		emit_byte(cg, byte(index & 0xff))
+		emit_instruction(cg, .OP_CONSTANT_LONG, byte((index >> 8) & 0xff), byte(index & 0xff))
 	}
 
 	return nil
+}
+
+/* Directly write a constant index to the chunk without any preceding opcode. */
+@(private = "file")
+emit_constant_only :: proc(cg: ^Codegen, index: int) {
+	if index <= U8_MAX {
+		emit_byte(cg, byte(index))
+	} else {
+		emit_byte(cg, byte((index >> 8) & 0xff), byte(index & 0xff))
+	}
 }
 
 /* 
@@ -194,11 +213,9 @@ constant index.
 @(private = "file")
 emit_op_with_constant :: proc(cg: ^Codegen, short_op: OpCode, long_op: OpCode, index: int) {
 	if index <= U8_MAX {
-		emit_bytes(cg, byte(short_op), byte(index))
+		emit_instruction(cg, short_op, byte(index))
 	} else {
-		emit_opcode(cg, long_op)
-		emit_byte(cg, byte((index >> 8) & 0xff))
-		emit_byte(cg, byte(index & 0xff))
+		emit_instruction(cg, long_op, byte((index >> 8) & 0xff), byte(index & 0xff))
 	}
 }
 
@@ -556,17 +573,36 @@ define_variable :: proc(cg: ^Codegen, global: int) {
 }
 
 @(private = "file")
+global_exists :: proc(cg: ^Codegen, global_o_str: ^ObjString) -> bool {
+	_, ok := table_get(cg.globals, global_o_str)
+	if ok {
+		return true
+	}
+	return false
+}
+
+@(private = "file")
+global_exists_and_is_final :: proc(cg: ^Codegen, global_o_str: ^ObjString) -> bool {
+	if value, ok := table_get(cg.globals, global_o_str); ok {
+		if values_equal(value, bool_val(true)) {
+			return true
+		}
+	}
+	return false
+}
+
+@(private = "file")
 emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> ErrorMessage {
 	local := resolve_local(cg, cg.current_compiler, name) or_return
 	upvalue, _ := resolve_upvalue(cg, cg.current_compiler, name) or_return
 
 	if local != -1 {
-		emit_bytes(cg, byte(OpCode.OP_GET_LOCAL), byte(local))
+		emit_instruction(cg, .OP_GET_LOCAL, byte(local))
 	} else if upvalue != -1 {
-		emit_bytes(cg, byte(OpCode.OP_GET_UPVALUE), byte(upvalue))
+		emit_instruction(cg, .OP_GET_UPVALUE, byte(upvalue))
 	} else {
 		global_o_str := copy_string(cg.gc, name.lexeme)
-		if _, ok := table_get(cg.current_compiler.globals, global_o_str); !ok {
+		if !global_exists(cg, global_o_str) {
 			return fmt.tprintf("Undefined variable '%s'.", name.lexeme)
 		}
 
@@ -582,6 +618,7 @@ emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> Erro
 	return nil
 }
 
+@(private = "file")
 emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 	local := resolve_local(cg, cg.current_compiler, name) or_return
 	upvalue, upvalue_is_final := resolve_upvalue(cg, cg.current_compiler, name) or_return
@@ -590,23 +627,21 @@ emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 		if cg.current_compiler.locals[local].is_final {
 			return "Can only set a final variable once."
 		}
-		emit_bytes(cg, byte(OpCode.OP_SET_LOCAL), byte(local))
+		emit_instruction(cg, .OP_SET_LOCAL, byte(local))
 	} else if upvalue != -1 {
 		if upvalue_is_final {
 			return "Can only set a final variable once."
 		}
-		emit_bytes(cg, byte(OpCode.OP_SET_UPVALUE), byte(upvalue))
+		emit_instruction(cg, .OP_SET_UPVALUE, byte(upvalue))
 	} else {
 		arg := identifier_constant(cg, name) or_return
 
 		global_o_str := copy_string(cg.gc, name.lexeme)
 		value: Value; ok: bool
-		if value, ok := table_get(cg.current_compiler.globals, global_o_str); ok {
-			if values_equal(value, bool_val(true)) {
-				return "Can only set a final variable once."
-			}
+		if global_exists_and_is_final(cg, global_o_str) {
+			return "Can only set a final variable once."
 		} else {
-			table_set(cg.current_compiler.globals, global_o_str, bool_val(false))
+			table_set(cg.globals, global_o_str, bool_val(false))
 		}
 
 		emit_op_with_constant(
@@ -621,23 +656,344 @@ emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 }
 
 @(require_results)
-compile_var_declaration :: proc(cg: ^Codegen, decl: ^VarDecl) -> bool {
-	unimplemented()
+compile_binding :: proc(
+	cg: ^Codegen,
+	name: Token,
+	is_final: bool,
+	is_loop_variable: bool,
+) -> (
+	global: int,
+	err: ErrorMessage,
+) {
+	declare_variable(cg, name, is_final, is_loop_variable) or_return
+	if cg.current_compiler.scope_depth > 0 {return 0, nil}
+
+	global_o_str := copy_string(cg.gc, name.lexeme)
+	value: Value; ok: bool
+
+	if value, ok := table_get(cg.globals, global_o_str); ok {
+		if values_equal(value, bool_val(true)) {
+			return 0,
+				is_final ? "Cannot redefine a final variable." : "Cannot redefine a final variable as normal variable."
+		} else if is_final {
+			return 0, "Cannot redefine a variable as final variable."
+		}
+	} else {
+		table_set(cg.globals, global_o_str, bool_val(is_final))
+	}
+
+	return identifier_constant(cg, name)
 }
 
 @(require_results)
-compile_func_declaration :: proc(cg: ^Codegen, decl: ^FuncDecl, public: bool) -> bool {
-	unimplemented()
+compile_var_declaration :: proc(
+	cg: ^Codegen,
+	d: ^VarDecl,
+	is_loop_variable: bool = false,
+) -> bool {
+	bindings := d.bindings
+	is_final := d.is_final
+
+	for binding in bindings {
+		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
+		if binding.initializer == nil {
+			if is_final {
+				codegen_error(cg, "Final variables must be initialized.")
+				return false
+			} else {
+				emit_opcode(cg, .OP_NIL)
+			}
+		} else {
+			/* Allow anonymous functions to recurse by referring to the name they've
+             been bound to. */
+			if _, ok := binding.initializer.(^LambdaExpr); ok {
+				mark_initialized(cg)
+			}
+			compile_expression(cg, binding.initializer) or_return
+		}
+
+		define_variable(cg, global)
+	}
+
+	return true
 }
 
 @(require_results)
-compile_class_declaration :: proc(cg: ^Codegen, decl: ^ClassDecl, public: bool) -> bool {
-	unimplemented()
+compile_function :: proc(
+	cg: ^Codegen,
+	name: Token,
+	params: []Token,
+	body: FunctionBody,
+	type: FunctionType,
+	public: bool,
+) -> bool {
+	compiler: Compiler
+	init_compiler(&compiler, cg, name, type)
+
+	/* Note that this scope doesn't need to be explicitly closed, since the 
+    Compiler itself is ended when we reach the end of the function body. */
+	begin_scope(cg)
+
+	for param in params {
+		cg.current_token = param
+		cg.current_compiler.function.arity += 1
+		if cg.current_compiler.function.arity == U8_MAX {
+			codegen_error(cg, "Cannot have more than 255 parameters.")
+			return false
+		}
+
+		/* Function parameters are mutable. This may change in the future. */
+		constant := try2(
+			cg,
+			compile_binding(cg, name, is_final = false, is_loop_variable = false),
+		) or_return
+		define_variable(cg, constant)
+	}
+
+	switch b in body {
+	case ^BlockStmt:
+		compile_statement(cg, b) or_return
+	case Expr:
+		/* This is the case of an arrow function which implicitly returns an
+         expression, so we need to add an OP_RETURN here */
+		compile_expression(cg, b) or_return
+		emit_opcode(cg, .OP_RETURN)
+		cg.current_compiler.function.has_returned = true
+	}
+
+	function := end_compiler(cg)
+
+	/* Note that OP_CLOSURE always uses a 2-byte constant index. While it would
+    be perfectly reasonable to switch between a 1-byte index and 2-byte index
+    using separate OP_CLOSURE and custom OP_CLOSURE_LONG opcodes, that would
+    further complicate the already complex closure encoding. */
+	emit_opcode(cg, .OP_CLOSURE)
+	idx := try2(cg, make_constant(cg, obj_val(function))) or_return
+	emit_byte(cg, byte((idx >> 8) & 0xff))
+	emit_byte(cg, byte(idx & 0xff))
+
+	/* Emit a final byte indicating whether the function should be available to
+     * other files importing the file it is in. */
+	emit_byte(cg, 1 if public else 0)
+
+	/* OP_CLOSURE has a variably sized encoding. For each upvalue captured by
+	the closure, there are two single-byte operands: a boolean indicating
+	whether the upvalue captures a local variable in the immediately enclosing
+	function (1) or one of that function's upvalues (0), and the local slot or upvalue
+	index to capture. */
+	for i in 0 ..< function.upvalue_count {
+		emit_byte(cg, 1 if compiler.upvalues[i].is_local else 0)
+		emit_byte(cg, u8(compiler.upvalues[i].index))
+	}
+
+	return true
 }
 
 @(require_results)
-compile_module_declaration :: proc(cg: ^Codegen, decl: ^ModuleDecl) -> bool {
-	unimplemented()
+compile_func_declaration :: proc(cg: ^Codegen, d: ^FuncDecl, public: bool) -> bool {
+	name := d.name
+	params := d.params
+	body := d.body
+
+	global := try2(
+		cg,
+		compile_binding(cg, name, is_final = false, is_loop_variable = false),
+	) or_return
+	mark_initialized(cg)
+	compile_function(cg, name, params, body, .FUNCTION, public) or_return
+	define_variable(cg, global)
+	return true
+}
+
+@(require_results)
+compile_method :: proc(cg: ^Codegen, m: ^FuncDecl) -> bool {
+	name := m.name
+	params := m.params
+	body := m.body
+	constant := try2(cg, identifier_constant(cg, name)) or_return
+
+	type: FunctionType = .METHOD
+	/* Check if the method is an initializer. */
+	if len(name.lexeme) == 4 && strings.compare(name.lexeme, "init") == 0 {
+		type = .INITIALIZER
+	}
+	compile_function(cg, name, params, body, type, public = false) or_return
+
+	emit_op_with_constant(cg, .OP_METHOD, .OP_METHOD_LONG, constant)
+	return true
+}
+
+@(require_results)
+compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> bool {
+	class_name := d.name
+	methods := d.methods
+	superclass := d.superclass
+
+	/* The class name is captured to push it back on the stack later on while
+	   compiling methods. */
+	name_constant := try2(cg, identifier_constant(cg, class_name)) or_return
+	try(
+		cg,
+		declare_variable(cg, class_name, is_final = true, is_loop_variable = true),
+	) or_return /* Classes are not reassignable. */
+
+	global_o_str := copy_string(cg.gc, class_name.lexeme)
+	value: Value; ok: bool
+
+	/* Add the value onto the globals table. */
+	if cg.current_compiler.scope_depth == 0 {
+		if global_exists(cg, global_o_str) {
+			codegen_error(cg, "Cannot reassign a class.")
+			return false
+		}
+		table_set(cg.globals, global_o_str, bool_val(false))
+	}
+
+	if name_constant <= U8_MAX {
+		emit_opcode(cg, .OP_CLASS)
+		emit_byte(cg, 1 if public else 0)
+		emit_byte(cg, byte(name_constant))
+	} else {
+		emit_opcode(cg, .OP_CLASS_LONG)
+		emit_byte(cg, 1 if public else 0)
+		emit_byte(cg, byte((name_constant >> 8) & 0xff))
+		emit_byte(cg, byte(name_constant & 0xff))
+	}
+	define_variable(cg, name_constant)
+
+	/* Push the current class to the linked list of classes. */
+	class_compiler: ClassCompiler
+	class_compiler.has_superclass = false
+	class_compiler.enclosing = cg.current_class
+	cg.current_class = &class_compiler
+
+	/* Check if this class inherits from another. */
+	if superclass != nil {
+		superclass := superclass.?
+		if identifiers_equal(class_name, superclass) {
+			codegen_error(cg, "A class can't inherit from itself.")
+			return false
+		}
+
+		/* Push the superclass on the stack. */
+		emit_named_variable(cg, superclass, can_assign = false)
+
+		/* Create a local variable as the reference to the superclass. */
+		begin_scope(cg)
+		try(cg, add_local(cg, synthetic_token("super"), is_final = true)) or_return
+		define_variable(cg, 0)
+
+		/* Push the inheriting class on the stack. */
+		emit_named_variable(cg, class_name, can_assign = false)
+
+		emit_opcode(cg, .OP_INHERIT)
+		class_compiler.has_superclass = true
+	}
+
+	/* Note that we don't need to do anything extra to allow method overrides.
+	 * The OP_INHERIT instruction which copies all methods of the superclass
+	 * into the subclass runs before any methods of the subclass itself are
+	 * compiled, so if a method of the same name appears in the subclass it
+	 * will override that inherited entry. */
+
+	/* This call to named_variable() pushes the class back on the stack. */
+	emit_named_variable(cg, class_name, can_assign = false)
+
+	/* Compile methods until the final curly brace. The EOF check ensures that
+	   the compiler doesn't get stuck in an infinite loop if the closing brace
+	   is forgotten.
+
+	   Note that currently, classes can only have method declarations; fields
+	   aren't explicitly declared but rather freely added. This may be changed
+	   in the future.
+	*/
+	for method in methods {
+		cg.current_token = method.token
+		compile_method(cg, method) or_return
+	}
+
+	emit_pop(cg) /* Pop the class object off. */
+	if class_compiler.has_superclass {
+		end_scope(cg)
+	}
+
+	/* Set the current class to its enclosing one. */
+	cg.current_class = cg.current_class.enclosing
+	return true
+}
+
+@(require_results)
+compile_module_declaration :: proc(cg: ^Codegen, d: ^ModuleDecl) -> bool {
+	path_str := d.path.lexeme
+
+	mod_type: ModuleType
+
+	path := strings.trim(path_str[1:len(path_str) - 1], " ")
+	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
+	if err != nil {
+		codegen_error(cg, fmt.tprintf("Error when declaring module: %s", os.error_string(err)))
+		return false
+	}
+	defer delete(abs_path)
+
+	// look for the path in the stdlib, if not present look for a file at the path
+	found := slice.contains(cg.gc.std_modules[:], path)
+	if found {
+		mod_type = .BUILTIN
+	} else {
+		found := os.exists(abs_path)
+		if !found {
+			codegen_error(cg, fmt.tprintf("Module '%s' not found.", abs_path))
+			return false
+		}
+
+		mod_type = .USER
+	}
+
+	// TODO: allows `use "module" as "m"` notation
+
+	// the mod_name here is path, but will be turned into just the filename
+	// in the VM if it is a user module
+	mod_name: string
+	switch mod_type {
+	case .BUILTIN:
+		mod_name = path
+	case .USER:
+		mod_name = filepath.short_stem(path)
+	}
+	name_constant := try2(cg, string_constant(cg, mod_name)) or_return
+
+	/* Standard library modules and user modules are implemented differently, so
+       we need to emit the correct opcode. */
+	switch mod_type {
+	case .BUILTIN:
+		emit_op_with_constant(cg, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, name_constant)
+	case .USER:
+		/* Provide the name of the module and the path as bytecode args. */
+		path_constant := try2(cg, string_constant(cg, abs_path)) or_return
+
+		/* Use OP_MODULE_USER_LONG if the path_constant needs to be encoded
+        as 2 bytes, even if the name_constant fits in 1. */
+		if path_constant <= U8_MAX {
+			emit_opcode(cg, .OP_MODULE_USER)
+			emit_constant_only(cg, name_constant)
+			emit_constant_only(cg, path_constant)
+		} else {
+			emit_opcode(cg, .OP_MODULE_USER_LONG)
+
+			emit_byte(cg, byte((name_constant >> 8) & 0xff))
+			emit_byte(cg, byte(name_constant & 0xff))
+
+			emit_byte(cg, byte((path_constant >> 8) & 0xff))
+			emit_byte(cg, byte(path_constant & 0xff))
+		}
+	}
+	define_variable(cg, name_constant)
+
+	/* Set the module as a global variable for variable existence checks.
+     * The `true` is to ensure that the variable cannot be reassigned to. */
+	table_set(cg.globals, copy_string(cg.gc, mod_name), bool_val(true))
+	return true
 }
 
 @(require_results)
@@ -674,7 +1030,7 @@ compile_declaration :: proc(cg: ^Codegen, decl: Decl) -> bool {
 		compile_statement(cg, d) or_return
 	}
 
-	unreachable()
+	return true
 }
 
 @(require_results)
@@ -802,7 +1158,7 @@ compile_for_statement :: proc(cg: ^Codegen, s: ^ForStmt) -> bool {
 	begin_scope(cg)
 	switch iz in initializer {
 	case ^VarDecl:
-		compile_var_declaration(cg, iz) or_return
+		compile_var_declaration(cg, iz, is_loop_variable = true) or_return
 		loop_variable_slot = cg.current_compiler.local_count - 1
 	case ^ExprStmt:
 		compile_statement(cg, iz) or_return
@@ -872,19 +1228,9 @@ compile_for_in_statement :: proc(cg: ^Codegen, s: ^ForInStmt) -> bool {
 	loop_variable_slot := cg.current_compiler.local_count - 1
 
 	// Push the iterable on the stack
-	#partial switch v in s.iterable {
-	case ^ListExpr:
-		compile_expression(cg, v) or_return
-	case ^LiteralExpr:
-		if v.value.type != .STRING {
-			codegen_error(cg, "Can only iterate over lists or strings.")
-			return false
-		}
-		compile_expression(cg, v) or_return
-	case:
-		codegen_error(cg, "Can only iterate over lists or strings.")
-		return false
-	}
+	// TODO: perhaps figure out a way to find out if the iterable is a valid
+	// iterable in advance
+	compile_expression(cg, iterable) or_return
 
 	try(
 		cg,
@@ -1104,7 +1450,7 @@ compile_statement :: proc(cg: ^Codegen, stmt: Stmt) -> bool {
 		compile_switch_statement(cg, s) or_return
 	}
 
-	unreachable()
+	return true
 }
 
 @(require_results)
@@ -1137,21 +1483,269 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		case .EQUAL_EQUAL:
 			emit_opcode(cg, .OP_EQUAL)
 		case .BANG_EQUAL:
-			emit_opcodes(cg, .OP_EQUAL, .OP_NOT)
+			emit_opcode(cg, .OP_EQUAL, .OP_NOT)
 		case .GREATER:
 			emit_opcode(cg, .OP_GREATER)
 		case .GREATER_EQUAL:
-			emit_opcodes(cg, .OP_LESS, .OP_NOT)
+			emit_opcode(cg, .OP_LESS, .OP_NOT)
 		case .LESS:
 			emit_opcode(cg, .OP_LESS)
 		case .LESS_EQUAL:
-			emit_opcodes(cg, .OP_GREATER, .OP_NOT)
+			emit_opcode(cg, .OP_GREATER, .OP_NOT)
+		case:
+			codegen_error(
+				cg,
+				fmt.tprintf(
+					"Invalid binary operator '%s'. This is a compiler bug.",
+					e.operator.lexeme,
+				),
+			)
 		}
 	case ^CallExpr:
-		unimplemented()
+		cg.current_token = e.token
+		arguments := e.arguments
+		callee := e.callee
+
+		// Arg count can't be more than 255 since it's stuffed in one byte.
+		if len(arguments) > U8_MAX {
+			codegen_error(cg, "Cannot have more than 255 arguments.")
+			return false
+		}
+		arg_count := u8(len(arguments))
+
+		if get_expr, ok := e.callee.(^GetExpr); ok {
+			// This branch compiles a method invocation.
+			compile_expression(cg, get_expr.receiver) or_return
+
+			if cg.pipeline_active {
+				emit_opcode(cg, .OP_GET_IT)
+			}
+
+			for arg in e.arguments {
+				compile_expression(cg, arg) or_return
+			}
+
+			name := try2(cg, identifier_constant(cg, get_expr.property)) or_return
+			emit_op_with_constant(cg, .OP_INVOKE, .OP_INVOKE_LONG, name)
+			emit_byte(cg, arg_count)
+		} else {
+			// Compile the callee.
+			compile_expression(cg, callee) or_return
+
+			// If in a pipeline, fetch `it` as the first argument.
+			if cg.pipeline_active {
+				emit_opcode(cg, .OP_GET_IT)
+			}
+
+			for arg in arguments {
+				compile_expression(cg, arg) or_return
+			}
+
+			emit_instruction(cg, .OP_CALL, arg_count)
+		}
+	case ^GetExpr:
+		cg.current_token = e.token
+		receiver := e.receiver
+		property := e.property
+
+		compile_expression(cg, receiver) or_return
+
+		property_name := try2(cg, identifier_constant(cg, property)) or_return
+		emit_op_with_constant(cg, .OP_GET_PROPERTY, .OP_GET_PROPERTY_LONG, property_name)
+	case ^SetExpr:
+		cg.current_token = e.token
+		receiver := e.receiver
+		property := e.property
+		value := e.value
+
+		compile_expression(cg, receiver) or_return
+		compile_expression(cg, value) or_return
+
+		property_name := try2(cg, identifier_constant(cg, property)) or_return
+		emit_op_with_constant(cg, .OP_SET_PROPERTY, .OP_SET_PROPERTY_LONG, property_name)
+
+	// TODO: Writeback for COW, I'll enable it once the rest is stable
+	// if var_expr, ok := e.object.(^VariableExpr); ok {
+	//     emit_named_variable_set(cg, var_expr.name)
+	// }
+	case ^GroupingExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.expression) or_return
+	case ^ItExpr:
+		cg.current_token = e.token
+		if !cg.pipeline_active {
+			codegen_error(cg, "Cannot use 'it' outside of a pipeline.")
+			return false
+		}
+
+		emit_opcode(cg, .OP_GET_IT)
+	case ^LambdaExpr:
+		cg.current_token = e.token
+		f := e.func_decl
+
+		compile_function(
+			cg,
+			synthetic_token("lambda"),
+			f.params,
+			f.body,
+			.LAMBDA,
+			public = false,
+		) or_return
+	case ^ListExpr:
+		cg.current_token = e.token
+		elements := e.elements
+		if len(elements) > U8_MAX {
+			codegen_error(cg, "Cannot have more than 255 items in a list literal.")
+			return false
+		}
+
+		for element in elements {
+			compile_expression(cg, element) or_return
+		}
+	case ^LiteralExpr:
+		cg.current_token = e.token
+
+		switch v in e.value {
+		case f64:
+			try(cg, emit_constant(cg, number_val(v))) or_return
+		case string:
+			try(cg, emit_constant(cg, obj_val(copy_string(cg.gc, v)))) or_return
+		case bool:
+			if v == true {
+				emit_opcode(cg, .OP_TRUE)
+			} else {
+				emit_opcode(cg, .OP_FALSE)
+			}
+		// nil case
+		case:
+			emit_opcode(cg, .OP_NIL)
+		}
+	case ^LogicalExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.left) or_return
+
+		#partial switch e.operator.type {
+		case .OR:
+			end_jump := emit_jump(cg, .OP_JUMP_IF_TRUE)
+
+			emit_pop(cg)
+			compile_expression(cg, e.right) or_return
+			try(cg, patch_jump(cg, end_jump)) or_return
+		case .AND:
+			end_jump := emit_jump(cg, .OP_JUMP_IF_FALSE)
+
+			emit_pop(cg)
+			compile_expression(cg, e.right) or_return
+			try(cg, patch_jump(cg, end_jump)) or_return
+		case:
+			codegen_error(
+				cg,
+				fmt.tprintf(
+					"Invalid logical operator '%s'. This is a compiler bug.",
+					e.operator.lexeme,
+				),
+			)
+		}
+	case ^PipeExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.left) or_return
+		emit_opcode(cg, .OP_SET_IT)
+		old_pipeline := cg.pipeline_active
+		cg.pipeline_active = true
+		compile_expression(cg, e.right) or_return
+		cg.pipeline_active = old_pipeline
+	case ^SubscriptExpr:
+		cg.current_token = e.token
+		receiver := e.receiver
+		index := e.index
+
+		compile_expression(cg, receiver) or_return
+		compile_expression(cg, index) or_return
+		emit_opcode(cg, .OP_SUBSCRIPT)
+	case ^SubscriptSetExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.receiver) or_return
+		compile_expression(cg, e.index) or_return
+		compile_expression(cg, e.value) or_return
+		emit_opcode(cg, .OP_SUBSCRIPT_SET)
+
+	// TODO: Writeback for COW, I'll enable it once the rest is stable
+	// if var_expr, ok := e.object.(^VariableExpr); ok {
+	// 	emit_named_variable_set(cg, var_expr.name)
+	// }
+	case ^SuperExpr:
+		cg.current_token = e.token
+		method := e.method
+		method_args := e.method_args
+
+		if cg.current_class == nil {
+			codegen_error(cg, "Can't use 'super' outside a class.")
+			return false
+		} else if !cg.current_class.has_superclass {
+			codegen_error(cg, "Can't use 'super' in a class with no superclass.")
+			return false
+		}
+
+		name := try2(cg, identifier_constant(cg, e.token)) or_return
+
+		/* Place both the current receiver and the superclass on the stack. */
+		emit_named_variable(cg, synthetic_token("this"), can_assign = false)
+
+		/* Check if the method is immediately invoked or not; since we can apply
+     	an optimization involving no use of bound methods if it is. */
+		if method_args != nil {
+			if len(method_args) > U8_COUNT {
+				codegen_error(cg, "Cannot have more than 255 arguments.")
+				return false
+			}
+			arg_count := u8(len(method_args))
+
+			for arg in method_args {
+				compile_expression(cg, arg) or_return
+			}
+
+			emit_named_variable(cg, synthetic_token("super"), can_assign = false)
+			emit_op_with_constant(cg, .OP_SUPER_INVOKE, .OP_SUPER_INVOKE_LONG, name)
+			emit_byte(cg, arg_count)
+		} else {
+			emit_named_variable(cg, synthetic_token("super"), can_assign = false)
+			emit_op_with_constant(cg, .OP_GET_SUPER, .OP_GET_SUPER_LONG, name)
+		}
+	case ^ThisExpr:
+		cg.current_token = e.token
+		if cg.current_class == nil {
+			codegen_error(cg, "Cannot use 'this' outside a class.")
+			return false
+		}
+
+		/* `this` is treated as a lexically scoped local variable whose value is
+        somehow magically initialized. Also, can_assign is set to false because
+        you obviously can't assign to `this`. */
+		emit_named_variable(cg, e.token, can_assign = false)
+	case ^UnaryExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.right) or_return
+
+		#partial switch e.operator.type {
+		case .NOT:
+			emit_opcode(cg, .OP_NOT)
+		case .MINUS:
+			emit_opcode(cg, .OP_NEGATE)
+		case:
+			codegen_error(
+				cg,
+				fmt.tprintf(
+					"Invalid unary operator '%s'. This is a compiler bug.",
+					e.operator.lexeme,
+				),
+			)
+		}
+	case ^VariableExpr:
+		cg.current_token = e.token
+		emit_named_variable(cg, e.token, can_assign = false)
 	}
 
-	unreachable()
+	return true
 }
 
 // Helper to avoid a billion `if err != nil`s everywhere
@@ -1165,9 +1759,35 @@ try :: #force_inline proc(cg: ^Codegen, err: ErrorMessage) -> bool {
 	return true
 }
 
+// `try` for procedures that return a value and possibly an error
+@(private = "file")
+@(require_results)
+try2 :: #force_inline proc(cg: ^Codegen, ret: $T, err: ErrorMessage) -> (T, bool) {
+	if err != nil {
+		codegen_error(cg, err.?)
+		return ret, false
+	}
+	return ret, true
+}
+
+/* 
+Report an error at the current token with a message. This doesn't propagate
+errors or stop compilation by itself, so it should either be used with `try`
+or a return should be made immediately after calling it.
+*/
 @(private = "file")
 codegen_error :: proc(cg: ^Codegen, message: string) {
-	unimplemented()
+	token := cg.current_token
+	color_red(os.stderr, "compile error ")
+
+	if token.type == .EOF {
+		fmt.eprintf("at end")
+	} else {
+		fmt.eprintf("at '%s'", token.lexeme)
+	}
+
+	fmt.eprintfln(": %s\n", message)
+	fmt.eprintfln("  on [line %d]\n", token.line)
 }
 
 /* Emit a return instruction and decode the RLE-encoded lines. */
@@ -1190,7 +1810,7 @@ end_compiler :: proc(cg: ^Codegen) -> ^ObjFunction {
 	return fn
 }
 
-init_compiler_cg :: proc(c: ^Compiler, cg: ^Codegen, type: FunctionType) {
+init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionType) {
 	c^ = Compiler {
 		enclosing   = cg.current_compiler,
 		type        = type,
@@ -1198,7 +1818,6 @@ init_compiler_cg :: proc(c: ^Compiler, cg: ^Codegen, type: FunctionType) {
 		loop_count  = 0,
 		scope_depth = 0,
 		function    = nil,
-		globals     = cg.globals,
 	}
 
 	/* DON'T FORGET to set current_compiler to the new compiler!
@@ -1206,11 +1825,11 @@ init_compiler_cg :: proc(c: ^Compiler, cg: ^Codegen, type: FunctionType) {
 	cg.current_compiler = c
 	c.function = new_function(cg.gc)
 
-	// if type != .SCRIPT && type != .LAMBDA {
-	// 	c.function.name = copy_string(cg.gc, cg.previous.lexeme)
-	// } else if type == .LAMBDA {
-	// 	c.function.name = copy_string(cg.gc, "lambda")
-	// }
+	if type != .SCRIPT && type != .LAMBDA {
+		c.function.name = copy_string(cg.gc, name.lexeme)
+	} else if type == .LAMBDA {
+		c.function.name = copy_string(cg.gc, "lambda")
+	}
 
 	/* The first slot is the function itself. */
 	local := &cg.current_compiler.locals[cg.current_compiler.local_count]
@@ -1228,16 +1847,23 @@ init_compiler_cg :: proc(c: ^Compiler, cg: ^Codegen, type: FunctionType) {
 }
 
 codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (^ObjFunction, bool) {
+	/* Add all the native function names to the global table, for variable
+     * existence checks. */
+	for fn_name in gc.global_native_fns {
+		table_set(globals, copy_string(gc, fn_name), bool_val(true))
+	}
+
 	cg := Codegen {
 		globals         = globals,
 		gc              = gc,
 		prev_mark_roots = gc.mark_roots_arg,
+		pipeline_active = false,
 		had_error       = false,
 	}
 	gc.mark_roots_arg = &cg
 
 	c: Compiler
-	init_compiler_cg(&c, &cg, .SCRIPT)
+	init_compiler(&c, &cg, synthetic_token(""), .SCRIPT)
 
 	for decl in decls {
 		compile_declaration(&cg, decl) or_break
