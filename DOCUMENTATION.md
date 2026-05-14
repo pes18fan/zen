@@ -11,10 +11,10 @@ print "Hello, world!\n" //=> Hello, world!
 Note that the `print` statement does not append a newline. You can use the
 `puts()` function if you want that.
 
-Statements are seperated by semicolons. They are automatically inserted
-only at newlines, following [certain rules](https://github.com/pes18fan/zen/blob/0b72dd5fa5d59a5fc42685c19ca82d48fb72cb93/src/lexer.odin#L170C1-L170C1).
-
-You can prevent automatic semicolon insertion by using a backslash.
+Statements are seperated by semicolons. While they can be manually added, it
+is not necessary as they are automatically inserted at newlines whenever the 
+next line doesn't continue an expression, after the last statement of a 
+single-line block, and never within lists.
 
 ## Datatypes
 
@@ -24,6 +24,7 @@ zen has the following primitive datatypes:
     support exponential notation (e.g `1e2` for `100`).
 - `bool`: A boolean value i.e. true or false.
 - `string`: A sequence of text, enclosed by either double or single quotes.
+    Strings are immutable in zen.
 - `nil`: A value that represents the absence of a value. It is the default
     value for uninitialized variables and the implicit return value for functions
     that do not return anything.
@@ -44,11 +45,14 @@ nice = 68 // ERROR!
 ```
 
 > [!NOTE]
-> Like in Python, zen uses aliasing. Basically, what that means is that doing
+> Like in Python, zen uses aliasing. What that means is that doing
 > something like `b = a` causes `b` and `a` to both refer to the same object in
 > memory, rather than creating a new copy. So, any changes to `a` will also be
-> reflected in `b`. This can cause unexpected results, specifically in the case
-> of lists and class instances. For more information, see the section on lists.
+> reflected in `b`. However, this is only true for non-immutable types.
+>
+> Aliasing can cause unexpected results, specifically in the case
+> of lists and class instances, which are both mutable. For more information, 
+> see the section on lists.
 
 ## Exiting early
 
@@ -170,7 +174,7 @@ func a_function() {
 a_function() //=> this is a function!
 ```
 
-If a function is pure i.e. only returns a value, it can be shortened using JS-like
+If a function only returns a value, it can be shortened using JS-like
 arrow notation:
 
 ```
@@ -203,7 +207,7 @@ func apply(value, fn) {
     return fn(value)
 }
 
-print apply(2, func(n) { return n * 2; }) //=> 4
+print apply(2, func(n) { return n * 2 }) //=> 4
 ```
 
 The above example can be made simpler using the convenient arrow notation:
@@ -266,7 +270,7 @@ used to get the length of the list.
 > You can also use the subscripting syntax on strings to get a character at the
 > provided index.
 
-Lists work well with pipes as well!
+Lists work well with pipelines as well!
 
 ```zen
 [4, 3, 2, 1]
@@ -277,10 +281,11 @@ Lists work well with pipes as well!
 ```
 
 > [!NOTE]
-> All the list functions mutate the provided list. Therefore, if a list bound
-> to a variable is passed through a pipeline, it will be modified. This is
-> done because keeping the passed variable the same would necessitate copying
-> lists on every pipeline stage, which would be very expensive.
+> All the functions provided by the list module mutate the provided list. 
+> Therefore, if a list bound to a variable is passed through a pipeline, it will
+> be mutated, alongside any other variable it references. This is done because
+> keeping the passed variable the same would necessitate copying lists on every
+> pipeline stage, which would be very expensive.
 >
 > ```zen
 > var a = [1, 2, 3]
@@ -394,7 +399,8 @@ Further information on what builtin modules are present is provided below.
 
 User-defined modules basically mean a file of code that can be imported with
 `use`. It will run the file and package all of its functions and classes prefixed
-with the `pub` keyword within the imported file's name.
+with the `pub` keyword within the imported file's name (e.g. the module will
+be called `foo` if the imported file is `foo.zn`.)
 
 ```zen
 // a.zn
@@ -410,7 +416,7 @@ pub func foo() {
 }
 ```
 
-This will print out "bar".
+Running `a.zn` will print out "bar".
 
 Functions without the `pub` keyword will NOT be imported when a file is `use`d.
 
@@ -444,7 +450,8 @@ for you to use.
 - `len(s)`: Get the length of a string or list `s`.
 - `typeof(x)`: Get the type of any expression as a string.
 - `str(x)`: Convert any value into a string.
-- `parse(s)`: Attempt to parse a string `s` into a floating point number.
+- `parse(s)`: Attempt to parse a string `s` into a floating point number. Panics
+    if the string is not a valid number.
 - `copy(x)`: Return a copy of `x`.
 - `dirname()`: Return the directory containing the running program, or an empty 
     string if running a REPL.
@@ -474,6 +481,7 @@ for you to use.
 
 - `panic(s)`: Crash the program with a message `s`.
 - `read(p)`: Read a file at the path `p` and return the contents as a string.
+    Panics if the file doesn't exist.
 - `write(p, m, s)`: Write the string `s` to a file `p` in the mode `m`. This 
     function returns `nil`. If the file does not exist, it will be created. The
     mode is a string and may be one of the following:
