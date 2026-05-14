@@ -489,8 +489,8 @@ resolve_upvalue :: proc(
 		/* The boolean is_local flag is false since here, we're capturing an
 		upvalue which captures either a local variable of its surrounding
 		function or another upvalue. */
-		idx, err := add_upvalue(cg, compiler, u8(local), is_local = true)
-		return idx, is_final, err
+		idx, err := add_upvalue(cg, compiler, u8(upvalue), is_local = false)
+		return idx, final, err
 	}
 
 	// Nope, didn't find anything.
@@ -1043,7 +1043,8 @@ compile_declaration :: proc(cg: ^Codegen, decl: Decl) -> bool {
 	case ^PubDecl:
 		cg.current_token = d.token
 		#partial switch inner in d.decl {
-		case ^FuncDecl:
+	case ^VarDecl:
+	case ^FuncDecl:
 			compile_func_declaration(cg, inner, public = true) or_return
 		case ^ClassDecl:
 			compile_class_declaration(cg, inner, public = true) or_return
@@ -1931,4 +1932,31 @@ codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (fn: ^ObjFunction, s
 	res_fn := end_compiler(&cg)
 	gc.mark_roots_arg = cg.prev_mark_roots
 	return res_fn, !cg.had_error
+}
+
+@(private = "file")
+collect_decl_globals :: proc(globals: ^Table, gc: ^GC, decl: Decl) {
+	switch d in decl {
+	case ^VarDecl:
+	case ^FuncDecl:
+		name := copy_string(gc, d.name.lexeme)
+		if _, ok := table_get(globals, name); ok {
+			return
+		}
+		table_set(globals, name, bool_val(false))
+	case ^ClassDecl:
+	case ^PubDecl:
+		collect_decl_globals(globals, gc, d.decl)
+	case ^ModuleDecl:
+	case Stmt:
+	}
+}
+
+collect_script_globals :: proc(globals: ^Table, gc: ^GC, decls: []Decl) {
+	for fn_name in gc.global_native_fns {
+		table_set(globals, copy_string(gc, fn_name), bool_val(true))
+	}
+	for decl in decls {
+		collect_decl_globals(globals, gc, decl)
+	}
 }

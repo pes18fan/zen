@@ -394,6 +394,7 @@ parse_class_decl :: proc(p: ^AstParser) -> ^ClassDecl {
 	ast_consume(p, .LSQUIRLY, "Expect '{' before class body.")
 	for !ast_check(p, .RSQUIRLY) && !ast_is_at_end(p) {
 		append(&methods, parse_method(p))
+		if ast_match(p, .SEMI) {}
 	}
 	decl.methods = methods[:]
 
@@ -439,9 +440,6 @@ parse_func_body :: proc(p: ^AstParser, name: Token) -> ^FuncDecl {
 
 	if ast_match(p, .FAT_ARROW) {
 		decl.body = parse_expression(p)
-		if ast_check(p, .SEMI) {
-			ast_advance(p)
-		}
 	} else {
 		ast_consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
 		decl.body = parse_block(p)
@@ -470,6 +468,12 @@ ast_get_rule :: proc(type: TokenType) -> ^AstParseRule {
 
 ast_parse_precedence :: proc(p: ^AstParser, precedence: AstPrecedence) -> Expr {
 	ast_advance(p)
+
+	if ast_is_at_end(p) {
+		ast_error(p, ast_previous(p), "Expect expression.")
+		return nil
+	}
+
 	prefix_rule := ast_get_rule(ast_previous(p).type).prefix
 	if prefix_rule == nil {
 		ast_error(p, ast_previous(p), "Expect expression.")
@@ -888,7 +892,7 @@ ast_parse_super :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	super_expr.method = ast_consume(p, .IDENT, "Expect superclass method name.")
 
 	invoked := false
-	method_args := make([dynamic]Expr)
+	method_args := make([dynamic]Expr, 0, 1)
 	defer if !invoked {
 		delete(method_args)
 	}

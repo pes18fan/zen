@@ -235,7 +235,7 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 				     .CONTINUE,
 				     .RETURN,
 				     .RPAREN,
-				     // NOTE: no squirly brace here, may need to readd for records
+				     .RSQUIRLY,
 				     .RSQUARE,
 				     .EXIT,
 				     .IT:
@@ -298,8 +298,9 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 				append(&result, semi)
 			}
 
-			assert(len(block_stack) >= 0, "cannot have less than 0 blocks")
-			pop(&block_stack)
+			if len(block_stack) > 0 {
+				pop(&block_stack)
+			}
 			append(&result, token)
 		case:
 			append(&result, token)

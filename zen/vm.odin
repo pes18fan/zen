@@ -1162,8 +1162,9 @@ interpret :: proc(
 			return .INTERPRET_OK
 		}
 
+		// Collect global variables before codegen
 		if !config.repl {
-			// TODO: do a pre-pass to collect globals in gc.globals
+			collect_script_globals(&vm.compiler_globals, gc, decls)
 		}
 
 		fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
