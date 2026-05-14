@@ -1721,10 +1721,10 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_expression(cg, e.value) or_return
 		emit_opcode(cg, .OP_SUBSCRIPT_SET)
 
-	// TODO: Writeback for COW, I'll enable it once the rest is stable
-	// if var_expr, ok := e.object.(^VariableExpr); ok {
-	// 	try(cg, emit_named_variable_set(cg, var_expr.name)) or_return
-	// }
+		// explicit write back, redundant for lists but necessary for strings
+		if var_expr, ok := e.receiver.(^VariableExpr); ok {
+			try(cg, emit_named_variable_set(cg, var_expr.name)) or_return
+		}
 	case ^SuperExpr:
 		cg.current_token = e.token
 		method := e.method
