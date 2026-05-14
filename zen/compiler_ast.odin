@@ -142,6 +142,7 @@ make_constant :: proc(cg: ^Codegen, value: Value) -> (int, ErrorMessage) {
 
 /* Store the lexeme of a token in the constant table. */
 @(private = "file")
+@(require_results)
 identifier_constant :: proc(cg: ^Codegen, name: Token) -> (int, ErrorMessage) {
 	return make_constant(cg, obj_val(copy_string(cg.gc, name.lexeme)))
 }
@@ -150,6 +151,7 @@ identifier_constant :: proc(cg: ^Codegen, name: Token) -> (int, ErrorMessage) {
  * Used to implement the modules, as module names are STRING tokens rather than
  * IDENT tokens. */
 @(private = "file")
+@(require_results)
 string_constant :: proc(cg: ^Codegen, text: string) -> (int, ErrorMessage) {
 	return make_constant(cg, obj_val(copy_string(cg.gc, text)))
 }
@@ -289,8 +291,9 @@ Free the dynamic array of break jump offsets.
 */
 @(private = "file")
 free_loops :: proc(cg: ^Codegen) {
-	for i in cg.current_compiler.loops {
-		delete(i.breaks)
+	for i in 0 ..< cg.current_compiler.loop_count {
+		loop := &cg.current_compiler.loops[i]
+		delete(loop.breaks)
 	}
 }
 
@@ -334,6 +337,7 @@ begin_loop :: proc(cg: ^Codegen, loop_start: int) -> ErrorMessage {
 	cg.current_compiler.loop_count += 1
 	loop.start = loop_start
 	loop.scope_depth = cg.current_compiler.scope_depth
+	loop.breaks = make([dynamic]int)
 	return nil
 }
 
@@ -401,7 +405,7 @@ resolve_local :: proc(cg: ^Codegen, compiler: ^Compiler, name: Token) -> (int, M
 		local := &compiler.locals[i]
 		if identifiers_equal(name, local.name) {
 			if local.depth == -1 {
-				return 0, "Cannot read local variable in its own initializer."
+				return -1, "Cannot read local variable in its own initializer."
 			}
 			return i, nil
 		}
@@ -443,6 +447,7 @@ the index to its name in the constant table. Also return whether the upvalue was
 initially declared with `val` or `var`.
 */
 @(private = "file")
+@(require_results)
 resolve_upvalue :: proc(
 	cg: ^Codegen,
 	compiler: ^Compiler,
@@ -495,6 +500,7 @@ resolve_upvalue :: proc(
 
 /* Add an upvalue to the function or return it if it already exists. */
 @(private = "file")
+@(require_results)
 add_upvalue :: proc(
 	p: ^Codegen,
 	compiler: ^Compiler,
@@ -574,8 +580,7 @@ define_variable :: proc(cg: ^Codegen, global: int) {
 
 @(private = "file")
 global_exists :: proc(cg: ^Codegen, global_o_str: ^ObjString) -> bool {
-	_, ok := table_get(cg.globals, global_o_str)
-	if ok {
+	if _, ok := table_get(cg.globals, global_o_str); ok {
 		return true
 	}
 	return false
@@ -592,6 +597,22 @@ global_exists_and_is_final :: proc(cg: ^Codegen, global_o_str: ^ObjString) -> bo
 }
 
 @(private = "file")
+binding_exists_and_is_final :: proc(cg: ^Codegen, name: Token) -> bool {
+	local, _ := resolve_local(cg, cg.current_compiler, name)
+	upvalue, _, _ := resolve_upvalue(cg, cg.current_compiler, name)
+
+	if local != -1 {
+		return true
+	} else if upvalue != -1 {
+		return true
+	} else {
+		global_o_str := copy_string(cg.gc, name.lexeme)
+		return global_exists_and_is_final(cg, global_o_str)
+	}
+}
+
+@(private = "file")
+@(require_results)
 emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> ErrorMessage {
 	local := resolve_local(cg, cg.current_compiler, name) or_return
 	upvalue, _ := resolve_upvalue(cg, cg.current_compiler, name) or_return
@@ -607,18 +628,14 @@ emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> Erro
 		}
 
 		arg := identifier_constant(cg, name) or_return
-		emit_op_with_constant(
-			cg,
-			arg <= U8_MAX ? .OP_GET_GLOBAL : .OP_GET_GLOBAL_LONG,
-			.OP_GET_GLOBAL_LONG,
-			arg,
-		)
+		emit_op_with_constant(cg, .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG, arg)
 	}
 
 	return nil
 }
 
 @(private = "file")
+@(require_results)
 emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 	local := resolve_local(cg, cg.current_compiler, name) or_return
 	upvalue, upvalue_is_final := resolve_upvalue(cg, cg.current_compiler, name) or_return
@@ -655,6 +672,7 @@ emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 	return nil
 }
 
+/* Compile a variable binding. */
 @(require_results)
 compile_binding :: proc(
 	cg: ^Codegen,
@@ -734,25 +752,32 @@ compile_function :: proc(
     Compiler itself is ended when we reach the end of the function body. */
 	begin_scope(cg)
 
+	if len(params) > U8_MAX {
+		codegen_error(cg, "Cannot have more than 255 parameters.")
+		return false
+	}
+	cg.current_compiler.function.arity = u8(len(params))
+
 	for param in params {
 		cg.current_token = param
-		cg.current_compiler.function.arity += 1
-		if cg.current_compiler.function.arity == U8_MAX {
-			codegen_error(cg, "Cannot have more than 255 parameters.")
-			return false
-		}
 
 		/* Function parameters are mutable. This may change in the future. */
 		constant := try2(
 			cg,
-			compile_binding(cg, name, is_final = false, is_loop_variable = false),
+			compile_binding(cg, param, is_final = false, is_loop_variable = false),
 		) or_return
 		define_variable(cg, constant)
 	}
 
 	switch b in body {
 	case ^BlockStmt:
-		compile_statement(cg, b) or_return
+		// I'm not handing off to compile_statement() here, because it will
+		// create a new scope for the block which will end up allowing function
+		// parameter shadowing. Not a bad thing, but not intended behavior for zen.
+		cg.current_token = b.token
+		for decl in b.declarations {
+			compile_declaration(cg, decl) or_return
+		}
 	case Expr:
 		/* This is the case of an arrow function which implicitly returns an
          expression, so we need to add an OP_RETURN here */
@@ -876,7 +901,7 @@ compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> 
 		}
 
 		/* Push the superclass on the stack. */
-		emit_named_variable(cg, superclass, can_assign = false)
+		try(cg, emit_named_variable(cg, superclass, can_assign = false)) or_return
 
 		/* Create a local variable as the reference to the superclass. */
 		begin_scope(cg)
@@ -884,7 +909,7 @@ compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> 
 		define_variable(cg, 0)
 
 		/* Push the inheriting class on the stack. */
-		emit_named_variable(cg, class_name, can_assign = false)
+		try(cg, emit_named_variable(cg, class_name, can_assign = false)) or_return
 
 		emit_opcode(cg, .OP_INHERIT)
 		class_compiler.has_superclass = true
@@ -897,7 +922,7 @@ compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> 
 	 * will override that inherited entry. */
 
 	/* This call to named_variable() pushes the class back on the stack. */
-	emit_named_variable(cg, class_name, can_assign = false)
+	try(cg, emit_named_variable(cg, class_name, can_assign = false)) or_return
 
 	/* Compile methods until the final curly brace. The EOF check ensures that
 	   the compiler doesn't get stuck in an infinite loop if the closing brace
@@ -1063,7 +1088,9 @@ compile_if_statement :: proc(cg: ^Codegen, s: ^IfStmt) -> bool {
 	try(cg, patch_jump(cg, then_jump)) or_return
 	emit_pop(cg)
 
-	compile_statement(cg, else_branch) or_return
+	if else_branch != nil {
+		compile_statement(cg, else_branch) or_return
+	}
 	return try(cg, patch_jump(cg, else_jump))
 }
 
@@ -1101,8 +1128,12 @@ compile_switch_statement :: proc(cg: ^Codegen, s: ^SwitchStmt) -> bool {
 
 		// Patch the case-to-case jump.
 		try(cg, patch_jump(cg, case_jump)) or_return
-		emit_pop(cg)
+		emit_pop(cg) /* Case condition. */
 	}
+
+	emit_pop(cg) // Pop the switch value.
+	compile_statement(cg, else_branch) or_return
+	// append(&case_jumps_to_end, emit_jump(cg, .OP_JUMP))
 
 	// Patch all the case-to-end jumps.
 	for jump in case_jumps_to_end {
@@ -1418,9 +1449,11 @@ compile_statement :: proc(cg: ^Codegen, stmt: Stmt) -> bool {
 		compile_while_statement(cg, s) or_return
 	case ^BlockStmt:
 		cg.current_token = s.token
+		begin_scope(cg)
 		for decl in s.declarations {
 			compile_declaration(cg, decl) or_return
 		}
+		end_scope(cg)
 	case ^BreakStmt:
 		cg.current_token = s.token
 		compile_break_statement(cg, s) or_return
@@ -1463,7 +1496,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^AssignExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.value) or_return
-		emit_named_variable_set(cg, e.name)
+		try(cg, emit_named_variable_set(cg, e.name)) or_return
 	case ^BinaryExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
@@ -1500,34 +1533,37 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 					e.operator.lexeme,
 				),
 			)
+			return false
 		}
 	case ^CallExpr:
 		cg.current_token = e.token
 		arguments := e.arguments
 		callee := e.callee
 
-		// Arg count can't be more than 255 since it's stuffed in one byte.
-		if len(arguments) > U8_MAX {
-			codegen_error(cg, "Cannot have more than 255 arguments.")
-			return false
-		}
-		arg_count := u8(len(arguments))
+		arg_count := len(arguments)
 
 		if get_expr, ok := e.callee.(^GetExpr); ok {
 			// This branch compiles a method invocation.
 			compile_expression(cg, get_expr.receiver) or_return
+			name := try2(cg, identifier_constant(cg, get_expr.property)) or_return
 
 			if cg.pipeline_active {
 				emit_opcode(cg, .OP_GET_IT)
+				arg_count += 1
+			}
+
+			// Arg count can't be more than 255 since it's stuffed in one byte.
+			if len(arguments) > U8_MAX {
+				codegen_error(cg, "Cannot have more than 255 arguments.")
+				return false
 			}
 
 			for arg in e.arguments {
 				compile_expression(cg, arg) or_return
 			}
 
-			name := try2(cg, identifier_constant(cg, get_expr.property)) or_return
 			emit_op_with_constant(cg, .OP_INVOKE, .OP_INVOKE_LONG, name)
-			emit_byte(cg, arg_count)
+			emit_byte(cg, u8(arg_count))
 		} else {
 			// Compile the callee.
 			compile_expression(cg, callee) or_return
@@ -1535,13 +1571,19 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			// If in a pipeline, fetch `it` as the first argument.
 			if cg.pipeline_active {
 				emit_opcode(cg, .OP_GET_IT)
+				arg_count += 1
+			}
+
+			if len(arguments) > U8_MAX {
+				codegen_error(cg, "Cannot have more than 255 arguments.")
+				return false
 			}
 
 			for arg in arguments {
 				compile_expression(cg, arg) or_return
 			}
 
-			emit_instruction(cg, .OP_CALL, arg_count)
+			emit_instruction(cg, .OP_CALL, u8(arg_count))
 		}
 	case ^GetExpr:
 		cg.current_token = e.token
@@ -1558,6 +1600,13 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		property := e.property
 		value := e.value
 
+		if r, ok := receiver.(^VariableExpr); ok {
+			if binding_exists_and_is_final(cg, r.name) {
+				codegen_error(cg, "Can only set a final variable once.")
+				return false
+			}
+		}
+
 		compile_expression(cg, receiver) or_return
 		compile_expression(cg, value) or_return
 
@@ -1566,7 +1615,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 
 	// TODO: Writeback for COW, I'll enable it once the rest is stable
 	// if var_expr, ok := e.object.(^VariableExpr); ok {
-	//     emit_named_variable_set(cg, var_expr.name)
+	//     try(cg, emit_named_variable_set(cg, var_expr.name)) or_return
 	// }
 	case ^GroupingExpr:
 		cg.current_token = e.token
@@ -1602,6 +1651,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		for element in elements {
 			compile_expression(cg, element) or_return
 		}
+		emit_instruction(cg, .OP_LIST, u8(len(elements)))
 	case ^LiteralExpr:
 		cg.current_token = e.token
 
@@ -1645,6 +1695,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 					e.operator.lexeme,
 				),
 			)
+			return false
 		}
 	case ^PipeExpr:
 		cg.current_token = e.token
@@ -1671,7 +1722,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 
 	// TODO: Writeback for COW, I'll enable it once the rest is stable
 	// if var_expr, ok := e.object.(^VariableExpr); ok {
-	// 	emit_named_variable_set(cg, var_expr.name)
+	// 	try(cg, emit_named_variable_set(cg, var_expr.name)) or_return
 	// }
 	case ^SuperExpr:
 		cg.current_token = e.token
@@ -1686,10 +1737,10 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			return false
 		}
 
-		name := try2(cg, identifier_constant(cg, e.token)) or_return
+		name := try2(cg, identifier_constant(cg, method)) or_return
 
 		/* Place both the current receiver and the superclass on the stack. */
-		emit_named_variable(cg, synthetic_token("this"), can_assign = false)
+		try(cg, emit_named_variable(cg, synthetic_token("this"), can_assign = false)) or_return
 
 		/* Check if the method is immediately invoked or not; since we can apply
      	an optimization involving no use of bound methods if it is. */
@@ -1704,11 +1755,17 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 				compile_expression(cg, arg) or_return
 			}
 
-			emit_named_variable(cg, synthetic_token("super"), can_assign = false)
+			try(
+				cg,
+				emit_named_variable(cg, synthetic_token("super"), can_assign = false),
+			) or_return
 			emit_op_with_constant(cg, .OP_SUPER_INVOKE, .OP_SUPER_INVOKE_LONG, name)
 			emit_byte(cg, arg_count)
 		} else {
-			emit_named_variable(cg, synthetic_token("super"), can_assign = false)
+			try(
+				cg,
+				emit_named_variable(cg, synthetic_token("super"), can_assign = false),
+			) or_return
 			emit_op_with_constant(cg, .OP_GET_SUPER, .OP_GET_SUPER_LONG, name)
 		}
 	case ^ThisExpr:
@@ -1721,7 +1778,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		/* `this` is treated as a lexically scoped local variable whose value is
         somehow magically initialized. Also, can_assign is set to false because
         you obviously can't assign to `this`. */
-		emit_named_variable(cg, e.token, can_assign = false)
+		try(cg, emit_named_variable(cg, e.token, can_assign = false)) or_return
 	case ^UnaryExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.right) or_return
@@ -1739,10 +1796,11 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 					e.operator.lexeme,
 				),
 			)
+			return false
 		}
 	case ^VariableExpr:
 		cg.current_token = e.token
-		emit_named_variable(cg, e.token, can_assign = false)
+		try(cg, emit_named_variable(cg, e.token, can_assign = false)) or_return
 	}
 
 	return true
@@ -1786,8 +1844,9 @@ codegen_error :: proc(cg: ^Codegen, message: string) {
 		fmt.eprintf("at '%s'", token.lexeme)
 	}
 
-	fmt.eprintfln(": %s\n", message)
-	fmt.eprintfln("  on [line %d]\n", token.line)
+	fmt.eprintfln(": %s", message)
+	fmt.eprintfln("  on [line %d]", token.line)
+	cg.had_error = true
 }
 
 /* Emit a return instruction and decode the RLE-encoded lines. */
@@ -1846,7 +1905,7 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 	}
 }
 
-codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (^ObjFunction, bool) {
+codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
 	/* Add all the native function names to the global table, for variable
      * existence checks. */
 	for fn_name in gc.global_native_fns {
@@ -1869,7 +1928,7 @@ codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (^ObjFunction, bool)
 		compile_declaration(&cg, decl) or_break
 	}
 
-	fn := end_compiler(&cg)
+	res_fn := end_compiler(&cg)
 	gc.mark_roots_arg = cg.prev_mark_roots
-	return fn, !cg.had_error
+	return res_fn, !cg.had_error
 }

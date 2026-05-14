@@ -204,13 +204,10 @@ BinaryExpr :: struct {
 }
 
 CallExpr :: struct {
-	token:     Token,
-	callee:    Expr,
-
-	// rparen is a Maybe cuz we can have a paren-less call if the arg is just
-	// one string, e.g. `puts "hello!"`
-	rparen:    Maybe(Token),
-	arguments: []Expr,
+	token:      Token,
+	callee:     Expr,
+	rdelimiter: Token,
+	arguments:  []Expr,
 }
 
 GetExpr :: struct {
@@ -332,14 +329,14 @@ AstParseRule :: struct {
 	precedence: AstPrecedence,
 }
 
-parse :: proc(p: ^AstParser) -> ([]Decl, bool) {
-	declarations: [dynamic]Decl
+parse :: proc(p: ^AstParser) -> (decls: []Decl, success: bool) {
+	declarations := make([dynamic]Decl)
 	for !ast_is_at_end(p) {
 		decl := parse_declaration(p)
+		append(&declarations, decl)
+
 		if p.panic_mode {
 			ast_synchronize(p)
-		} else {
-			append(&declarations, decl)
 		}
 	}
 
@@ -635,8 +632,6 @@ parse_block :: proc(p: ^AstParser) -> ^BlockStmt {
 	stmt.declarations = declarations[:]
 	ast_consume(p, .RSQUIRLY, "Expect '}' after block.")
 
-	// This is added by ASI after blocks (dunno how to make that not happen yet)
-	ast_consume_semi(p, "Expect ';' after block.")
 	return stmt
 }
 
@@ -840,6 +835,38 @@ ast_parse_literal :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 
 ast_parse_variable :: proc(p: ^AstParser, can_assign: bool) -> Expr {
 	name := ast_previous(p)
+
+	// No-paren string call: `puts "hello"`
+	// Only valid as a call, not as an assignment target
+	if ast_match(p, .STRING) {
+		str_literal := new(LiteralExpr)
+		str_literal.token = ast_previous(p)
+		str_literal.value = add_escape_sequences(
+			str_literal.token.lexeme[1:len(str_literal.token.lexeme) - 1],
+		)
+
+		call := new(CallExpr)
+
+		// The `token` and `rparen` fields for this type of call are inconsistent
+		// from a normal call since for a normal call those two are `(` and
+		// `)` respectively, but in this case there are no parentheses.
+		// Therefore, `token` for this case is the function name and `rparen`
+		// is the string.
+		call.token = name
+		call.rdelimiter = ast_previous(p)
+		call.arguments = make([]Expr, 1)
+
+		// The no-paren function call is a bit limited as only functions assigned
+		// to variables can use the syntax.
+		callee := new(VariableExpr)
+		callee.token = name
+		callee.name = name
+
+		call.arguments[0] = str_literal
+		call.callee = callee
+		return call
+	}
+
 	if can_assign && ast_match(p, .EQUAL) {
 		value := parse_expression(p)
 		assign := new(AssignExpr)
@@ -960,24 +987,25 @@ ast_parse_call :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
 		}
 	}
 	call.arguments = arguments[:]
-	call.rparen = ast_consume(p, .RPAREN, "Expect ')' after arguments.")
+	call.rdelimiter = ast_consume(p, .RPAREN, "Expect ')' after arguments.")
 	return call
 }
 
 ast_parse_dot :: proc(p: ^AstParser, left: Expr, can_assign: bool) -> Expr {
-	token := ast_previous(p) // The '.' token
+	dot := ast_previous(p) // The '.' token
 	property := ast_consume(p, .IDENT, "Expect property name after '.'.")
 	if can_assign && ast_match(p, .EQUAL) {
+		equals := ast_previous(p)
 		value := parse_expression(p)
 		set_expr := new(SetExpr)
-		set_expr.token = token
+		set_expr.token = equals // The '=' token
 		set_expr.receiver = left
 		set_expr.property = property
 		set_expr.value = value
 		return set_expr
 	}
 	get_expr := new(GetExpr)
-	get_expr.token = token
+	get_expr.token = dot
 	get_expr.receiver = left
 	get_expr.property = property
 	return get_expr
@@ -1257,8 +1285,10 @@ free_stmt :: proc(stmt: Stmt) {
 		free_expr(s.condition)
 		free_decls(s.then_branch.declarations)
 		free(s.then_branch)
-		free_decls(s.else_branch.declarations)
-		free(s.else_branch)
+		if s.else_branch != nil {
+			free_decls(s.else_branch.declarations)
+			free(s.else_branch)
+		}
 		free(s)
 	case ^PrintStmt:
 		free_expr(s.expr)
@@ -1562,7 +1592,7 @@ ast_print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
 			strings.write_string(b, "\n")
 			ast_print_expr(b, cond, indent + 1)
 		} else {
-			strings.write_string(b, " <implicit true>\n")
+			strings.write_string(b, " true\n")
 		}
 		for c in s.cases {
 			ast_print_indent(b, indent + 1)
@@ -1639,6 +1669,10 @@ ast_print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 	case ^ListExpr:
 		ast_print_indent(b, indent)
 		strings.write_string(b, "(list\n")
+		if len(e.elements) == 0 {
+			ast_print_indent(b, indent + 1)
+			strings.write_string(b, "[]\n")
+		}
 		for el in e.elements {
 			ast_print_expr(b, el, indent + 1)
 		}
@@ -1646,7 +1680,13 @@ ast_print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^LiteralExpr:
 		ast_print_indent(b, indent)
-		fmt.sbprintf(b, "%v\n", e.value)
+		if e.value == nil {
+			fmt.sbprintln(b, "nil")
+		} else if v, ok := e.value.(string); ok {
+			fmt.sbprintfln(b, "\"%v\"", e.value)
+		} else {
+			fmt.sbprintfln(b, "%v", e.value)
+		}
 	case ^LogicalExpr:
 		ast_print_indent(b, indent)
 		fmt.sbprintf(b, "(logical %s\n", e.operator.lexeme)

@@ -79,9 +79,7 @@ func test() {
 		Token{type = .IDENT, lexeme = "str", line = 4},
 		Token{type = .SEMI, lexeme = ";", line = 4},
 		Token{type = .RSQUIRLY, lexeme = "}", line = 5},
-		Token{type = .SEMI, lexeme = ";", line = 5},
 		Token{type = .RSQUIRLY, lexeme = "}", line = 6},
-		Token{type = .SEMI, lexeme = ";", line = 6},
 		Token{type = .FUNC, lexeme = "func", line = 8},
 		Token{type = .IDENT, lexeme = "add", line = 8},
 		Token{type = .LPAREN, lexeme = "(", line = 8},
@@ -150,6 +148,7 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
 		Token{type = .LPAREN, lexeme = "(", line = 3},
 		Token{type = .RPAREN, lexeme = ")", line = 3},
 		Token{type = .SEMI, lexeme = ";", line = 3},
+		Token{type = .EOF, lexeme = "", line = 4},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -183,6 +182,7 @@ test_lexer_oneline_block :: proc(t: ^tt.T) {
 		Token{type = .NUMBER, lexeme = "2", line = 1},
 		Token{type = .SEMI, lexeme = ";", line = 1},
 		Token{type = .RSQUIRLY, lexeme = "}", line = 1},
+		Token{type = .EOF, lexeme = "", line = 1},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)

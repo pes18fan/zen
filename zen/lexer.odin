@@ -211,7 +211,6 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 		#partial switch token.type {
 		case .NEWLINE:
 			{
-
 				/* If the very first token is a newline, ignore it and continue. */
 				if idx == 0 {
 					continue
@@ -236,7 +235,7 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 				     .CONTINUE,
 				     .RETURN,
 				     .RPAREN,
-				     .RSQUIRLY,
+				     // NOTE: no squirly brace here, may need to readd for records
 				     .RSQUARE,
 				     .EXIT,
 				     .IT:
@@ -263,7 +262,8 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 						continue
 					case:
 						/* 
-                        Don't add a semicolon when inside a list.
+                        Don't add a semicolon when inside a list or parenthesis
+                        grouping.
                         This prevents a semicolon from being added after "b"
                         element in a situation like this:
                         

@@ -1169,7 +1169,6 @@ interpret :: proc(
 		fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
 		if !cg_ok {
 			return .INTERPRET_COMPILE_ERROR
-
 		}
 	} else {
 		fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
