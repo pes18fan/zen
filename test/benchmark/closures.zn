@@ -11,7 +11,7 @@ func make_counter() {
 var start = time.clock_ms()
 var counter = make_counter()
 var i = 0
-while i < 1000000 {
+while i < 10000000 {
     counter()
     i = i + 1
 }

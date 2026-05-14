@@ -2,7 +2,7 @@ use "time"
 use "list"
 
 var data = []
-for var i = 0; i < 100000; i = i + 1 {
+for var i = 0; i < 1000000; i = i + 1 {
     list.push(data, i)
 }
 

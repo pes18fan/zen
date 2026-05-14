@@ -167,9 +167,12 @@ if __name__ == "__main__":
 
     print()
     print(f"Total tests run: {tests}")
-    print("Draft tests not run:")
-    for path in draft_paths:
-        print(f"\t{path}")
+
+    if len(draft_paths) > 0:
+        print("Draft tests not run:")
+        for path in draft_paths:
+            print(f"\t{path}")
+
     print()
     if failed > 0:
         print(f"{COL_RED}FAILED{RESET}: {failed} tests failed.")

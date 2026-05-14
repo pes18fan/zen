@@ -31,10 +31,10 @@ class NthToggle < Toggle {
   }
 }
 
-var start = time.clock_ms()
-var n = 100000
+var n = 1000000
 var value = true
 var toggle = Toggle(value)
+var start = time.clock_ms()
 
 for var i = 0; i < n; i = i + 1 {
   value = toggle.activate().value()

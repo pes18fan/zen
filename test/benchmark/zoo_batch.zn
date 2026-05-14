@@ -9,12 +9,12 @@ class Zoo {
     this.elephant = 1
     this.fox      = 1
   }
-  ant()    { return this.aarvark; }
-  banana() { return this.baboon; }
-  tuna()   { return this.cat; }
-  hay()    { return this.donkey; }
-  grass()  { return this.elephant; }
-  mouse()  { return this.fox; }
+  ant()    => this.aarvark
+  banana() => this.baboon
+  tuna()   => this.cat
+  hay()    => this.donkey
+  grass()  => this.elephant
+  mouse()  => this.fox
 }
 
 var zoo = Zoo()
