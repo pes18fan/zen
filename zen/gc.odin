@@ -47,7 +47,7 @@ GC :: struct {
 
 /* Source for the roots for the root marking step in the GC. */
 RootSource :: union {
-	^Parser,
+	^Codegen,
 	^VM,
 }
 
@@ -57,9 +57,9 @@ is_vm :: #force_inline proc(source: RootSource) -> bool {
 	return ok
 }
 
-/* Check if the root source is the parser. */
-is_parser :: #force_inline proc(source: RootSource) -> bool {
-	_, ok := source.(^Parser)
+/* Check if the root source is codegen. */
+is_codegen :: #force_inline proc(source: RootSource) -> bool {
+	_, ok := source.(^Codegen)
 	return ok
 }
 
@@ -69,26 +69,26 @@ as_vm :: #force_inline proc(source: RootSource) -> ^VM {
 }
 
 /* Cast the `source` to a parser pointer. */
-as_parser :: #force_inline proc(source: RootSource) -> ^Parser {
-	return source.(^Parser)
+as_parser :: #force_inline proc(source: RootSource) -> ^Codegen {
+	return source.(^Codegen)
 }
 
 /* Initialize the GC and all its values. */
 init_gc :: proc() -> GC {
-	return (GC {
-				objects = nil,
-				bytes_allocated = 0,
-				next_gc = 1024 * 1024,
-				gray_stack = make([dynamic]^Obj, 0, 0),
-				gray_count = 0,
-				mark_roots_arg = nil,
-				strings = init_table(),
-				init_string = nil,
-				std_modules = make([dynamic]string),
-				global_native_fns = make([dynamic]string),
-				import_stack = make([dynamic]string),
-				globals = init_table(),
-			})
+	return GC {
+		objects = nil,
+		bytes_allocated = 0,
+		next_gc = 1024 * 1024,
+		gray_stack = make([dynamic]^Obj, 0, 0),
+		gray_count = 0,
+		mark_roots_arg = nil,
+		strings = init_table(),
+		init_string = nil,
+		std_modules = make([dynamic]string),
+		global_native_fns = make([dynamic]string),
+		import_stack = make([dynamic]string),
+		globals = init_table(),
+	}
 }
 
 /* Free the GC's memory; also frees all allocated objects. */
@@ -106,12 +106,10 @@ free_gc :: proc(gc: ^GC) {
 /* Push a value on the stack temporarily. */
 temp_push :: proc(gc: ^GC, value: Value) {
 	switch s in gc.mark_roots_arg {
-	case ^Parser:
-		{
-			/* The parser stores the previous mark_roots_arg of the GC, which is
+	case ^Codegen:
+		/* The codegen struct stores the previous mark_roots_arg of the GC, which is
             the VM, so we temporarily restore it. */
-			vm_push(as_vm(s.prev_mark_roots), value)
-		}
+		vm_push(as_vm(s.prev_mark_roots), value)
 	case ^VM:
 		vm_push(as_vm(s), value)
 	}
@@ -121,11 +119,9 @@ temp_push :: proc(gc: ^GC, value: Value) {
 temp_pop :: proc(gc: ^GC) -> Value {
 	value: Value
 	switch s in gc.mark_roots_arg {
-	case ^Parser:
-		{
-			value = vm_pop(as_vm(s.prev_mark_roots))
-			gc.mark_roots_arg = s
-		}
+	case ^Codegen:
+		value = vm_pop(as_vm(s.prev_mark_roots))
+		gc.mark_roots_arg = s
 	case ^VM:
 		value = vm_pop(as_vm(s))
 	}
@@ -224,7 +220,7 @@ mark_roots :: proc(gc: ^GC, source: RootSource) {
 	mark_table(gc, &gc.globals)
 
 	switch s in source {
-	case ^Parser:
+	case ^Codegen:
 		mark_compiler_roots(gc, s.current_compiler)
 	case ^VM:
 		mark_vm_roots(gc, s)

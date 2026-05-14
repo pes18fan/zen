@@ -80,16 +80,15 @@ Token :: struct {
 
 /* The lexer. */
 Lexer :: struct {
-	source:    string,
-	start:     int,
-	current:   int,
-	line:      int,
-	had_error: bool,
+	source:  string,
+	start:   int,
+	current: int,
+	line:    int,
 }
 
 /* Create a new lexer. */
 init_lexer :: proc(source: string) -> Lexer {
-	return Lexer{source = source, start = 0, current = 0, line = 1, had_error = false}
+	return Lexer{source = source, start = 0, current = 0, line = 1}
 }
 
 /* 
@@ -101,7 +100,6 @@ syntax_error :: proc(l: ^Lexer, message: string) {
 	color_red(os.stderr, "syntax error: ")
 	fmt.eprintf("%s\n", message)
 	fmt.eprintf("  on [line %d]\n", l.line)
-	l.had_error = true
 }
 
 /* Returns true if `c` is alphanumeric, a question mark or an exclamation mark. */
@@ -213,7 +211,6 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 		#partial switch token.type {
 		case .NEWLINE:
 			{
-
 				/* If the very first token is a newline, ignore it and continue. */
 				if idx == 0 {
 					continue
@@ -265,7 +262,8 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 						continue
 					case:
 						/* 
-                        Don't add a semicolon when inside a list.
+                        Don't add a semicolon when inside a list or parenthesis
+                        grouping.
                         This prevents a semicolon from being added after "b"
                         element in a situation like this:
                         
@@ -300,8 +298,9 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 				append(&result, semi)
 			}
 
-			assert(len(block_stack) >= 0, "cannot have less than 0 blocks")
-			pop(&block_stack)
+			if len(block_stack) > 0 {
+				pop(&block_stack)
+			}
 			append(&result, token)
 		case:
 			append(&result, token)
@@ -667,7 +666,6 @@ lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
 
 	for {
 		token, ok := lex_token(l).?
-
 		if !ok {
 			delete(toks)
 			return nil, false
@@ -679,13 +677,6 @@ lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
 	}
 
 	tokens = insert_semis(toks[:])
-
-	if config.dump_tokens {
-		fmt.printf("TOKENS:\n")
-		for token in tokens {
-			fmt.printf("  %v\n", token)
-		}
-	}
 
 	return tokens, true
 }

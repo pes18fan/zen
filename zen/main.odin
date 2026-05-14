@@ -7,6 +7,7 @@ import "core:path/filepath"
 import ic "isocline"
 
 VERSION :: #load("../.zen_version")
+AST :: true
 
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)
@@ -17,6 +18,7 @@ Config :: struct {
 	compile_only:     bool,
 	dump_disassembly: bool,
 	dump_tokens:      bool,
+	dump_ast:         bool,
 	trace_exec:       bool,
 	stress_gc:        bool,
 	log_gc:           bool,
@@ -35,8 +37,9 @@ Config :: struct {
 
 config := Config {
 	compile_only     = false,
-	dump_disassembly = false,
 	dump_tokens      = false,
+	dump_ast         = false,
+	dump_disassembly = false,
 	trace_exec       = false,
 	stress_gc        = false,
 	log_gc           = false,
@@ -140,8 +143,9 @@ print_help :: proc(stream: ^os.File) {
 
     -t, --time          Record time taken to compile and run
     -C, --compile       Compile only, useful with -D
-    -D, --dump          Dump disassembled bytecode
     --dump-tokens       Dump tokens from lexer and exit
+    --dump-ast          Dump the abstract syntax tree from the parser and exit
+    -D, --dump          Dump disassembled bytecode
     -T, --trace         Trace script execution
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation`
@@ -203,6 +207,8 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 			config.dump_disassembly = true
 		case "--dump-tokens":
 			config.dump_tokens = true
+		case "--dump-ast":
+			config.dump_ast = true
 		case "--trace":
 			config.trace_exec = true
 		case "--time":
@@ -262,13 +268,11 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 
 	/* Create a ObjList for the args. Don't worry about freeing it, GC will handle it */
 	args_list := new_list(vm.gc)
-
 	for i in 0 ..< len(argv) {
 		if args_passed {
 			write_value_array(&args_list.items, obj_val(copy_string(vm.gc, argv[i])))
 		}
 	}
-
 	vm.args = args_list
 
 	if script == "" {
@@ -295,14 +299,16 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		switch result {
 		case .INTERPRET_LEX_ERROR:
 			return 65
-		case .INTERPRET_VOLUNTARY_EXIT:
-			return config.__exit_code
+		case .INTERPRET_PARSE_ERROR:
+			return 65
 		case .INTERPRET_COMPILE_ERROR:
 			return 65
 		case .INTERPRET_RUNTIME_ERROR:
 			return 70
 		case .INTERPRET_READ_ERROR:
 			return 74
+		case .INTERPRET_VOLUNTARY_EXIT:
+			return config.__exit_code
 		case .INTERPRET_OK:
 			return 0
 		case:
@@ -339,7 +345,9 @@ main :: proc() {
 	}
 
 	gc := init_gc()
+	defer free_gc(&gc)
 	vm := init_VM()
+	defer free_VM(&vm)
 
 	gc.mark_roots_arg = &vm
 	vm.gc = &gc
@@ -350,7 +358,4 @@ main :: proc() {
 	init_natives(&gc)
 
 	status = parse_argv(&vm)
-
-	free_VM(&vm)
-	free_gc(&gc)
 }

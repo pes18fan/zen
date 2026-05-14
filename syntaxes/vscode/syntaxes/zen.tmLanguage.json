@@ -37,7 +37,7 @@
         "keywords": {
             "patterns": [
                 {
-                    "match": "\\b(if|else|while|for|return|break|continue|switch)\\b",
+                    "match": "\\b(if|else|while|for|return|break|continue|switch|exit)\\b",
                     "name": "keyword.control.zen"
                 },
                 {
@@ -148,7 +148,7 @@
             "patterns": [
                 {
                     "name": "keyword.operator.arithmetic.zen",
-                    "match": "\\+|-|\\*|\\/|\\mod"
+                    "match": "\\+|-|\\*|\\/|\\%"
                 },
                 {
                     "name": "keyword.operator.comparison.zen",

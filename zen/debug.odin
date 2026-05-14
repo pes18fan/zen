@@ -130,12 +130,12 @@ invoke_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> 
 
 /* Disassembles the instruction at the provided offset. */
 disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
-	fmt.eprintf("%04d ", offset)
+	fmt.eprintf("%04d", offset)
 
 	if offset > 0 && get_line(c.lines, offset) == get_line(c.lines, offset - 1) {
-		fmt.eprintf("   | ")
+		fmt.eprintf("    |\t")
 	} else {
-		fmt.eprintf("   %d ", get_line(c.lines, offset))
+		fmt.eprintf("    %d\t", get_line(c.lines, offset))
 	}
 
 	instruction := c.code[offset]
@@ -263,8 +263,9 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 				offset += 1
 
 				fmt.eprintf(
-					"%04d	  |                     %s %d\n",
+					"%04d    |\t%-21s %s %d\n",
 					offset - 2,
+					" ",
 					is_local ? "local" : "upvalue",
 					index,
 				)

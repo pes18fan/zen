@@ -56,7 +56,7 @@ contexts:
   keywords:
     - match: \b(use|pub)\b
       scope: keyword.control.zen
-    - match: \b(if|else|while|for|return|break|continue|switch)\b
+    - match: \b(if|else|while|for|return|break|continue|switch|exit)\b
       scope: keyword.control.zen
     - match: \b(var|val)\b
       scope: storage.type.zen

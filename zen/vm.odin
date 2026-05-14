@@ -78,6 +78,7 @@ InterpretResult :: enum {
 	INTERPRET_OK,
 	INTERPRET_VOLUNTARY_EXIT,
 	INTERPRET_LEX_ERROR,
+	INTERPRET_PARSE_ERROR,
 	INTERPRET_COMPILE_ERROR,
 	INTERPRET_READ_ERROR,
 	INTERPRET_RUNTIME_ERROR,
@@ -807,6 +808,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					/* Build a new string with the specified index updated.
 					 * I tried to just directly update the existing string but
 					 * that wasn't possible for some reason */
+					// TODO: Fix this, it should NOT be O(n)
 					sb := strings.builder_make()
 					defer strings.builder_destroy(&sb)
 
@@ -818,10 +820,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						}
 					}
 
-					// FIXME: the underlying string doesn't actually get set
-					// because the pointer to it cannot be mutated without
-					// causing crashes when freeing the objects
-					// only easy way to fix is with an AST, gotta work on that!!
 					res := strings.to_string(sb)
 					vm_push(vm, obj_val(copy_string(vm.gc, res)))
 				}
@@ -859,10 +857,13 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				/* If the current file is being imported AND the function being
                  * compiled is set as public with the `pub` keyword, add the 
                  * declared closure into the module that's importing it. */
-				importing_module, ok := importer.?
-				if is_public && ok {
-					module := importing_module.module
-					table_set(&module.values, closure.function.name, vm_peek(vm, 0))
+				importing_module, imported := importer.?
+				if is_public && imported {
+					table_set(
+						&importing_module.module.values,
+						closure.function.name,
+						vm_peek(vm, 0),
+					)
 				}
 			}
 		case .OP_CLOSE_UPVALUE:
@@ -904,8 +905,8 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			vm_push(vm, obj_val(new_class(vm.gc, name)))
 
 			/* If the current file is being imported AND the class being
-                 * compiled is set as public with the `pub` keyword, add the 
-                 * declared class into the module that's importing it. */
+             * compiled is set as public with the `pub` keyword, add the 
+             * declared class into the module that's importing it. */
 			importing_module, ok := importer.?
 			if public && ok {
 				module := importing_module.module
@@ -1038,11 +1039,12 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			{
 				iter := vm_pop(vm)
 
-				assert(is_number(vm_peek(vm, 0)))
+				assert(is_number(vm_peek(vm, 0)), "iteration index should be a number\n")
 				idx := as_number(vm_pop(vm))
 
 				if is_list(iter) {
 					list := as_list(iter)
+
 					if int(idx) < len(list.items.values) {
 						vm_push(vm, list.items.values[int(idx)])
 						vm_push(vm, number_val(idx + 1))
@@ -1126,12 +1128,54 @@ interpret :: proc(
 	}
 
 	if config.dump_tokens {
+		fmt.println("TOKENS:")
+		for token in tokens {
+			fmt.printfln("  %v", token)
+		}
+
 		return .INTERPRET_OK
 	}
 
-	fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
-	if !cmp_ok {
-		return .INTERPRET_COMPILE_ERROR
+	when AST {
+		p := init_parser(tokens)
+		decls, ps_ok := parse(&p)
+		if !ps_ok {
+			free_decls(decls)
+			return .INTERPRET_PARSE_ERROR
+		}
+		defer free_decls(decls)
+
+		/* Time the parser. */
+		if config.record_time {
+			time.stopwatch_stop(&sw)
+			fmt.eprintf("Parser: %v\n", time.stopwatch_duration(sw))
+			time.stopwatch_reset(&sw)
+			time.stopwatch_start(&sw)
+		}
+
+		if config.dump_ast {
+			// TODO: make the ast representation a bit nicer
+			str := ast_string(decls)
+			defer delete(str)
+			fmt.println(str)
+
+			return .INTERPRET_OK
+		}
+
+		// Collect global variables before codegen
+		if !config.repl {
+			collect_script_globals(&vm.compiler_globals, gc, decls)
+		}
+
+		fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
+		if !cg_ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
+	} else {
+		fn, cmp_ok := compile(gc, tokens, &vm.compiler_globals)
+		if !cmp_ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
 	}
 
 	/* Time the compiler. */
@@ -1170,7 +1214,7 @@ vm_push :: #force_inline proc(vm: ^VM, value: Value) #no_bounds_check {
 
 /* Pop a value out of the stack. */
 vm_pop :: #force_inline proc(vm: ^VM) -> Value #no_bounds_check {
-	assert(vm.stack_top >= 0)
+	assert(vm.stack_top >= 0, "vm stack must not be empty\n")
 	defer vm.stack_top -= 1
 	return vm.stack[vm.stack_top]
 }
@@ -1239,7 +1283,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 					return call(vm, as_closure(initializer), arg_count)
 				} else if arg_count != 0 {
 					/* If there is no initializer, passing arguments to a class
-				 * call makes no sense and is thus an error. */
+                     * call makes no sense and is thus an error. */
 					vm_panic(vm, "Expected 0 arguments but got %d.", arg_count)
 					return false
 				}
@@ -1319,8 +1363,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 			return call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count))
 		} else {
 			panic_str := fmt.tprintf(
-				`Value '%s' does not exist on module '%s'.
-       If this module is a file, you may have forgotten the pub keyword.`,
+				"Value '%s' does not exist on module '%s'.",
 				name.chars,
 				module.name.chars,
 			)

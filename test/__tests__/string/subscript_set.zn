@@ -1,4 +1,3 @@
-// DRAFT
 // Subscript setting on strings currently does not work, should be fixed
 // once zen is AST-based
 var s = "hello"

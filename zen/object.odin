@@ -60,6 +60,9 @@ ObjString :: struct {
 /* An upvalue. Upvalues are local variables from an enclosing function. */
 ObjUpvalue :: struct {
 	using obj:    Obj,
+
+	/* Location is on the stack if the upvalue is open, otherwise the location
+     * is the `closed` field of its own object. */
 	location:     ^Value,
 
 	/* If an upvalue is closed, it lives here. */
@@ -377,7 +380,7 @@ allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
 	switch s in gc.mark_roots_arg {
 	case ^VM:
 		vm = s
-	case ^Parser:
+	case ^Codegen:
 		vm = as_vm(s.prev_mark_roots)
 	}
 
