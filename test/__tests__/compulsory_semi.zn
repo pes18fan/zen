@@ -1,2 +1,0 @@
-// TODO: make the ASI handle this case right
-{ puts("hello"); }  // expect: hello
