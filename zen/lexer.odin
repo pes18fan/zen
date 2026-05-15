@@ -191,7 +191,6 @@ This is the way it works:
 @(private = "file")
 insert_semis :: proc(tokens: []Token) -> []Token {
 	defer delete(tokens)
-	length := len(tokens)
 	result := make([dynamic]Token)
 
 	list_stack := make([dynamic]byte)

@@ -177,7 +177,6 @@ print_version_message :: proc(stream: ^os.File) {
 parse_argv :: proc(vm: ^VM) -> (status: int) {
 	argc := len(os.args)
 	argv := os.args
-	argv_i := 0
 	script := ""
 	args_passed := false
 

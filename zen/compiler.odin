@@ -473,7 +473,7 @@ resolve_upvalue :: proc(
 		/* is_local is true since we're capturing a local variable from the
 		immediately enclosing function. */
 		idx, err := add_upvalue(cg, compiler, u8(local), is_local = true)
-		return idx, is_final, err
+		return idx, final, err
 	}
 
 	/* Recursively look for an upvalue in the enclosing function. */
@@ -654,7 +654,6 @@ emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 		arg := identifier_constant(cg, name) or_return
 
 		global_o_str := copy_string(cg.gc, name.lexeme)
-		value: Value; ok: bool
 		if global_exists_and_is_final(cg, global_o_str) {
 			return "Can only set a final variable once."
 		} else {
@@ -687,8 +686,6 @@ compile_binding :: proc(
 	if cg.current_compiler.scope_depth > 0 {return 0, nil}
 
 	global_o_str := copy_string(cg.gc, name.lexeme)
-	value: Value; ok: bool
-
 	if value, ok := table_get(cg.globals, global_o_str); ok {
 		if values_equal(value, bool_val(true)) {
 			return 0,
@@ -863,8 +860,6 @@ compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> 
 	) or_return /* Classes are reassignable. */
 
 	global_o_str := copy_string(cg.gc, class_name.lexeme)
-	value: Value; ok: bool
-
 	/* Add the value onto the globals table. */
 	if cg.current_compiler.scope_depth == 0 {
 		if global_exists(cg, global_o_str) {
@@ -962,12 +957,12 @@ compile_module_declaration :: proc(cg: ^Codegen, d: ^ModuleDecl) -> bool {
 	defer delete(abs_path)
 
 	// look for the path in the stdlib, if not present look for a file at the path
-	found := slice.contains(cg.gc.std_modules[:], path)
-	if found {
+	builtin_found := slice.contains(cg.gc.std_modules[:], path)
+	if builtin_found {
 		mod_type = .BUILTIN
 	} else {
-		found := os.exists(abs_path)
-		if !found {
+		user_found := os.exists(abs_path)
+		if !user_found {
 			codegen_error(cg, fmt.tprintf("Module '%s' not found.", abs_path))
 			return false
 		}
@@ -1065,7 +1060,7 @@ compile_if_statement :: proc(cg: ^Codegen, s: ^IfStmt) -> bool {
 	then_branch := s.then_branch
 	else_branch := s.else_branch
 
-	compile_expression(cg, s.condition) or_return
+	compile_expression(cg, condition) or_return
 
 	when CHAOTIC {
 		then_jump: int
@@ -1081,7 +1076,7 @@ compile_if_statement :: proc(cg: ^Codegen, s: ^IfStmt) -> bool {
 	emit_pop(cg)
 
 	begin_scope(cg)
-	compile_statement(cg, s.then_branch) or_return
+	compile_statement(cg, then_branch) or_return
 	end_scope(cg)
 
 	else_jump := emit_jump(cg, .OP_JUMP)

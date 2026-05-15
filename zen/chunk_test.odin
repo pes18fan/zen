@@ -110,7 +110,12 @@ test_chunk_empty :: proc(t: ^tt.T) {
 	chunk := init_chunk()
 	defer free_chunk(&chunk)
 
-	tt.expectf(t, len(chunk.code) == 0, "expected empty chunk, got %v instructions", len(chunk.code))
+	tt.expectf(
+		t,
+		len(chunk.code) == 0,
+		"expected empty chunk, got %v instructions",
+		len(chunk.code),
+	)
 	tt.expectf(t, len(chunk.lines) == 0, "expected empty lines, got %v", len(chunk.lines))
 }
 
@@ -154,10 +159,10 @@ test_chunk_diff_line_encoding :: proc(t: ^tt.T) {
 
 	got := chunk.lines
 	tt.expectf(t, len(got) == 6, "expected 6 RLE values (3 runs), got %v", len(got))
-	tt.expect_value(t, got[0], 1)  // run length
-	tt.expect_value(t, got[1], 1)  // line number
-	tt.expect_value(t, got[2], 1)  // run length
-	tt.expect_value(t, got[3], 2)  // line number
-	tt.expect_value(t, got[4], 1)  // run length
-	tt.expect_value(t, got[5], 3)  // line number
+	tt.expect_value(t, got[0], 1) // run length
+	tt.expect_value(t, got[1], 1) // line number
+	tt.expect_value(t, got[2], 1) // run length
+	tt.expect_value(t, got[3], 2) // line number
+	tt.expect_value(t, got[4], 1) // run length
+	tt.expect_value(t, got[5], 3) // line number
 }

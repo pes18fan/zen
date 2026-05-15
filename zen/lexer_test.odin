@@ -4,12 +4,6 @@ import "core:fmt"
 import "core:os"
 import tt "core:testing"
 
-/* A `Token` or nil. */
-@(private = "file")
-MaybeToken :: union {
-	Token,
-}
-
 /* Check if two slices of `Token`s are the same. */
 @(private = "file")
 expect_tokens_equal :: proc(
@@ -17,8 +11,8 @@ expect_tokens_equal :: proc(
 	got: []Token,
 ) -> (
 	ok: bool,
-	err_wanted: MaybeToken,
-	err_recieved: MaybeToken,
+	err_wanted: Maybe(Token),
+	err_recieved: Maybe(Token),
 ) {
 	got := got
 	for i in want {
@@ -62,7 +56,7 @@ func test() {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .FUNC, lexeme = "func", line = 2},
@@ -133,7 +127,7 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .IDENT, lexeme = "some_string", line = 1},
@@ -162,7 +156,7 @@ test_lexer_oneline_block :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .FUNC, lexeme = "func", line = 1},
@@ -191,7 +185,7 @@ test_lexer_empty :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error on empty source") { return }
+	if !tt.expect(t, ok, "lexer error on empty source") {return}
 
 	tt.expectf(t, len(got) == 1, "expected 1 token (EOF), got %v", len(got))
 	tt.expect_value(t, got[0].type, TokenType.EOF)
@@ -204,7 +198,7 @@ test_lexer_comment_only :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 	tt.expect_value(t, got[0].type, TokenType.EOF)
 }
 
@@ -217,7 +211,7 @@ test_lexer_literals :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .NUMBER, lexeme = "42", line = 1},
@@ -242,7 +236,7 @@ test_lexer_operators :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .PLUS, lexeme = "+", line = 1},
@@ -283,7 +277,7 @@ test_lexer_asi_identifier :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .IDENT, lexeme = "a", line = 1},
@@ -303,7 +297,7 @@ test_lexer_asi_suppressed_in_list :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .LSQUARE, lexeme = "[", line = 1},
@@ -323,7 +317,7 @@ test_lexer_asi_suppressed_in :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .IDENT, lexeme = "a", line = 1},
@@ -343,7 +337,7 @@ test_lexer_asi_r_squirly :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .RSQUIRLY, lexeme = "}", line = 1},
@@ -365,7 +359,7 @@ test_lexer_keywords :: proc(t: ^tt.T) {
 	got, ok := lex(&lx)
 	defer delete(got)
 
-	if !tt.expect(t, ok, "lexer error") { return }
+	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
 		Token{type = .CLASS, lexeme = "class", line = 1},

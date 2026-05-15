@@ -2,7 +2,6 @@ package zen
 
 import "core:fmt"
 import "core:os"
-import "core:sys/windows"
 import "core:terminal"
 
 /* Print text in red in the specific `stream`. */
@@ -12,25 +11,8 @@ color_red :: proc(stream: ^os.File, text: string) {
 		return
 	}
 
-	when ODIN_OS == .Windows {
-		switch stream {
-		case os.stdout:
-			windows.SetConsoleTextAttribute(
-				windows.GetStdHandle(windows.STD_OUTPUT_HANDLE),
-				windows.FOREGROUND_RED,
-			)
-		case os.stderr:
-			windows.SetConsoleTextAttribute(
-				windows.GetStdHandle(windows.STD_ERROR_HANDLE),
-				windows.FOREGROUND_RED,
-			)
-		}
-	} else {
-		fmt.fprint(stream, "\x1b[31m")
-	}
-
+	fmt.fprint(stream, "\x1b[31m")
 	fmt.fprint(stream, text)
-
 	color_reset(stream)
 }
 
@@ -41,25 +23,8 @@ color_green :: proc(stream: ^os.File, text: string) {
 		return
 	}
 
-	when ODIN_OS == .Windows {
-		switch stream {
-		case os.stdout:
-			windows.SetConsoleTextAttribute(
-				windows.GetStdHandle(windows.STD_OUTPUT_HANDLE),
-				windows.FOREGROUND_GREEN,
-			)
-		case os.stderr:
-			windows.SetConsoleTextAttribute(
-				windows.GetStdHandle(windows.STD_ERROR_HANDLE),
-				windows.FOREGROUND_GREEN,
-			)
-		}
-	} else {
-		fmt.fprint(stream, "\x1b[32m")
-	}
-
+	fmt.fprint(stream, "\x1b[32m")
 	fmt.fprint(stream, text)
-
 	color_reset(stream)
 }
 
@@ -70,26 +35,8 @@ color_yellow :: proc(stream: ^os.File, text: string) {
 		return
 	}
 
-	when ODIN_OS == .Windows {
-		switch stream {
-		case os.stdout:
-			windows.SetConsoleTextAttribute(
-				windows.GetStdHandle(windows.STD_OUTPUT_HANDLE),
-				windows.FOREGROUND_RED | windows.FOREGROUND_GREEN,
-			)
-		case os.stderr:
-			windows.SetConsoleTextAttribute(
-				windows.GetStdHandle(windows.STD_ERROR_HANDLE),
-				windows.FOREGROUND_RED | windows.FOREGROUND_GREEN,
-			)
-		}
-	} else {
-		fmt.fprint(stream, "\x1b[33m")
-	}
-
-
+	fmt.fprint(stream, "\x1b[33m")
 	fmt.fprint(stream, text)
-
 	color_reset(stream)
 }
 
@@ -100,25 +47,5 @@ the end.
 */
 @(private = "file")
 color_reset :: proc(stream: ^os.File) {
-	when ODIN_OS == .Windows {
-		switch stream {
-		case os.stdout:
-			windows.SetConsoleTextAttribute(
-				windows.GetStdHandle(windows.STD_OUTPUT_HANDLE),
-				windows.FOREGROUND_RED | windows.FOREGROUND_GREEN | windows.FOREGROUND_BLUE,
-			)
-		case os.stderr:
-			windows.SetConsoleTextAttribute(
-				windows.GetStdHandle(windows.STD_ERROR_HANDLE),
-				windows.FOREGROUND_RED | windows.FOREGROUND_GREEN | windows.FOREGROUND_BLUE,
-			)
-		}
-	} else {
-		switch stream {
-		case os.stdout:
-			fmt.print("\x1b[0m")
-		case os.stderr:
-			fmt.eprint("\x1b[0m")
-		}
-	}
+	fmt.fprint(stream, "\x1b[0m")
 }

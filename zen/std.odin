@@ -630,7 +630,7 @@ _partition :: proc(list: ^[dynamic]Value, lo, hi: int) -> int {
 	for i := lo; i < hi; i += 1 {
 		if as_number(list[i]) <= pivot_as_num {
 			idx += 1
-			tmp := list[i]
+			tmp = list[i]
 			list[i] = list[idx]
 			list[idx] = tmp
 		}

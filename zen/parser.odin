@@ -1688,7 +1688,7 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		if e.value == nil {
 			fmt.sbprintln(b, "nil")
 		} else if v, ok := e.value.(string); ok {
-			fmt.sbprintfln(b, "\"%v\"", e.value)
+			fmt.sbprintfln(b, "\"%v\"", v)
 		} else {
 			fmt.sbprintfln(b, "%v", e.value)
 		}

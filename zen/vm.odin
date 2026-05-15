@@ -1097,8 +1097,7 @@ interpret :: proc(
 	/* If the name of the VM and the importing module are both the same (if the
      * importing module is not nil), then we have a cyclic import, which causes
      * all sorts of problems. So we have to disallow that. */
-	importer_struct, importer_exists := importer.?
-
+	_, importer_exists := importer.?
 	if importer_exists && slice.contains(vm.gc.import_stack[:], vm.path) {
 		vm_panic(vm, "Cannot perform a cyclic import.")
 		return .INTERPRET_RUNTIME_ERROR
@@ -1342,7 +1341,7 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 			args := make([dynamic]Value)
 			defer delete(args)
 
-			for i in 0 ..< int(arg_count) {
+			for _ in 0 ..< int(arg_count) {
 				append(&args, vm_pop(vm)) /* Temporarily pop off all the args. */
 			}
 

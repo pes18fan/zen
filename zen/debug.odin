@@ -256,7 +256,7 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 			offset += 1
 
 			function := as_function(c.constants.values[constant])
-			for j in 0 ..< function.upvalue_count {
+			for _ in 0 ..< function.upvalue_count {
 				is_local := bool(c.code[offset])
 				offset += 1
 				index := c.code[offset]

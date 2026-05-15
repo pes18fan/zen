@@ -10,22 +10,6 @@ union representation instead.
 NAN_BOXING :: true
 
 when NAN_BOXING {
-	/* A u64 with only the highest bit (the sign bit) set. */
-	SIGN_BIT :: cast(u64)0x8000000000000000
-
-	/*
-	A NaN value with the highest mantissa bit as well as the second highest 
-	mantissa bit (the Intel QNaN bit) set.
-	*/
-	QNAN :: cast(u64)0x7ffc000000000000
-
-	TAG_NIL :: 1 // 01.
-	TAG_FALSE :: 2 // 10.
-	TAG_TRUE :: 3 // 11.
-
-	FALSE_VAL :: cast(Value)(cast(u64)(QNAN | TAG_FALSE))
-	TRUE_VAL :: cast(Value)(cast(u64)(QNAN | TAG_TRUE))
-
 	/* Every value can be represented by a unsigned 64-bit integer. */
 	Value :: u64
 
@@ -42,6 +26,22 @@ when NAN_BOXING {
     spare. Those remaining three bytes can be used as type tags to 
     distinguish between the types. This is what NaN boxing is all about.
 	*/
+
+	/* A u64 with only the highest bit (the sign bit) set. */
+	SIGN_BIT :: cast(u64)0x8000000000000000
+
+	/*
+	A NaN value with the highest mantissa bit as well as the second highest 
+	mantissa bit (the Intel QNaN bit) set.
+	*/
+	QNAN :: cast(u64)0x7ffc000000000000
+
+	TAG_NIL :: 1 // 01.
+	TAG_FALSE :: 2 // 10.
+	TAG_TRUE :: 3 // 11.
+
+	FALSE_VAL :: QNAN | TAG_FALSE
+	TRUE_VAL :: QNAN | TAG_TRUE
 
 	/*
 	ORing FALSE_VAL (10 in binary) with 1 simply gives 11 in binary, which
@@ -90,7 +90,7 @@ when NAN_BOXING {
 	}
 
 	nil_val :: #force_inline proc() -> Value {
-		return cast(Value)(cast(u64)(QNAN | TAG_NIL))
+		return QNAN | TAG_NIL
 	}
 
 	number_val :: #force_inline proc(num: f64) -> Value {
@@ -227,8 +227,8 @@ stringify_value :: proc(value: Value) -> (res: string, was_allocation: bool) {
 				return (fmt.tprintf("%.3f", as_number(value))), false
 			}
 		} else if is_obj(value) {
-			str, was_allocation := stringify_object(as_obj(value))
-			if was_allocation {
+			str, allocated := stringify_object(as_obj(value))
+			if allocated {
 				return str, true
 			}
 			return str, false
