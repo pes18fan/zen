@@ -499,11 +499,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			}
 		case .OP_SET_PROPERTY_LONG:
 			{
-				if is_module(vm_peek(vm, 1)) {
-					vm_panic(vm, "Cannot change the values of a module.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
 				if !is_instance(vm_peek(vm, 1)) {
 					vm_panic(vm, "Only instances have fields.")
 					return .INTERPRET_RUNTIME_ERROR
@@ -1137,11 +1132,10 @@ interpret :: proc(
 
 	p := init_parser(tokens)
 	decls, ps_ok := parse(&p)
+	defer free_decls(decls)
 	if !ps_ok {
-		free_decls(decls)
 		return .INTERPRET_PARSE_ERROR
 	}
-	defer free_decls(decls)
 
 	/* Time the parser. */
 	if config.record_time {

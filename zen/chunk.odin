@@ -10,7 +10,7 @@ control the instruction we're dealing with.
 Note that the operation code is a byte, but the operation itself may consist of 
 more than just one byte.
 */
-OpCode :: enum {
+OpCode :: enum u8 {
 	OP_NOOP,
 	OP_CONSTANT,
 	OP_CONSTANT_LONG,
