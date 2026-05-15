@@ -859,8 +859,8 @@ compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> 
 	name_constant := try2(cg, identifier_constant(cg, class_name)) or_return
 	try(
 		cg,
-		declare_variable(cg, class_name, is_final = true, is_loop_variable = true),
-	) or_return /* Classes are not reassignable. */
+		declare_variable(cg, class_name, is_final = false, is_loop_variable = true),
+	) or_return /* Classes are reassignable. */
 
 	global_o_str := copy_string(cg.gc, class_name.lexeme)
 	value: Value; ok: bool
@@ -868,7 +868,7 @@ compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> 
 	/* Add the value onto the globals table. */
 	if cg.current_compiler.scope_depth == 0 {
 		if global_exists(cg, global_o_str) {
-			codegen_error(cg, "Cannot reassign a class.")
+			codegen_error(cg, "Cannot redeclare a class.")
 			return false
 		}
 		table_set(cg.globals, global_o_str, bool_val(false))
@@ -1906,6 +1906,7 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 	}
 }
 
+/* Compile the provided abstract syntax tree (array of declarations) into a bytecode chunk. */
 codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
 	/* Add all the native function names to the global table, for variable
      * existence checks. */
@@ -1952,6 +1953,8 @@ collect_decl_globals :: proc(globals: ^Table, gc: ^GC, decl: Decl) {
 	}
 }
 
+/* Collect all global functions declared in the file and put them into the
+`globals` table. */
 collect_script_globals :: proc(globals: ^Table, gc: ^GC, decls: []Decl) {
 	for fn_name in gc.global_native_fns {
 		table_set(globals, copy_string(gc, fn_name), bool_val(true))

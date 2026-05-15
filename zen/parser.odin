@@ -621,10 +621,10 @@ parse_block :: proc(p: ^Parser) -> ^BlockStmt {
 
 	for !check(p, .RSQUIRLY) && !is_at_end(p) {
 		decl := parse_declaration(p)
+		append(&declarations, decl)
+
 		if p.panic_mode {
 			synchronize(p)
-		} else {
-			append(&declarations, decl)
 		}
 	}
 	stmt.declarations = declarations[:]
@@ -1211,6 +1211,9 @@ free_decl :: proc(decl: Decl) {
 
 	switch d in decl {
 	case ^ClassDecl:
+		for method in d.methods {
+			free_decl(method)
+		}
 		delete(d.methods)
 		free(d)
 	case ^FuncDecl:
