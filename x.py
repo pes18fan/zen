@@ -8,7 +8,7 @@ import platform
 
 OC = "odin"
 ProcError = subprocess.CalledProcessError
-DEBUG_FLAGS = "-debug -vet"
+DEBUG_FLAGS = "-vet -debug"
 RELEASE_FLAGS = "-vet -o:speed"
 CHAOTIC_FLAGS = f"{RELEASE_FLAGS} -define:CHAOTIC=true"
 TARGET = "zen"
