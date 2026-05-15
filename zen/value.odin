@@ -182,7 +182,6 @@ print_value_array :: proc(a: ^ValueArray) {
 	fmt.eprintln(" ]")
 }
 
-@(private = "file")
 is_integer :: proc(value: f64) -> bool {
 	return value == math.floor(value)
 }

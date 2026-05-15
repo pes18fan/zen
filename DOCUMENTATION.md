@@ -266,9 +266,19 @@ The `push()` and `pop()` native functions in the `list` module can be used to
 add and remove items from a list, and the global `len()` native function can be 
 used to get the length of the list.
 
+You can set a value at a specific index of the list by using the subscript syntax
+alongside an assignment.
+
+```zen
+var list = [1, 2, 3]
+list[0] = 4
+puts(list)  //=> [4, 2, 3]
+```
+
 > [!NOTE]
 > You can also use the subscripting syntax on strings to get a character at the
-> provided index.
+> provided index. However, subscript assignment is not allowed for strings
+> as they are immutable.
 
 Lists work well with pipelines as well!
 
@@ -499,6 +509,9 @@ for you to use.
 - `chomp(s)`: Trim whitespace from both sides of a string `s`.
 - `replace(s, o, n)`: Replace all instances of a substring `o` in a string `s`
     with the substring `n`.
+- `slice(s, start, end)`: Get a subscring of the string `s` between the indices
+    `start` and `end` (exclusive). Panics if the indices are out of bounds or
+    if they're not valid integers.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.

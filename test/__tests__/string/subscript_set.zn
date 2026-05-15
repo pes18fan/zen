@@ -1,6 +1,0 @@
-var s = "hello"
-s[0] = "H"
-puts(s) // expect: Hello
-
-s[4] = "!"
-puts(s) // expect: Hell!

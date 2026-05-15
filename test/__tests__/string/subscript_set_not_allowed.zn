@@ -1,0 +1,2 @@
+var s = "hello"
+s[0] = "H"  // ERR: Can only set elements of a list.

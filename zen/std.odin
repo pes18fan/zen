@@ -72,6 +72,7 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 		{
 			append(&module_functions, ModuleFunction{"chomp", chomp_native, 1})
 			append(&module_functions, ModuleFunction{"replace", replace_native, 3})
+			append(&module_functions, ModuleFunction{"slice", slice_native, 3})
 			append(&module_functions, ModuleFunction{"upcase", upcase_native, 1})
 			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
 			append(&module_functions, ModuleFunction{"reverse", reverse_native, 1})
@@ -169,7 +170,7 @@ typeof_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return obj_val(copy_string(vm.gc, type_of_value(args[0]))), true
 }
 
-/* Copy an object. */
+/* Make a deep copy of an object. */
 copy_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return copy_value(vm.gc, args[0]), true
 }
@@ -462,8 +463,10 @@ replace_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 	if !is_string(args[0]) || !is_string(args[1]) || !is_string(args[2]) {
 		vm_panic(
 			vm,
-			"All arguments for gsub must be strings, got %v instead.",
+			"All arguments for replace() must be strings, got %v, %v and %v instead.",
 			type_of_value(args[0]),
+			type_of_value(args[1]),
+			type_of_value(args[2]),
 		)
 		return nil_val(), false
 	}
@@ -480,6 +483,44 @@ replace_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 
 	return obj_val(copy_string(vm.gc, str)), true
 }
+
+/* Get a substring from a string, in the range [start,end). */
+slice_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(
+			vm,
+			"First argument to substr() must be a string, got %v instead.",
+			type_of_value(args[0]),
+		)
+		return nil_val(), false
+	}
+
+	if !is_number(args[1]) || !is_number(args[2]) {
+		vm_panic(
+			vm,
+			"Second and third arguments to slice() must be numbers, got %v and %v instead.",
+			type_of_value(args[1]),
+			type_of_value(args[2]),
+		)
+		return nil_val(), false
+	}
+
+	start := as_number(args[1])
+	end := as_number(args[2])
+	if !is_integer(start) || !is_integer(end) {
+		vm_panic(vm, "Second and third arguments to slice() must both be integers.")
+		return nil_val(), false
+	}
+
+	sub, ok := strings.substring(as_string(args[0]).chars, int(start), int(end))
+	if !ok {
+		vm_panic(vm, "Index out of bounds in slice().")
+		return nil_val(), false
+	}
+
+	return obj_val(copy_string(vm.gc, sub)), true
+}
+
 
 /* Trim whitespace from both sides of a string. */
 chomp_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
