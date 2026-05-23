@@ -40,6 +40,7 @@ when NAN_BOXING {
 	TAG_FALSE :: 2 // 10.
 	TAG_TRUE :: 3 // 11.
 
+	NIL_VAL :: QNAN | TAG_NIL
 	FALSE_VAL :: QNAN | TAG_FALSE
 	TRUE_VAL :: QNAN | TAG_TRUE
 
@@ -90,7 +91,7 @@ when NAN_BOXING {
 	}
 
 	nil_val :: #force_inline proc() -> Value {
-		return QNAN | TAG_NIL
+		return NIL_VAL
 	}
 
 	number_val :: #force_inline proc(num: f64) -> Value {
