@@ -10,9 +10,11 @@ import "core:strings"
 Expr :: union {
 	^AssignExpr,
 	^BinaryExpr,
+	^BlockExpr,
 	^CallExpr,
 	^GetExpr,
 	^GroupingExpr,
+	^IfExpr,
 	^ItExpr,
 	^LambdaExpr,
 	^ListExpr,
@@ -23,6 +25,7 @@ Expr :: union {
 	^SubscriptExpr,
 	^SubscriptSetExpr,
 	^SuperExpr,
+	^SwitchExpr,
 	^ThisExpr,
 	^UnaryExpr,
 	^VariableExpr,
@@ -195,6 +198,14 @@ BinaryExpr :: struct {
 	right:    Expr,
 }
 
+// A variant of a block usable in expression position; it must end with an
+// expression, and evaluates to that expression.
+BlockExpr :: struct {
+	token:        Token,
+	declarations: []Decl,
+	expression:   Expr,
+}
+
 CallExpr :: struct {
 	token:      Token,
 	callee:     Expr,
@@ -211,6 +222,15 @@ GetExpr :: struct {
 GroupingExpr :: struct {
 	token:      Token,
 	expression: Expr,
+}
+
+// Variant of the if statement that evaluates to a value.
+IfExpr :: struct {
+	token:       Token,
+	is_ifnt:     bool,
+	condition:   Expr,
+	then_branch: ^BlockExpr,
+	else_branch: ^BlockExpr,
 }
 
 ItExpr :: struct {
@@ -282,6 +302,19 @@ SuperExpr :: struct {
 	method_args: []Expr, // nil if the method wasn't directly invoked
 }
 
+// Variant of the switch statement whose cases must evaluate to expressions
+ExprSwitchCase :: struct {
+	condition: Expr,
+	body:      Expr,
+}
+
+SwitchExpr :: struct {
+	token:       Token,
+	condition:   Expr,
+	cases:       []ExprSwitchCase,
+	else_branch: Expr,
+}
+
 ThisExpr :: struct {
 	token: Token,
 }
@@ -301,6 +334,7 @@ Precedence :: enum {
 	NONE,
 	PIPELINE, // |>
 	ASSIGNMENT, // =
+	CONDITIONAL, // if switch
 	OR, // or
 	AND, // and
 	EQUALITY, // == !=
@@ -351,6 +385,30 @@ parse_declaration :: proc(p: ^Parser) -> Decl {
 		return parse_pub_decl(p)
 	}
 	return parse_statement(p)
+}
+
+is_start_of_declaration :: proc(p: ^Parser) -> bool {
+	return check_any(
+		p,
+		.VAR,
+		.VAL,
+		.CLASS,
+		.USE,
+		.FUNC,
+		.PUB,
+		.IF,
+		.IFNT,
+		.WHILE,
+		.WHILENT,
+		.BREAK,
+		.CONTINUE,
+		.FOR,
+		.PRINT,
+		.RETURN,
+		.EXIT,
+		.SWITCH,
+		.SEMI,
+	)
 }
 
 parse_var_decl :: proc(p: ^Parser) -> ^VarDecl {
@@ -693,7 +751,7 @@ parse_switch_stmt :: proc(p: ^Parser) -> ^SwitchStmt {
 	}
 
 	if !has_else_clause {
-		error(p, peek(p), "Switch statement must have an 'else' clause.")
+		error(p, peek(p), "Switch statement must have an 'else' case.")
 	}
 
 	stmt.cases = cases[:]
@@ -717,6 +775,63 @@ parse_expression :: proc(p: ^Parser) -> Expr {
 //---------------------------------------------------------
 // Prefix Rules
 //---------------------------------------------------------
+
+parse_if_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(IfExpr)
+	expr.token = previous(p)
+	expr.is_ifnt = expr.token.type == .IFNT
+	expr.condition = parse_expression(p)
+
+	consume(p, .LSQUIRLY, "Expect '{' after condition.")
+	expr.then_branch = parse_block_expr(p, can_assign).(^BlockExpr)
+
+	if match(p, .ELSE) {
+		consume(p, .LSQUIRLY, "Expect '{' after else.")
+		expr.else_branch = parse_block_expr(p, can_assign).(^BlockExpr)
+	}
+	return expr
+}
+
+parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(SwitchExpr)
+	expr.token = previous(p)
+	cases := make([dynamic]ExprSwitchCase)
+	has_else_clause := false
+
+	if match(p, .LSQUIRLY) {
+		// No condition
+	} else {
+		expr.condition = parse_expression(p)
+		consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
+	}
+
+	for !match(p, .RSQUIRLY) && !is_at_end(p) {
+		if match(p, .ELSE) {
+			has_else_clause = true
+			consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
+			if match(p, .LSQUIRLY) {} 	// for block expressions
+			expr.else_branch = parse_expression(p)
+			if match(p, .SEMI) {}
+			consume(p, .RSQUIRLY, "'else' must be the last case.")
+			break
+		}
+
+		case_node: ExprSwitchCase
+		case_node.condition = parse_expression(p)
+		consume(p, .FAT_ARROW, "Expect '=>' after case.")
+		if match(p, .LSQUIRLY) {} 	// for block expressions
+		case_node.body = parse_expression(p)
+		if match(p, .SEMI) {}
+		append(&cases, case_node)
+	}
+
+	if !has_else_clause {
+		error(p, peek(p), "Switch expression must have an 'else' case.")
+	}
+
+	expr.cases = cases[:]
+	return expr
+}
 
 parse_grouping :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	token := previous(p)
@@ -928,22 +1043,45 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	return lambda
 }
 
+parse_block_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(BlockExpr)
+	expr.token = previous(p) // the '{'
+	declarations := make([dynamic]Decl)
+
+	// Parse zero or more declarations
+	for is_start_of_declaration(p) {
+		decl := parse_declaration(p)
+		append(&declarations, decl)
+		if p.panic_mode {synchronize(p)}
+	}
+
+	// Now either '}' or a final expression
+	if !check(p, .RSQUIRLY) {
+		expr.expression = parse_expression(p)
+		if match(p, .SEMI) {} 	// optional semicolon makes block return ()
+	}
+
+	consume(p, .RSQUIRLY, "Expect '}' after block.")
+	expr.declarations = declarations[:]
+	return expr
+}
+
 //---------------------------------------------------------
 // Infix Rules
 //---------------------------------------------------------
 
-parse_binary :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+
+parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	operator := previous(p)
 	rule := get_rule(operator.type)
-	// Add 1 to precedence for left-associative operators
 	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
 
-	binary := new(BinaryExpr)
-	binary.token = operator
-	binary.left = left
-	binary.operator = operator
-	binary.right = right
-	return binary
+	pipe := new(PipeExpr)
+	pipe.token = operator
+	pipe.left = left
+	pipe.operator = operator
+	pipe.right = right
+	return pipe
 }
 
 parse_logical :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
@@ -959,17 +1097,18 @@ parse_logical :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	return logical
 }
 
-parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+parse_binary :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	operator := previous(p)
 	rule := get_rule(operator.type)
+	// Add 1 to precedence for left-associative operators
 	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
 
-	pipe := new(PipeExpr)
-	pipe.token = operator
-	pipe.left = left
-	pipe.operator = operator
-	pipe.right = right
-	return pipe
+	binary := new(BinaryExpr)
+	binary.token = operator
+	binary.left = left
+	binary.operator = operator
+	binary.right = right
+	return binary
 }
 
 parse_call :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
@@ -1036,7 +1175,7 @@ parse_subscript :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 rules: [TokenType]ParseRule = {
 	.LPAREN        = {parse_grouping, parse_call, .CALL},
 	.RPAREN        = {nil, nil, .NONE},
-	.LSQUIRLY      = {nil, nil, .NONE},
+	.LSQUIRLY      = {parse_block_expr, nil, .PRIMARY},
 	.RSQUIRLY      = {nil, nil, .NONE},
 	.LSQUARE       = {parse_list, parse_subscript, .CALL},
 	.RSQUARE       = {nil, nil, .NONE},
@@ -1070,7 +1209,7 @@ rules: [TokenType]ParseRule = {
 	.FALSE         = {parse_literal, nil, .NONE},
 	.FOR           = {nil, nil, .NONE},
 	.FUNC          = {parse_lambda, nil, .NONE},
-	.IF            = {nil, nil, .NONE},
+	.IF            = {parse_if_expr, nil, .CONDITIONAL},
 	.IFNT          = {nil, nil, .NONE},
 	.IN            = {nil, nil, .NONE},
 	.IT            = {parse_it, nil, .NONE},
@@ -1080,7 +1219,7 @@ rules: [TokenType]ParseRule = {
 	.PRINT         = {nil, nil, .NONE},
 	.PUB           = {nil, nil, .NONE},
 	.RETURN        = {nil, nil, .NONE},
-	.SWITCH        = {nil, nil, .NONE},
+	.SWITCH        = {parse_switch_expr, nil, .CONDITIONAL},
 	.SUPER         = {parse_super, nil, .NONE},
 	.THIS          = {parse_this, nil, .NONE},
 	.TRUE          = {parse_literal, nil, .NONE},
@@ -1135,6 +1274,15 @@ is_at_end :: proc(p: ^Parser) -> bool {
 check :: proc(p: ^Parser, type: TokenType) -> bool {
 	if is_at_end(p) {return false}
 	return peek(p).type == type
+}
+
+/* Like match() but doesn't advance */
+check_any :: proc(p: ^Parser, types: ..TokenType) -> bool {
+	if is_at_end(p) {return false}
+	for type in types {
+		if check(p, type) {return true}
+	}
+	return false
 }
 
 advance :: proc(p: ^Parser) -> Token {
