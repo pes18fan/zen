@@ -18,7 +18,6 @@ U8_COUNT :: 256
 /* Number of sixteen bit unsigned integers in existence. */
 U16_COUNT :: 65536
 
-ErrorMessage :: Maybe(string)
 
 /* Struct holding state of codegen. */
 Codegen :: struct {
@@ -1797,34 +1796,11 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	return true
 }
 
-// Helper to avoid a billion `if err != nil`s everywhere
-@(private = "file")
-@(require_results)
-try :: #force_inline proc(cg: ^Codegen, err: ErrorMessage) -> bool {
-	if err != nil {
-		codegen_error(cg, err.?)
-		return false
-	}
-	return true
-}
-
-// `try` for procedures that return a value and possibly an error
-@(private = "file")
-@(require_results)
-try2 :: #force_inline proc(cg: ^Codegen, ret: $T, err: ErrorMessage) -> (T, bool) {
-	if err != nil {
-		codegen_error(cg, err.?)
-		return ret, false
-	}
-	return ret, true
-}
-
 /* 
 Report an error at the current token with a message. This doesn't propagate
 errors or stop compilation by itself, so it should either be used with `try`
 or a return should be made immediately after calling it.
 */
-@(private = "file")
 codegen_error :: proc(cg: ^Codegen, message: string) {
 	token := cg.current_token
 	color_red(os.stderr, "compile error ")
