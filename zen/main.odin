@@ -11,7 +11,7 @@ VERSION :: #load("../.zen_version")
 CHAOTIC :: #config(CHAOTIC, false)
 
 /* Config values set on start, most are for debugging, but some have use in
-the actual program. */
+    the actual program. */
 Config :: struct {
 	compile_only:     bool,
 	dump_disassembly: bool,
@@ -19,6 +19,7 @@ Config :: struct {
 	dump_ast:         bool,
 	trace_exec:       bool,
 	stress_gc:        bool,
+	log_type:         bool,
 	log_gc:           bool,
 	record_time:      bool,
 	repl:             bool,
@@ -40,6 +41,7 @@ config := Config {
 	dump_disassembly = false,
 	trace_exec       = false,
 	stress_gc        = false,
+	log_type         = false,
 	log_gc           = false,
 	record_time      = false,
 	repl             = false,
@@ -145,9 +147,9 @@ print_help :: proc(stream: ^os.File) {
     --dump-ast          Dump the abstract syntax tree from the parser and exit
     -D, --dump          Dump disassembled bytecode
     -T, --trace         Trace script execution
+    -l, --log-type      Log type inference
     -L, --log-gc        Log garbage collection
     -S, --stress-gc     Collect garbage on every allocation`
-
 
 	color_green(stream, "zen ")
 	fmt.fprintfln(stream, "%s", VERSION)
@@ -210,6 +212,8 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 			config.trace_exec = true
 		case "--time":
 			config.record_time = true
+		case "--log-type":
+			config.log_type = true
 		case "--log-gc":
 			config.log_gc = true
 		case "--stress-gc":
@@ -242,6 +246,8 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 							config.record_time = true
 						case 'T':
 							config.trace_exec = true
+						case 'l':
+							config.log_type = true
 						case 'L':
 							config.log_gc = true
 						case 'S':
@@ -340,6 +346,9 @@ main :: proc() {
 			}
 		}
 	}
+
+	// free all temp allocator (arena) allocations (like in tprintf)
+	defer free_all(context.temp_allocator)
 
 	gc := init_gc()
 	defer free_gc(&gc)
