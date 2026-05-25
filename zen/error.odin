@@ -19,7 +19,8 @@ try_codegen :: #force_inline proc(cg: ^Codegen, err: ErrorMessage) -> bool {
 
 try_type_checker :: #force_inline proc(tc: ^TypeChecker, err: ErrorMessage) -> bool {
 	if err != nil {
-		unimplemented()
+		typecheck_error(tc, err.?)
+		return false
 	}
 	return true
 }
@@ -41,7 +42,8 @@ try2_codegen :: #force_inline proc(cg: ^Codegen, ret: $T, err: ErrorMessage) -> 
 
 try2_type_checker :: #force_inline proc(t: ^TypeChecker, ret: $T, err: ErrorMessage) -> (T, bool) {
 	if err != nil {
-		unimplemented()
+		typecheck_error(tc, err.?)
+		return ret, false
 	}
 	return ret, true
 }
