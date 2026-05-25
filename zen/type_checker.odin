@@ -449,6 +449,34 @@ infer_type :: proc(
 @(require_results)
 w :: proc(tc: ^TypeChecker, expr: Expr) -> (subst: Substitution, type: Type, err: ErrorMessage) {
 	switch e in expr {
+	case ^AssignExpr:
+		unimplemented()
+	case ^BinaryExpr:
+		unimplemented()
+	case ^UnaryExpr:
+		unimplemented()
+	case ^GetExpr:
+		unimplemented()
+	case ^SetExpr:
+		unimplemented()
+	case ^GroupingExpr:
+		unimplemented()
+	case ^LogicalExpr:
+		unimplemented()
+	case ^ItExpr:
+		unimplemented()
+	case ^ListExpr:
+		unimplemented()
+	case ^PipeExpr:
+		unimplemented()
+	case ^SubscriptExpr:
+		unimplemented()
+	case ^SubscriptSetExpr:
+		unimplemented()
+	case ^SuperExpr:
+		unimplemented()
+	case ^ThisExpr:
+		unimplemented()
 	case ^LiteralExpr:
 		tc.current_token = e.token
 		switch l in e.value {
@@ -478,6 +506,8 @@ w :: proc(tc: ^TypeChecker, expr: Expr) -> (subst: Substitution, type: Type, err
 		// must curry
 		unimplemented()
 	}
+
+	unimplemented()
 }
 
 type_string :: proc(scheme: TypeScheme) -> string {
