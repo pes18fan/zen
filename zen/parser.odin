@@ -11,7 +11,10 @@ Expr :: union {
 	^AssignExpr,
 	^BinaryExpr,
 	^BlockExpr,
+	^BreakExpr,
 	^CallExpr,
+	^ContinueExpr,
+	^ExitExpr,
 	^GetExpr,
 	^GroupingExpr,
 	^IfExpr,
@@ -21,6 +24,7 @@ Expr :: union {
 	^LiteralExpr,
 	^LogicalExpr,
 	^PipeExpr,
+	^ReturnExpr,
 	^SetExpr,
 	^SemicolonExpr,
 	^SubscriptExpr,
@@ -204,11 +208,24 @@ BlockExpr :: struct {
 	expression: Expr,
 }
 
+BreakExpr :: struct {
+	token: Token,
+}
+
 CallExpr :: struct {
 	token:      Token,
 	callee:     Expr,
 	rdelimiter: Token,
 	arguments:  []Expr,
+}
+
+ContinueExpr :: struct {
+	token: Token,
+}
+
+ExitExpr :: struct {
+	token: Token,
+	code:  Expr,
 }
 
 GetExpr :: struct {
@@ -272,6 +289,11 @@ PipeExpr :: struct {
 	left:     Expr,
 	operator: Token,
 	right:    Expr,
+}
+
+ReturnExpr :: struct {
+	token: Token,
+	value: Expr,
 }
 
 SemicolonExpr :: struct {
@@ -1057,6 +1079,36 @@ parse_block_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	return expr
 }
 
+parse_break :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(BreakExpr)
+	expr.token = previous(p)
+	return expr
+}
+
+parse_continue :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(ContinueExpr)
+	expr.token = previous(p)
+	return expr
+}
+
+parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(ReturnExpr)
+	expr.token = previous(p)
+	if !match(p, .SEMI) && !check(p, .RSQUIRLY) && !is_at_end(p) {
+		expr.value = parse_expression(p)
+	}
+	return expr
+}
+
+parse_exit :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(ExitExpr)
+	expr.token = previous(p)
+	if !match(p, .SEMI) && !check(p, .RSQUIRLY) && !is_at_end(p) {
+		expr.code = parse_expression(p)
+	}
+	return expr
+}
+
 //---------------------------------------------------------
 // Infix Rules
 //---------------------------------------------------------
@@ -1188,7 +1240,7 @@ parse_subscript :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 rules: [TokenType]ParseRule = {
 	.LPAREN        = {parse_grouping, parse_call, .CALL},
 	.RPAREN        = {nil, nil, .NONE},
-	.LSQUIRLY      = {parse_block_expr, nil, .PRIMARY},
+	.LSQUIRLY      = {parse_block_expr, nil, .NONE},
 	.RSQUIRLY      = {nil, nil, .NONE},
 	.LSQUARE       = {parse_list, parse_subscript, .CALL},
 	.RSQUARE       = {nil, nil, .NONE},
@@ -1196,7 +1248,7 @@ rules: [TokenType]ParseRule = {
 	.DOT           = {nil, parse_dot, .CALL},
 	.MINUS         = {parse_unary, parse_binary, .TERM},
 	.PLUS          = {nil, parse_binary, .TERM},
-	.SEMI          = {nil, parse_semi, .PIPELINE},
+	.SEMI          = {nil, parse_semi, .NONE},
 	.SLASH         = {nil, parse_binary, .FACTOR},
 	.STAR          = {nil, parse_binary, .FACTOR},
 	.PERCENT       = {nil, parse_binary, .FACTOR},
@@ -1214,11 +1266,11 @@ rules: [TokenType]ParseRule = {
 	.STRING        = {parse_literal, nil, .NONE},
 	.NUMBER        = {parse_literal, nil, .NONE},
 	.AND           = {nil, parse_logical, .AND},
-	.BREAK         = {nil, nil, .NONE},
-	.CONTINUE      = {nil, nil, .NONE},
+	.BREAK         = {parse_break, nil, .NONE},
+	.CONTINUE      = {parse_continue, nil, .NONE},
 	.CLASS         = {nil, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
-	.EXIT          = {nil, nil, .NONE},
+	.EXIT          = {parse_exit, nil, .NONE},
 	.FALSE         = {parse_literal, nil, .NONE},
 	.FOR           = {nil, nil, .NONE},
 	.FUNC          = {parse_lambda, nil, .NONE},
@@ -1231,7 +1283,7 @@ rules: [TokenType]ParseRule = {
 	.OR            = {nil, parse_logical, .OR},
 	.PRINT         = {nil, nil, .NONE},
 	.PUB           = {nil, nil, .NONE},
-	.RETURN        = {nil, nil, .NONE},
+	.RETURN        = {parse_return, nil, .NONE},
 	.SWITCH        = {parse_switch_expr, nil, .CONDITIONAL},
 	.SUPER         = {parse_super, nil, .NONE},
 	.THIS          = {parse_this, nil, .NONE},
@@ -1486,8 +1538,12 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.left)
 		free_expr(e.right)
 		free(e)
+	case ^BreakExpr:
+		free(e)
 	case ^BlockExpr:
 		free_expr(e.expression)
+		free(e)
+	case ^ContinueExpr:
 		free(e)
 	case ^CallExpr:
 		for arg in e.arguments {
@@ -1495,6 +1551,9 @@ free_expr :: proc(expr: Expr) {
 		}
 		delete(e.arguments)
 		free_expr(e.callee)
+		free(e)
+	case ^ExitExpr:
+		free_expr(e.code)
 		free(e)
 	case ^GetExpr:
 		free_expr(e.receiver)
@@ -1531,6 +1590,9 @@ free_expr :: proc(expr: Expr) {
 	case ^PipeExpr:
 		free_expr(e.left)
 		free_expr(e.right)
+		free(e)
+	case ^ReturnExpr:
+		free_expr(e.value)
 		free(e)
 	case ^SemicolonExpr:
 		free_expr(e.left)
@@ -1828,6 +1890,9 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
+	case ^BreakExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(break)\n")
 	case ^BlockExpr:
 		print_indent(b, indent)
 		strings.write_string(b, "(block\n")
@@ -1842,6 +1907,19 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 			print_expr(b, arg, indent + 1)
 		}
 		print_indent(b, indent)
+		strings.write_string(b, ")\n")
+	case ^ContinueExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(continue)\n")
+	case ^ExitExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(exit")
+		if e.code != nil {
+			code: Expr = e.code
+			strings.write_string(b, "\n")
+			print_expr(b, code, indent + 1)
+			print_indent(b, indent)
+		}
 		strings.write_string(b, ")\n")
 	case ^GetExpr:
 		print_indent(b, indent)
@@ -1909,6 +1987,16 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.left, indent + 1)
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
+		strings.write_string(b, ")\n")
+	case ^ReturnExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(return")
+		if e.value != nil {
+			val: Expr = e.value
+			strings.write_string(b, "\n")
+			print_expr(b, val, indent + 1)
+			print_indent(b, indent)
+		}
 		strings.write_string(b, ")\n")
 	case ^SemicolonExpr:
 		print_indent(b, indent)

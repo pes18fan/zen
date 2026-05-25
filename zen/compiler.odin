@@ -1510,6 +1510,7 @@ compile_if_expression :: proc(cg: ^Codegen, e: ^IfExpr) -> bool {
 	return try(cg, patch_jump(cg, else_jump))
 }
 
+@(require_results)
 compile_switch_expression :: proc(cg: ^Codegen, e: ^SwitchExpr) -> bool {
 	condition := e.condition
 	cases := e.cases
@@ -1555,6 +1556,98 @@ compile_switch_expression :: proc(cg: ^Codegen, e: ^SwitchExpr) -> bool {
 		try(cg, patch_jump(cg, jump)) or_return
 	}
 
+	return true
+}
+
+@(require_results)
+compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
+	if cg.current_compiler.loop_count == 0 {
+		codegen_error(cg, "Cannot break outside a loop.")
+		return false
+	}
+
+	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
+
+	// Discard correct number of values from the stack.
+	for i := cg.current_compiler.local_count - 1; i >= 0; i -= 1 {
+		local := &cg.current_compiler.locals[i]
+		if local.depth < loop.scope_depth {
+			break
+		}
+		emit_pop(cg)
+	}
+
+	append(&loop.breaks, emit_jump(cg, .OP_JUMP))
+	return true
+}
+
+@(require_results)
+compile_continue_expression :: proc(cg: ^Codegen, s: ^ContinueExpr) -> bool {
+	if cg.current_compiler.loop_count == 0 {
+		codegen_error(cg, "Cannot use 'continue' outside a loop.")
+		return false
+	}
+
+	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
+
+	// Discard correct number of values from the stack.
+	for i := cg.current_compiler.local_count - 1; i >= 0; i -= 1 {
+		local := &cg.current_compiler.locals[i]
+		if local.depth < loop.scope_depth {
+			break
+		}
+		if local.is_loop_variable {
+			continue
+		}
+		emit_pop(cg)
+	}
+
+	return try(cg, emit_loop(cg, loop.start))
+}
+
+@(require_results)
+compile_return_expression :: proc(cg: ^Codegen, s: ^ReturnExpr) -> bool {
+	value := s.value
+
+	if cg.current_compiler.type == .SCRIPT {
+		codegen_error(cg, "Cannot return from the top level.")
+		return false
+	}
+
+	if s.value != nil {
+		if cg.current_compiler.type == .INITIALIZER {
+			codegen_error(cg, "Cannot return a value from an initializer.")
+			return false
+		}
+
+		compile_expression(cg, value) or_return
+		emit_opcode(cg, .OP_RETURN)
+	} else {
+		emit_return(cg)
+	}
+
+	/* Set a flag to true if the function returns in its outermost scope.
+	This flag is to check if the function needs an implicit return in the end. */
+	if cg.current_compiler.scope_depth == 0 {
+		cg.current_compiler.function.has_returned = true
+	}
+	return true
+}
+
+@(require_results)
+compile_exit_expression :: proc(cg: ^Codegen, s: ^ExitExpr) -> bool {
+	code := s.code
+
+	/* A bare exit will exit the program successfully (with status code 0),
+     * and you can add a number after it to make it exit with a certain
+     * status code. */
+	if code != nil {
+		compile_expression(cg, s.code) or_return
+	} else {
+		try(cg, emit_constant(cg, 0)) or_return
+	}
+
+	emit_opcode(cg, .OP_EXIT)
 	return true
 }
 
@@ -1607,6 +1700,9 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			)
 			return false
 		}
+	case ^BreakExpr:
+		cg.current_token = e.token
+		compile_break_expression(cg, e) or_return
 	case ^BlockExpr:
 		cg.current_token = e.token
 		begin_scope(cg)
@@ -1662,6 +1758,12 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 
 			emit_instruction(cg, .OP_CALL, u8(arg_count))
 		}
+	case ^ContinueExpr:
+		cg.current_token = e.token
+		compile_continue_expression(cg, e) or_return
+	case ^ExitExpr:
+		cg.current_token = e.token
+		compile_exit_expression(cg, e) or_return
 	case ^GetExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
@@ -1780,6 +1882,9 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		cg.pipeline_active = true
 		compile_expression(cg, e.right) or_return
 		cg.pipeline_active = old_pipeline
+	case ^ReturnExpr:
+		cg.current_token = e.token
+		compile_return_expression(cg, e) or_return
 	case ^SemicolonExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
