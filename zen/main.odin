@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:mem"
 import "core:os"
 import "core:path/filepath"
 import ic "isocline"
@@ -318,6 +319,9 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 main :: proc() {
 	status: int
 	defer os.exit(status)
+
+	// need to add this otherwise -vet would complain on release builds
+	_ = mem.Allocator
 
 	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
 	when ODIN_DEBUG {
