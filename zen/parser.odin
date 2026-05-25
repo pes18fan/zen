@@ -22,6 +22,7 @@ Expr :: union {
 	^LogicalExpr,
 	^PipeExpr,
 	^SetExpr,
+	^SemicolonExpr,
 	^SubscriptExpr,
 	^SubscriptSetExpr,
 	^SuperExpr,
@@ -198,12 +199,9 @@ BinaryExpr :: struct {
 	right:    Expr,
 }
 
-// A variant of a block usable in expression position; it must end with an
-// expression, and evaluates to that expression.
 BlockExpr :: struct {
-	token:        Token,
-	declarations: []Decl,
-	expression:   Expr,
+	token:      Token,
+	expression: Expr,
 }
 
 CallExpr :: struct {
@@ -270,6 +268,13 @@ LogicalExpr :: struct {
 }
 
 PipeExpr :: struct {
+	token:    Token,
+	left:     Expr,
+	operator: Token,
+	right:    Expr,
+}
+
+SemicolonExpr :: struct {
 	token:    Token,
 	left:     Expr,
 	operator: Token,
@@ -357,18 +362,19 @@ ParseRule :: struct {
 
 /* Create a list of parsed declarations forming an abstract syntax tree, from
 a list of tokens stored in a parser. */
-parse :: proc(p: ^Parser) -> (decls: []Decl, success: bool) {
-	declarations := make([dynamic]Decl)
-	for !is_at_end(p) {
-		decl := parse_declaration(p)
-		append(&declarations, decl)
-
-		if p.panic_mode {
-			synchronize(p)
-		}
-	}
-
-	return declarations[:], !p.had_error
+parse :: proc(p: ^Parser) -> (expr: Expr, success: bool) {
+	// declarations := make([dynamic]Decl)
+	// for !is_at_end(p) {
+	// 	decl := parse_declaration(p)
+	// 	append(&declarations, decl)
+	//
+	// 	if p.panic_mode {
+	// 		synchronize(p)
+	// 	}
+	// }
+	//
+	// return declarations[:], !p.had_error
+	return parse_expression(p), !p.had_error
 }
 
 parse_declaration :: proc(p: ^Parser) -> Decl {
@@ -521,10 +527,10 @@ get_rule :: proc(type: TokenType) -> ^ParseRule {
 parse_precedence :: proc(p: ^Parser, precedence: Precedence) -> Expr {
 	advance(p)
 
-	if is_at_end(p) {
-		error(p, previous(p), "Expect expression.")
-		return nil
-	}
+	// if is_at_end(p) {
+	// 	error(p, previous(p), "Expect expression.")
+	// 	return nil
+	// }
 
 	prefix_rule := get_rule(previous(p).type).prefix
 	if prefix_rule == nil {
@@ -572,8 +578,8 @@ parse_statement :: proc(p: ^Parser) -> Stmt {
 		return parse_continue_stmt(p)
 	case match(p, .FOR):
 		return parse_for_stmt(p)
-	case match(p, .LSQUIRLY):
-		return parse_block(p)
+	// case match(p, .LSQUIRLY):
+	// 	return parse_block(p)
 	case match(p, .PRINT):
 		return parse_print_stmt(p)
 	case match(p, .RETURN):
@@ -1046,30 +1052,14 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_block_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(BlockExpr)
 	expr.token = previous(p) // the '{'
-	declarations := make([dynamic]Decl)
-
-	// Parse zero or more declarations
-	for is_start_of_declaration(p) {
-		decl := parse_declaration(p)
-		append(&declarations, decl)
-		if p.panic_mode {synchronize(p)}
-	}
-
-	// Now either '}' or a final expression
-	if !check(p, .RSQUIRLY) {
-		expr.expression = parse_expression(p)
-		if match(p, .SEMI) {} 	// optional semicolon makes block return ()
-	}
-
+	expr.expression = parse_expression(p)
 	consume(p, .RSQUIRLY, "Expect '}' after block.")
-	expr.declarations = declarations[:]
 	return expr
 }
 
 //---------------------------------------------------------
 // Infix Rules
 //---------------------------------------------------------
-
 
 parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	operator := previous(p)
@@ -1082,6 +1072,29 @@ parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	pipe.operator = operator
 	pipe.right = right
 	return pipe
+}
+
+// very similar to pipe in terms of parsing, but need to account for effects of
+// automatic semicolon insertion
+parse_semi :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+	operator := previous(p)
+	rule := get_rule(operator.type)
+
+	// a bit of a hacky way to check if the semicolon pipe ended
+	// need this to account for ASI
+	right: Expr
+	if is_at_end(p) || check(p, .RSQUIRLY) {
+		right = nil
+	} else {
+		right = parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
+	}
+
+	semi := new(SemicolonExpr)
+	semi.token = operator
+	semi.left = left
+	semi.operator = operator
+	semi.right = right
+	return semi
 }
 
 parse_logical :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
@@ -1183,7 +1196,7 @@ rules: [TokenType]ParseRule = {
 	.DOT           = {nil, parse_dot, .CALL},
 	.MINUS         = {parse_unary, parse_binary, .TERM},
 	.PLUS          = {nil, parse_binary, .TERM},
-	.SEMI          = {nil, nil, .NONE},
+	.SEMI          = {nil, parse_semi, .PIPELINE},
 	.SLASH         = {nil, parse_binary, .FACTOR},
 	.STAR          = {nil, parse_binary, .FACTOR},
 	.PERCENT       = {nil, parse_binary, .FACTOR},
@@ -1351,7 +1364,6 @@ free_decls :: proc(decls: []Decl) {
 	delete(decls)
 }
 
-@(private = "file")
 free_decl :: proc(decl: Decl) {
 	if decl == nil {
 		return
@@ -1389,7 +1401,6 @@ free_decl :: proc(decl: Decl) {
 	}
 }
 
-@(private = "file")
 free_stmt :: proc(stmt: Stmt) {
 	if stmt == nil {
 		return
@@ -1462,7 +1473,6 @@ free_stmt :: proc(stmt: Stmt) {
 	}
 }
 
-@(private = "file")
 free_expr :: proc(expr: Expr) {
 	if expr == nil {
 		return
@@ -1476,6 +1486,9 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.left)
 		free_expr(e.right)
 		free(e)
+	case ^BlockExpr:
+		free_expr(e.expression)
+		free(e)
 	case ^CallExpr:
 		for arg in e.arguments {
 			free_expr(arg)
@@ -1488,6 +1501,11 @@ free_expr :: proc(expr: Expr) {
 		free(e)
 	case ^GroupingExpr:
 		free_expr(e.expression)
+		free(e)
+	case ^IfExpr:
+		free_expr(e.condition)
+		free_expr(e.then_branch)
+		free_expr(e.else_branch)
 		free(e)
 	case ^ItExpr:
 		free(e)
@@ -1514,6 +1532,10 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.left)
 		free_expr(e.right)
 		free(e)
+	case ^SemicolonExpr:
+		free_expr(e.left)
+		free_expr(e.right)
+		free(e)
 	case ^SetExpr:
 		free_expr(e.receiver)
 		free_expr(e.value)
@@ -1528,6 +1550,15 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.value)
 		free(e)
 	case ^SuperExpr:
+		free(e)
+	case ^SwitchExpr:
+		free_expr(e.condition)
+		for c in e.cases {
+			free_expr(c.condition)
+			free_expr(c.body)
+		}
+		delete(e.cases)
+		free_expr(e.else_branch)
 		free(e)
 	case ^ThisExpr:
 		free(e)
@@ -1553,14 +1584,21 @@ ast_string :: proc(decls: []Decl) -> string {
 	return strings.clone(strings.to_string(b))
 }
 
-@(private = "file")
+// allocates a string
+ast_string_expr :: proc(expr: Expr) -> string {
+	b := strings.builder_make()
+	defer strings.builder_destroy(&b)
+
+	print_expr(&b, expr, 0)
+	return strings.clone(strings.to_string(b))
+}
+
 print_indent :: proc(b: ^strings.Builder, indent: int) {
 	for i := 0; i < indent; i += 1 {
 		strings.write_string(b, "  ")
 	}
 }
 
-@(private = "file")
 print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
 	if decl == nil {
 		return
@@ -1629,7 +1667,6 @@ print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
 	}
 }
 
-@(private = "file")
 print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
 	if stmt == nil {
 		return
@@ -1772,7 +1809,6 @@ print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
 	}
 }
 
-@(private = "file")
 print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 	if expr == nil {
 		return
@@ -1790,6 +1826,12 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		fmt.sbprintf(b, "(%s\n", e.operator.lexeme)
 		print_expr(b, e.left, indent + 1)
 		print_expr(b, e.right, indent + 1)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
+	case ^BlockExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(block\n")
+		print_expr(b, e.expression, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^CallExpr:
@@ -1811,6 +1853,20 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_indent(b, indent)
 		strings.write_string(b, "(group\n")
 		print_expr(b, e.expression, indent + 1)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
+	case ^IfExpr:
+		print_indent(b, indent)
+		kind := e.is_ifnt ? "ifn't" : "if"
+		fmt.sbprintf(b, "(%s\n", kind)
+		print_expr(b, e.condition, indent + 1)
+		print_expr(b, e.then_branch, indent + 1)
+		if e.else_branch != nil {
+			else_b: ^BlockExpr = e.else_branch
+			print_indent(b, indent + 1)
+			strings.write_string(b, "else:\n")
+			print_expr(b, else_b, indent + 2)
+		}
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ItExpr:
@@ -1854,6 +1910,13 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
+	case ^SemicolonExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(;\n")
+		print_expr(b, e.left, indent + 1)
+		print_expr(b, e.right, indent + 1)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
 	case ^SetExpr:
 		print_indent(b, indent)
 		fmt.sbprintf(b, "(set %s\n", e.property.lexeme)
@@ -1879,6 +1942,29 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 	case ^SuperExpr:
 		print_indent(b, indent)
 		fmt.sbprintf(b, "(super %s)\n", e.method.lexeme)
+	case ^SwitchExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(switch")
+		if e.condition != nil {
+			cond: Expr = e.condition
+			strings.write_string(b, "\n")
+			print_expr(b, cond, indent + 1)
+		} else {
+			strings.write_string(b, " true\n")
+		}
+		for c in e.cases {
+			print_indent(b, indent + 1)
+			strings.write_string(b, "case:\n")
+			print_expr(b, c.condition, indent + 2)
+			print_expr(b, c.body, indent + 2)
+		}
+		if e.else_branch != nil {
+			print_indent(b, indent + 1)
+			strings.write_string(b, "else:\n")
+			print_expr(b, e.else_branch, indent + 2)
+		}
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
 	case ^ThisExpr:
 		print_indent(b, indent)
 		strings.write_string(b, "this\n")

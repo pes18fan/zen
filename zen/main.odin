@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:mem"
 import "core:os"
 import "core:path/filepath"
 import ic "isocline"
@@ -82,8 +83,7 @@ repl :: proc(vm: ^VM) -> int {
 
 		ic.ic_history_add(raw)
 
-		line := fmt.tprintf("%s\n", line_str)
-		interpret(vm, vm.gc, line)
+		interpret(vm, vm.gc, line_str)
 		ic.ic_free(rawptr(raw))
 	}
 
@@ -318,6 +318,9 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 main :: proc() {
 	status: int
 	defer os.exit(status)
+
+	// so the compiler's -vet flag doesn't complain about the unused "mem" import on release build
+	_ = mem.Allocator
 
 	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
 	when ODIN_DEBUG {

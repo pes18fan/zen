@@ -265,7 +265,11 @@ emit_return :: proc(cg: ^Codegen) {
 		emit_opcode(cg, .OP_GET_LOCAL)
 		emit_byte(cg, 0) /* Since the receiver is always stored in slot zero. */
 	} else {
-		emit_opcode(cg, .OP_NIL)
+		// emit_opcode(cg, .OP_NIL)
+	}
+
+	if config.repl {
+		emit_opcode(cg, .OP_PRINT_REPL)
 	}
 
 	emit_opcode(cg, .OP_RETURN)
@@ -1424,19 +1428,7 @@ compile_statement :: proc(cg: ^Codegen, stmt: Stmt) -> bool {
 	case ^ExprStmt:
 		cg.current_token = s.token
 		compile_expression(cg, s.expr) or_return
-		if config.repl && cg.current_compiler.type == .SCRIPT {
-			try(cg, emit_constant(cg, obj_val(copy_string(cg.gc, "=> ")))) or_return
-			emit_opcode(cg, .OP_PRINT)
-
-			// print the expression itself
-			emit_opcode(cg, .OP_PRINT)
-
-			/* Add a newline, since OP_PRINT does not append a newline. */
-			try(cg, emit_constant(cg, obj_val(copy_string(cg.gc, "\n")))) or_return
-			emit_opcode(cg, .OP_PRINT)
-		} else {
-			emit_pop(cg)
-		}
+		emit_pop(cg)
 	case ^IfStmt:
 		cg.current_token = s.token
 		compile_if_statement(cg, s) or_return
@@ -1477,6 +1469,90 @@ compile_statement :: proc(cg: ^Codegen, stmt: Stmt) -> bool {
 	case ^SwitchStmt:
 		cg.current_token = s.token
 		compile_switch_statement(cg, s) or_return
+	}
+
+	return true
+}
+
+@(require_results)
+compile_if_expression :: proc(cg: ^Codegen, e: ^IfExpr) -> bool {
+	condition := e.condition
+	then_branch := e.then_branch
+	else_branch := e.else_branch
+
+	compile_expression(cg, condition) or_return
+
+	when CHAOTIC {
+		then_jump: int
+		if s.is_ifnt {
+			then_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
+		} else {
+			then_jump = emit_jump(cg, .OP_JUMP_IF_TRUE)
+		}
+	} else {
+		then_jump := emit_jump(cg, .OP_JUMP_IF_FALSE)
+	}
+
+	emit_pop(cg)
+
+	begin_scope(cg)
+	compile_expression(cg, then_branch) or_return
+	end_scope(cg)
+
+	else_jump := emit_jump(cg, .OP_JUMP)
+
+	try(cg, patch_jump(cg, then_jump)) or_return
+	emit_pop(cg)
+
+	if else_branch != nil {
+		compile_expression(cg, else_branch) or_return
+	}
+	return try(cg, patch_jump(cg, else_jump))
+}
+
+compile_switch_expression :: proc(cg: ^Codegen, e: ^SwitchExpr) -> bool {
+	condition := e.condition
+	cases := e.cases
+	else_branch := e.else_branch
+
+	case_jumps_to_end := make([dynamic]int)
+	defer delete(case_jumps_to_end)
+
+	/* If there is no switch variable, the value to switch on is assumed to
+       be the boolean value true. This is so that the switch statement can
+       be used like else if. */
+	if condition == nil {
+		emit_opcode(cg, .OP_TRUE)
+	} else {
+		compile_expression(cg, condition) or_return
+	}
+
+	for switch_case in cases {
+		emit_opcode(cg, .OP_DUP)
+		compile_expression(cg, switch_case.condition) or_return
+		emit_opcode(cg, .OP_EQUAL)
+		case_jump := emit_jump(cg, .OP_JUMP_IF_FALSE)
+
+		// If a case matches, pop out both the residual boolean comparison
+		// and the switch value. We can do this since the switch statement
+		// is exhaustive.
+		emit_pop(cg)
+		emit_pop(cg)
+		compile_expression(cg, switch_case.body) or_return
+
+		append(&case_jumps_to_end, emit_jump(cg, .OP_JUMP))
+
+		// Patch the case-to-case jump.
+		try(cg, patch_jump(cg, case_jump)) or_return
+		emit_pop(cg) /* Case condition. */
+	}
+
+	emit_pop(cg) // Pop the switch value.
+	compile_expression(cg, else_branch) or_return
+
+	// Patch all the case-to-end jumps.
+	for jump in case_jumps_to_end {
+		try(cg, patch_jump(cg, jump)) or_return
 	}
 
 	return true
@@ -1531,6 +1607,11 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			)
 			return false
 		}
+	case ^BlockExpr:
+		cg.current_token = e.token
+		begin_scope(cg)
+		compile_expression(cg, e.expression) or_return
+		end_scope(cg)
 	case ^CallExpr:
 		cg.current_token = e.token
 		arguments := e.arguments
@@ -1608,14 +1689,12 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 
 		property_name := try2(cg, identifier_constant(cg, property)) or_return
 		emit_op_with_constant(cg, .OP_SET_PROPERTY, .OP_SET_PROPERTY_LONG, property_name)
-
-	// TODO: Writeback for COW, I'll enable it once the rest is stable
-	// if var_expr, ok := e.object.(^VariableExpr); ok {
-	//     try(cg, emit_named_variable_set(cg, var_expr.name)) or_return
-	// }
 	case ^GroupingExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expression) or_return
+	case ^IfExpr:
+		cg.current_token = e.token
+		compile_if_expression(cg, e) or_return
 	case ^ItExpr:
 		cg.current_token = e.token
 		if !cg.pipeline_active {
@@ -1701,6 +1780,11 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		cg.pipeline_active = true
 		compile_expression(cg, e.right) or_return
 		cg.pipeline_active = old_pipeline
+	case ^SemicolonExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.left) or_return
+		emit_opcode(cg, .OP_POP) // discard the result
+		compile_expression(cg, e.right) or_return
 	case ^SubscriptExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
@@ -1759,6 +1843,9 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			) or_return
 			emit_op_with_constant(cg, .OP_GET_SUPER, .OP_GET_SUPER_LONG, name)
 		}
+	case ^SwitchExpr:
+		cg.current_token = e.token
+		compile_switch_expression(cg, e) or_return
 	case ^ThisExpr:
 		cg.current_token = e.token
 		if cg.current_class == nil {
@@ -1920,6 +2007,31 @@ codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (fn: ^ObjFunction, s
 		compile_declaration(&cg, decl) or_break
 	}
 
+	res_fn := end_compiler(&cg)
+	gc.mark_roots_arg = cg.prev_mark_roots
+	return res_fn, !cg.had_error
+}
+
+codegen_expr :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
+	/* Add all the native function names to the global table, for variable
+     * existence checks. */
+	for fn_name in gc.global_native_fns {
+		table_set(globals, copy_string(gc, fn_name), bool_val(true))
+	}
+
+	cg := Codegen {
+		globals         = globals,
+		gc              = gc,
+		prev_mark_roots = gc.mark_roots_arg,
+		pipeline_active = false,
+		had_error       = false,
+	}
+	gc.mark_roots_arg = &cg
+
+	c: Compiler
+	init_compiler(&c, &cg, synthetic_token(""), .SCRIPT)
+
+	compile_expression(&cg, expr) or_return
 	res_fn := end_compiler(&cg)
 	gc.mark_roots_arg = cg.prev_mark_roots
 	return res_fn, !cg.had_error

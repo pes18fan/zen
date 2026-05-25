@@ -214,6 +214,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_NEGATE", offset)
 	case .OP_PRINT:
 		return simple_instruction("OP_PRINT", offset)
+	case .OP_PRINT_REPL:
+		return simple_instruction("OP_PRINT_REPL", offset)
 	case .OP_JUMP:
 		return jump_instruction("OP_JUMP", 1, c, offset)
 	case .OP_JUMP_IF_FALSE:

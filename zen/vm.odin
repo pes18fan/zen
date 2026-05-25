@@ -577,6 +577,10 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			}
 		case .OP_PRINT:
 			print_value(vm_pop(vm))
+		case .OP_PRINT_REPL:
+			fmt.print("=> ")
+			print_value(vm_peek(vm, 0))
+			fmt.println()
 		case .OP_JUMP:
 			{
 				offset := read_short(frame)
@@ -1086,8 +1090,8 @@ interpret :: proc(
 	}
 
 	p := init_parser(tokens)
-	decls, ps_ok := parse(&p)
-	defer free_decls(decls)
+	expr, ps_ok := parse(&p)
+	defer free_expr(expr)
 	if !ps_ok {
 		return .INTERPRET_PARSE_ERROR
 	}
@@ -1102,7 +1106,7 @@ interpret :: proc(
 
 	if config.dump_ast {
 		// TODO: make the ast representation a bit nicer
-		str := ast_string(decls)
+		str := ast_string_expr(expr)
 		defer delete(str)
 		fmt.println(str)
 
@@ -1111,10 +1115,10 @@ interpret :: proc(
 
 	// Collect global variables before codegen
 	if !config.repl {
-		collect_script_globals(&vm.compiler_globals, gc, decls)
+		// collect_script_globals(&vm.compiler_globals, gc, decls)
 	}
 
-	fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
+	fn, cg_ok := codegen_expr(gc, expr, &vm.compiler_globals)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}

@@ -194,9 +194,11 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 	result := make([dynamic]Token)
 
 	list_stack := make([dynamic]byte)
+	paren_stack := make([dynamic]byte)
 	block_stack := make([dynamic]byte)
 	defer {
 		delete(list_stack)
+		delete(paren_stack)
 		delete(block_stack)
 	}
 
@@ -271,7 +273,13 @@ insert_semis :: proc(tokens: []Token) -> []Token {
                             "b"
                         ]
                         */
-						if len(list_stack) > 0 && len(block_stack) == 0 {
+						if len(list_stack) > 0 || len(paren_stack) > 0 {
+							continue
+						}
+
+						/* Do NOT insert a semi after the end of the expression 
+                        in a block, as blocks return it. */
+						if len(block_stack) > 0 {
 							continue
 						}
 
@@ -285,21 +293,17 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 		case .LSQUIRLY:
 			append(&block_stack, 1)
 			append(&result, token)
+		case .LPAREN:
+			append(&paren_stack, 1)
+			append(&result, token)
 		case .RSQUARE:
-			assert(len(list_stack) >= 0, "cannot have less than 0 lists")
-			pop(&list_stack)
+			if len(list_stack) > 0 {pop(&list_stack)}
 			append(&result, token)
 		case .RSQUIRLY:
-			/* For the corner case of blocks in one line, e.g. `{ statement }` */
-			if len(block_stack) > 0 &&
-			   tokens[idx - 1].line == token.line &&
-			   tokens[idx - 1].type != .LSQUIRLY {
-				append(&result, semi)
-			}
-
-			if len(block_stack) > 0 {
-				pop(&block_stack)
-			}
+			if len(block_stack) > 0 {pop(&block_stack)}
+			append(&result, token)
+		case .RPAREN:
+			if len(paren_stack) > 0 {pop(&paren_stack)}
 			append(&result, token)
 		case:
 			append(&result, token)
