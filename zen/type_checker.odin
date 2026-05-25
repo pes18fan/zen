@@ -111,7 +111,7 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> (TypeScheme, ErrorMessag
 	}
 
 	// panic cuz variable resolving is supposed to be done beforehand
-	fmt.panicf("undefined variable '%v'", name)
+	return TypeScheme{}, fmt.tprintf("Undefined variable '%v'", name)
 }
 
 bind_type :: proc(ctx: ^TypeContext, name: string, t: TypeScheme) {
@@ -235,6 +235,7 @@ contains :: proc(container: Type, containee: TypeVariable) -> bool {
 apply_substitution :: proc {
 	apply_substitution_type,
 	apply_substitution_quantified,
+	apply_substitution_ctx,
 }
 
 apply_substitution_type :: proc(type: Type, subst: Substitution) -> Type {
@@ -277,6 +278,12 @@ apply_substitution_quantified :: proc(scheme: TypeScheme, subst: Substitution) -
 	}
 
 	panic("invalid typescheme kind in apply_substitution_quantified()")
+}
+
+apply_substitution_ctx :: proc(tc: ^TypeChecker, subst: Substitution) {
+	for name, scheme in tc.ctx.bindings {
+		tc.ctx.bindings[name] = apply_substitution(scheme, subst)
+	}
 }
 
 // allocates a map (Substitution)
@@ -356,7 +363,6 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 	return res
 }
 
-
 // allocates a map
 @(require_results)
 unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
@@ -428,31 +434,50 @@ infer_type :: proc(
 	tc: ^TypeChecker,
 	expr: Expr,
 ) -> (
-	s: Substitution,
-	ty: TypeScheme,
-	success: bool,
-) {
-	var := fresh(tc)
-	subst := check_type(tc, expr, var) or_return
-	return subst, apply_substitution(var, subst), true
-}
-
-@(require_results)
-check_type :: proc(
-	tc: ^TypeChecker,
-	expr: Expr,
-	ty: Type,
-) -> (
 	subst: Substitution,
+	ty: Type,
 	success: bool,
 ) {
-	return try2(tc, m(tc, expr, ty))
+	s, type, err := w(tc, expr)
+	if err != nil {
+		typecheck_error(tc, err.?)
+		return nil, Type{}, false
+	}
+	return s, type, true
 }
 
-// algorithm M
 @(require_results)
-m :: proc(tc: ^TypeChecker, expr: Expr, ty: Type) -> (subst: Substitution, err: ErrorMessage) {
-	unimplemented()
+w :: proc(tc: ^TypeChecker, expr: Expr) -> (subst: Substitution, type: Type, err: ErrorMessage) {
+	switch e in expr {
+	case ^LiteralExpr:
+		tc.current_token = e.token
+		switch l in e.value {
+		case f64:
+			return nil, TypeFunctionApplication{constructor = .NUMBER}, nil
+		case string:
+			return nil, TypeFunctionApplication{constructor = .STRING}, nil
+		case bool:
+			return nil, TypeFunctionApplication{constructor = .BOOL}, nil
+		case:
+			// nil
+			return nil, TypeFunctionApplication{constructor = .NIL}, nil
+		}
+	case ^VariableExpr:
+		tc.current_token = e.token
+		alpha := fresh(tc)
+		found := resolve_type(tc, e.name.lexeme) or_return
+		ty := instantiate(tc, found)
+		s := unify(alpha, ty) or_return
+		return subst, apply_substitution(alpha, s), nil
+	case ^LambdaExpr:
+		tc.current_token = e.token
+		// must curry
+		unimplemented()
+	case ^CallExpr:
+		tc.current_token = e.token
+		// must curry
+		unimplemented()
+	}
 }
 
 type_string :: proc(scheme: TypeScheme) -> string {
