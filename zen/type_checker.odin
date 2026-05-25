@@ -13,7 +13,6 @@ TypeChecker :: struct {
 
 TypeContext :: struct {
 	bindings:  map[string]TypeScheme,
-	is_func:   bool,
 	enclosing: ^TypeContext,
 }
 
@@ -30,26 +29,6 @@ TypeVariable :: struct {
 TypeFunctionApplication :: struct {
 	constructor: TypeConstructor,
 	args:        []Type,
-}
-
-@(require_results)
-is_type_variable :: #force_inline proc(ty: Type) -> bool {
-	_, ok := ty.(TypeVariable)
-	return ok
-}
-
-@(require_results)
-is_type_function_application :: #force_inline proc(ty: Type) -> bool {
-	_, ok := ty.(TypeFunctionApplication)
-	return ok
-}
-
-as_type_variable :: #force_inline proc(ty: Type) -> TypeVariable {
-	return ty.(TypeVariable)
-}
-
-as_type_function_application :: #force_inline proc(ty: Type) -> TypeFunctionApplication {
-	return ty.(TypeFunctionApplication)
 }
 
 TypeConstructor :: enum {
@@ -83,6 +62,31 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 	panic("invalid type constructor")
 }
 
+fresh :: proc(tc: ^TypeChecker) -> TypeVariable {
+	defer tc.typevar_count += 1
+	return TypeVariable{tc.typevar_count}
+}
+
+@(require_results)
+is_type_variable :: #force_inline proc(ty: Type) -> bool {
+	_, ok := ty.(TypeVariable)
+	return ok
+}
+
+@(require_results)
+is_type_function_application :: #force_inline proc(ty: Type) -> bool {
+	_, ok := ty.(TypeFunctionApplication)
+	return ok
+}
+
+as_type_variable :: #force_inline proc(ty: Type) -> TypeVariable {
+	return ty.(TypeVariable)
+}
+
+as_type_function_application :: #force_inline proc(ty: Type) -> TypeFunctionApplication {
+	return ty.(TypeFunctionApplication)
+}
+
 TypeScheme :: union #no_nil {
 	Type,
 	TypeQuantified,
@@ -105,25 +109,27 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> (TypeScheme, ErrorMessag
 		}
 		ctx = ctx.enclosing
 	}
-	return TypeScheme{}, fmt.tprintf("undefined variable '%v'", name)
+
+	// panic cuz variable resolving is supposed to be done beforehand
+	fmt.panicf("undefined variable '%v'", name)
 }
 
 bind_type :: proc(ctx: ^TypeContext, name: string, t: TypeScheme) {
 	ctx.bindings[name] = t
 }
 
-push_scope :: proc(tc: ^TypeChecker, is_func: bool = false) {
-	new_ctx := TypeContext {
-		bindings  = make(map[string]TypeScheme),
-		enclosing = tc.ctx,
-		is_func   = is_func,
-	}
-	tc.ctx = &new_ctx
+push_scope :: proc(tc: ^TypeChecker) {
+	ctx := new(TypeContext)
+	ctx.bindings = make(map[string]TypeScheme)
+	ctx.enclosing = tc.ctx
+	tc.ctx = ctx
 }
 
 pop_scope :: proc(tc: ^TypeChecker) {
-	delete(tc.ctx.bindings)
-	tc.ctx = tc.ctx.enclosing
+	ctx := tc.ctx
+	tc.ctx = ctx.enclosing
+	delete(ctx.bindings)
+	free(ctx)
 }
 
 @(require_results)
@@ -239,7 +245,6 @@ apply_substitution_type :: proc(type: Type, subst: Substitution) -> Type {
 		}
 		return t
 	case TypeFunctionApplication:
-		defer delete(t.args)
 		new_args := make([]Type, len(t.args))
 		for i in 0 ..< len(t.args) {
 			new_args[i] = apply_substitution_type(t.args[i], subst)
@@ -298,7 +303,6 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 	case Type:
 		return type
 	case TypeQuantified:
-		defer delete(type.bound)
 		subst := make(Substitution)
 		defer delete(subst)
 		for bound in type.bound {
@@ -401,11 +405,6 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 	}
 
 	panic("unreachable point in unify()")
-}
-
-fresh :: proc(tc: ^TypeChecker) -> TypeVariable {
-	defer tc.typevar_count += 1
-	return TypeVariable{tc.typevar_count}
 }
 
 typecheck_error :: proc(tc: ^TypeChecker, message: string) {
@@ -526,7 +525,7 @@ subst_string :: proc(subst: Substitution) -> string {
 	return fmt.tprint(strings.to_string(sb))
 }
 
-init_typechecker :: proc() -> TypeChecker {
+init_type_checker :: proc() -> TypeChecker {
 	tc := TypeChecker {
 		ctx           = nil,
 		typevar_count = 0,
@@ -536,11 +535,12 @@ init_typechecker :: proc() -> TypeChecker {
 	return tc
 }
 
-destroy_typechecker :: proc(tc: ^TypeChecker) {
+destroy_type_checker :: proc(tc: ^TypeChecker) {
 	ctx := tc.ctx
 	for ctx != nil {
-		// FIXME: segfault at this point for some reason???
+		next := ctx.enclosing
 		delete(ctx.bindings)
-		ctx = ctx.enclosing
+		free(ctx)
+		ctx = next
 	}
 }

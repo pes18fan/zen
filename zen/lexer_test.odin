@@ -16,7 +16,7 @@ expect_tokens_equal :: proc(
 ) {
 	got := got
 	for i in want {
-		if len(got) == 0 do break
+		if len(got) == 0 {break}
 
 		if i != got[0] {
 			return false, i, got[0]

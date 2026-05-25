@@ -1,0 +1,309 @@
+package zen
+import "core:fmt"
+import tt "core:testing"
+
+// do variables successfully unify to primitives?
+@(test)
+test_unify_var_with_primitives :: proc(t: ^tt.T) {
+	tc := init_type_checker()
+	defer destroy_type_checker(&tc)
+
+	var := fresh(&tc)
+
+	num_lit := TypeFunctionApplication {
+		constructor = .NUMBER,
+	}
+	bool_lit := TypeFunctionApplication {
+		constructor = .BOOL,
+	}
+	nil_lit := TypeFunctionApplication {
+		constructor = .NIL,
+	}
+	string_lit := TypeFunctionApplication {
+		constructor = .STRING,
+	}
+
+	num_subst, err1 := unify(var, num_lit)
+	if err1 != nil {
+		tt.fail(t)
+		return
+	}
+	defer delete(num_subst)
+
+	bool_subst, err2 := unify(var, bool_lit)
+	if err2 != nil {
+		tt.fail(t)
+		return
+	}
+	defer delete(bool_subst)
+
+	nil_subst, err3 := unify(var, nil_lit)
+	if err3 != nil {
+		tt.fail(t)
+		return
+	}
+	defer delete(nil_subst)
+
+	string_subst, err4 := unify(var, string_lit)
+	if err4 != nil {
+		tt.fail(t)
+		return
+	}
+	defer delete(string_subst)
+
+	tt.expect(t, types_equal(apply_substitution(var, num_subst), num_lit))
+	tt.expect(t, types_equal(apply_substitution(var, bool_subst), bool_lit))
+	tt.expect(t, types_equal(apply_substitution(var, nil_subst), nil_lit))
+	tt.expect(t, types_equal(apply_substitution(var, string_subst), string_lit))
+}
+
+// do equal types return a nil substitution?
+@(test)
+test_unify_equal_types_returns_nil :: proc(t: ^tt.T) {
+	subst, err := unify(
+		TypeFunctionApplication{constructor = .NUMBER},
+		TypeFunctionApplication{constructor = .NUMBER},
+	)
+	defer delete(subst)
+	tt.expect(t, err == nil)
+	tt.expect(t, subst == nil)
+}
+
+// do incampatible type function applications fail to unify?
+@(test)
+test_unify_mismatched_types :: proc(t: ^tt.T) {
+	_, err := unify(
+		TypeFunctionApplication{constructor = .NUMBER},
+		TypeFunctionApplication{constructor = .BOOL},
+	)
+	tt.expect(
+		t,
+		err ==
+		fmt.tprintf(
+			"cannot unify %v with %v",
+			type_constructor_string(.NUMBER),
+			type_constructor_string(.BOOL),
+		),
+	)
+}
+
+// are infinite types detected correctly?
+@(test)
+test_unify_occurs_check :: proc(t: ^tt.T) {
+	a := TypeVariable {
+		idx = 0,
+	}
+	b := TypeFunctionApplication {
+		constructor = .FUNCTION,
+		args        = {a},
+	}
+	_, err := unify(a, b)
+	tt.expect(t, err == "occurs check failed, infinite type")
+}
+
+// do function applications unify correctly?
+@(test)
+test_unify_function_type :: proc(t: ^tt.T) {
+	a := TypeVariable {
+		idx = 0,
+	}
+	b := TypeVariable {
+		idx = 1,
+	}
+
+	fn_type_a := TypeFunctionApplication {
+		constructor = .FUNCTION,
+		args        = {a, TypeFunctionApplication{constructor = .NUMBER}},
+	}
+	fn_type_b := TypeFunctionApplication {
+		constructor = .FUNCTION,
+		args        = {TypeFunctionApplication{constructor = .NUMBER}, b},
+	}
+
+	subst, err := unify(fn_type_a, fn_type_b)
+	defer delete(subst)
+	if err != nil {
+		tt.fail(t)
+		return
+	}
+
+	tt.expect(
+		t,
+		types_equal(apply_substitution(a, subst), TypeFunctionApplication{constructor = .NUMBER}),
+	)
+	tt.expect(
+		t,
+		types_equal(apply_substitution(b, subst), TypeFunctionApplication{constructor = .NUMBER}),
+	)
+}
+
+// do substitutions combine correctly?
+@(test)
+test_substitution_combine :: proc(t: ^tt.T) {
+	s1 := make(Substitution)
+	defer delete(s1)
+	s2 := make(Substitution)
+	defer delete(s2)
+
+	s1[TypeVariable{idx = 0}] = TypeFunctionApplication {
+		constructor = .NUMBER,
+	}
+	s2[TypeVariable{idx = 1}] = TypeFunctionApplication {
+		constructor = .BOOL,
+	}
+
+	combined := combine_substitutions(s1, s2)
+	defer delete(combined)
+
+	tt.expect(
+		t,
+		types_equal(
+			combined[TypeVariable{idx = 0}],
+			TypeFunctionApplication{constructor = .NUMBER},
+		),
+	)
+	tt.expect(
+		t,
+		types_equal(combined[TypeVariable{idx = 1}], TypeFunctionApplication{constructor = .BOOL}),
+	)
+}
+
+// is the result of free_vars() on a type variable the variable itself?
+@(test)
+test_free_vars_type_variable :: proc(t: ^tt.T) {
+	fvs := free_vars(TypeVariable{idx = 42})
+	defer delete(fvs)
+	tt.expect(t, TypeVariable{idx = 42} in fvs)
+	tt.expect(t, len(fvs) == 1)
+}
+
+// is the result of free_vars() on an application the union of the free_vars() in the args?
+@(test)
+test_free_vars_type_application :: proc(t: ^tt.T) {
+	ty := TypeFunctionApplication {
+		constructor = .FUNCTION,
+		args        = {TypeVariable{idx = 0}, TypeVariable{idx = 1}},
+	}
+	fvs := free_vars(ty)
+	defer delete(fvs)
+	tt.expect(t, TypeVariable{idx = 0} in fvs)
+	tt.expect(t, TypeVariable{idx = 1} in fvs)
+	tt.expect(t, len(fvs) == 2)
+}
+
+// do substitutions apply correctly to type variables?
+@(test)
+test_apply_substitution_type_variable :: proc(t: ^tt.T) {
+	subst := make(Substitution)
+	defer delete(subst)
+	subst[TypeVariable{idx = 0}] = TypeFunctionApplication {
+		constructor = .STRING,
+	}
+
+	result := apply_substitution(TypeVariable{idx = 0}, subst)
+	tt.expect(t, types_equal(result, TypeFunctionApplication{constructor = .STRING}))
+}
+
+// do substitutions apply correctly to type function applications?
+@(test)
+test_apply_substitution_function :: proc(t: ^tt.T) {
+	ty := TypeFunctionApplication {
+		constructor = .FUNCTION,
+		args        = {TypeVariable{idx = 0}, TypeVariable{idx = 1}},
+	}
+	subst := make(Substitution)
+	defer delete(subst)
+	subst[TypeVariable{idx = 0}] = TypeFunctionApplication {
+		constructor = .NUMBER,
+	}
+	subst[TypeVariable{idx = 1}] = TypeFunctionApplication {
+		constructor = .STRING,
+	}
+
+	result := apply_substitution(ty, subst)
+	expected := TypeFunctionApplication {
+		constructor = .FUNCTION,
+		args        = {
+			TypeFunctionApplication{constructor = .NUMBER},
+			TypeFunctionApplication{constructor = .STRING},
+		},
+	}
+	tt.expect(t, types_equal(result, expected))
+}
+
+// are equal types reported as so by types_equal()?
+@(test)
+test_types_equal_same :: proc(t: ^tt.T) {
+	tt.expect(t, types_equal(TypeVariable{idx = 0}, TypeVariable{idx = 0}))
+	tt.expect(
+		t,
+		types_equal(
+			TypeFunctionApplication{constructor = .NUMBER},
+			TypeFunctionApplication{constructor = .NUMBER},
+		),
+	)
+}
+
+// are different types reported as so by types_equal()?
+@(test)
+test_types_equal_different :: proc(t: ^tt.T) {
+	tt.expect(t, !types_equal(TypeVariable{idx = 0}, TypeVariable{idx = 1}))
+	tt.expect(
+		t,
+		!types_equal(
+			TypeFunctionApplication{constructor = .NUMBER},
+			TypeFunctionApplication{constructor = .BOOL},
+		),
+	)
+	tt.expect(
+		t,
+		!types_equal(TypeVariable{idx = 0}, TypeFunctionApplication{constructor = .NUMBER}),
+	)
+}
+
+// does popping and pushing contexts work correctly?
+@(test)
+test_scope_push_pop :: proc(t: ^tt.T) {
+	tc := init_type_checker()
+	defer destroy_type_checker(&tc)
+
+	push_scope(&tc)
+	bind_type(tc.ctx, "x", TypeFunctionApplication{constructor = .NUMBER})
+	push_scope(&tc)
+	bind_type(tc.ctx, "y", TypeFunctionApplication{constructor = .BOOL})
+
+	_, err_x := resolve_type(&tc, "x")
+	tt.expect(t, err_x == nil)
+	_, err_y := resolve_type(&tc, "y")
+	tt.expect(t, err_y == nil)
+
+	pop_scope(&tc)
+	_, err_x2 := resolve_type(&tc, "x")
+	tt.expect(t, err_x2 == nil)
+
+	pop_scope(&tc)
+}
+
+// do generalization and instantiation work correctly?
+@(test)
+test_generalize_instantiate :: proc(t: ^tt.T) {
+	tc := init_type_checker()
+	defer destroy_type_checker(&tc)
+
+	ty := fresh(&tc)
+	scheme := generalize(&tc, ty)
+
+	inst := instantiate(&tc, scheme)
+	tt.expect(t, is_type_variable(inst))
+
+	inst_tv := as_type_variable(inst)
+	tt.expect(t, inst_tv.idx != ty.idx)
+}
+
+// does initializing the typechecker create a scope automatically?
+@(test)
+test_init_type_checker_creates_scope :: proc(t: ^tt.T) {
+	tc := init_type_checker()
+	defer destroy_type_checker(&tc)
+	tt.expect(t, tc.ctx != nil)
+}

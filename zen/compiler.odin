@@ -1901,19 +1901,17 @@ codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (fn: ^ObjFunction, s
 	return res_fn, !cg.had_error
 }
 
+// only functions are collected from the globals table
 @(private = "file")
-collect_decl_globals :: proc(globals: ^Table, gc: ^GC, decl: Decl) {
+collect_global_decls :: proc(globals: ^Table, gc: ^GC, decl: Decl) {
 	switch d in decl {
 	case ^VarDecl:
 	case ^FuncDecl:
 		name := copy_string(gc, d.name.lexeme)
-		if _, ok := table_get(globals, name); ok {
-			return
-		}
 		table_set(globals, name, bool_val(false))
 	case ^ClassDecl:
 	case ^PubDecl:
-		collect_decl_globals(globals, gc, d.decl)
+		collect_global_decls(globals, gc, d.decl)
 	case ^ModuleDecl:
 	case Stmt:
 	}
@@ -1921,11 +1919,11 @@ collect_decl_globals :: proc(globals: ^Table, gc: ^GC, decl: Decl) {
 
 /* Collect all global functions declared in the file and put them into the
 `globals` table. */
-collect_script_globals :: proc(globals: ^Table, gc: ^GC, decls: []Decl) {
+collect_global_functions :: proc(globals: ^Table, gc: ^GC, decls: []Decl) {
 	for fn_name in gc.global_native_fns {
 		table_set(globals, copy_string(gc, fn_name), bool_val(true))
 	}
 	for decl in decls {
-		collect_decl_globals(globals, gc, decl)
+		collect_global_decls(globals, gc, decl)
 	}
 }

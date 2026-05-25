@@ -1111,7 +1111,13 @@ interpret :: proc(
 
 	// Collect global variables before codegen
 	if !config.repl {
-		collect_script_globals(&vm.compiler_globals, gc, decls)
+		collect_global_functions(&vm.compiler_globals, gc, decls)
+	}
+
+	// semantic analysis pass
+
+	when TYPE_CHECK {
+		// implement typechecking pass here
 	}
 
 	fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
