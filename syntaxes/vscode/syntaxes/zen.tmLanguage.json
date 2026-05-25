@@ -37,7 +37,7 @@
         "keywords": {
             "patterns": [
                 {
-                    "match": "\\b(if|else|while|for|return|break|continue|switch|exit)\\b",
+                    "match": "\\b(if|else|while|for|return|break|continue|switch|exit|in)\\b",
                     "name": "keyword.control.zen"
                 },
                 {
@@ -96,7 +96,7 @@
                             "name": "punctuation.zen"
                         }
                     },
-                    "match": "\\b(puts|gets|len|typeof|str|parse)\\b\\s*(\\()"
+                    "match": "\\b(puts|gets|len|typeof|str|parse|copy|dirname|filename)\\b\\s*(\\()"
                 },
                 {
                     "captures": {
@@ -182,6 +182,16 @@
                     "name": "string.quoted.double.zen",
                     "begin": "\"",
                     "end": "\"",
+                    "patterns": [
+                        {
+                            "include": "#string-escaped-char"
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.zen",
+                    "begin": "'",
+                    "end": "'",
                     "patterns": [
                         {
                             "include": "#string-escaped-char"

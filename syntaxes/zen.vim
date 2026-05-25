@@ -8,17 +8,19 @@ if exists("b:current_syntax")
 endif
 
 " Keywords
-syn keyword zenKeyword use var val print func return pub class in exit
+syn keyword zenKeyword use var val print func return pub exit
 syn keyword zenConditional if else switch
 syn keyword zenRepeat while for break continue
+syn keyword zenRepeat for in
 syn keyword zenLogicalOperator and or not
+syn keyword zenKeyword class
 
 " Built-in Constants and Values
 syn keyword zenBoolean true false
 syn keyword zenConstant it nil this super
 
-" Built-in Functions (From the demo)
-syn keyword zenBuiltin puts len parse
+" Built-in Functions
+syn keyword zenBuiltin puts gets len typeof str parse copy dirname filename
 
 " Strings (Matches "..." and handles escaped quotes \")
 syn region zenString start=/"/ skip=/\\./ end=/"/
@@ -27,16 +29,19 @@ syn region zenString start=/'/ skip=/\\./ end=/'/
 " Numbers (Matches integers and floats)
 syn match zenNumber "\v<\d+(\.\d+)?>\ze"
 
-" Operators (Matches math, pipes, and assignments)
+" Operators (Matches math, comparison, pipes, and arrows)
 syn match zenOperator "\v\+"
 syn match zenOperator "\v-"
 syn match zenOperator "\v\*"
 syn match zenOperator "\v/"
 syn match zenOperator "\v\%"
-syn match zenOperator "\v\="
 syn match zenOperator "\v\=\="
+syn match zenOperator "\v\!\="
+syn match zenOperator "\v\<="
+syn match zenOperator "\v\>="
 syn match zenOperator "\v\<"
 syn match zenOperator "\v\>"
+syn match zenOperator "\v\="
 syn match zenOperator "\v\|\>"
 syn match zenOperator "\v\=\>"
 

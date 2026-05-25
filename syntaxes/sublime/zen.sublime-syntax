@@ -36,7 +36,7 @@ contexts:
       captures:
         1: storage.type.zen
         2: meta.function.zen entity.name.function.zen
-    - match: \b(puts|gets|len|typeof|str|parse)\b\s*(\()
+    - match: \b(puts|gets|len|typeof|str|parse|copy|dirname|filename)\b\s*(\()
       captures:
         1: support.function.builtin.zen
         2: punctuation.zen
@@ -52,11 +52,15 @@ contexts:
       captures:
         1: storage.type.zen
         2: entity.name.class.zen
+    - match: \b(var|val)\s*({{identifier}})
+      captures:
+        1: storage.type.zen
+        2: support.variable.zen
 
   keywords:
     - match: \b(use|pub)\b
       scope: keyword.control.zen
-    - match: \b(if|else|while|for|return|break|continue|switch|exit)\b
+    - match: \b(if|else|while|for|return|break|continue|switch|exit|in)\b
       scope: keyword.control.zen
     - match: \b(var|val)\b
       scope: storage.type.zen
@@ -73,7 +77,7 @@ contexts:
 
   operators:
     - scope: keyword.operator.arithmetic.zen
-      match: \+|-|\*|\/|\mod
+      match: \+|-|\*|\/|\%
     - scope: keyword.operator.comparison.zen
       match: ==|\!=
     - scope: keyword.operator.relational.zen
@@ -97,6 +101,14 @@ contexts:
       push:
         - meta_scope: string.quoted.double.zen
         - match: '"'
+          scope: punctuation.definition.string.end.zen
+          pop: true
+        - include: string-escaped-char
+    - match: "'"
+      scope: punctuation.definition.string.begin.zen
+      push:
+        - meta_scope: string.quoted.single.zen
+        - match: "'"
           scope: punctuation.definition.string.end.zen
           pop: true
         - include: string-escaped-char
