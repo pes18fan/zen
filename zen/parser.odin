@@ -15,6 +15,8 @@ Expr :: union {
 	^CallExpr,
 	^ContinueExpr,
 	^ExitExpr,
+	^ForExpr,
+	^ForInExpr,
 	^GetExpr,
 	^GroupingExpr,
 	^IfExpr,
@@ -24,9 +26,10 @@ Expr :: union {
 	^LiteralExpr,
 	^LogicalExpr,
 	^PipeExpr,
+	^PrintExpr,
 	^ReturnExpr,
 	^SetExpr,
-	^SemicolonExpr,
+	^SequenceExpr,
 	^SubscriptExpr,
 	^SubscriptSetExpr,
 	^SuperExpr,
@@ -34,6 +37,8 @@ Expr :: union {
 	^ThisExpr,
 	^UnaryExpr,
 	^VariableExpr,
+	^VarDeclExpr,
+	^WhileExpr,
 }
 
 Stmt :: union {
@@ -228,6 +233,21 @@ ExitExpr :: struct {
 	code:  Expr,
 }
 
+ForExpr :: struct {
+	token:       Token,
+	initializer: Expr,
+	condition:   Expr,
+	increment:   Expr,
+	body:        ^BlockExpr,
+}
+
+ForInExpr :: struct {
+	token:    Token,
+	var_name: Token,
+	iterable: Expr,
+	body:     ^BlockExpr,
+}
+
 GetExpr :: struct {
 	token:    Token,
 	receiver: Expr,
@@ -239,7 +259,6 @@ GroupingExpr :: struct {
 	expression: Expr,
 }
 
-// Variant of the if statement that evaluates to a value.
 IfExpr :: struct {
 	token:       Token,
 	is_ifnt:     bool,
@@ -291,12 +310,17 @@ PipeExpr :: struct {
 	right:    Expr,
 }
 
+PrintExpr :: struct {
+	token: Token,
+	expr:  Expr,
+}
+
 ReturnExpr :: struct {
 	token: Token,
 	value: Expr,
 }
 
-SemicolonExpr :: struct {
+SequenceExpr :: struct {
 	token:    Token,
 	left:     Expr,
 	operator: Token,
@@ -352,15 +376,28 @@ UnaryExpr :: struct {
 	right:    Expr,
 }
 
+VarDeclExpr :: struct {
+	token:    Token,
+	is_final: bool,
+	bindings: []VarBinding,
+}
+
 VariableExpr :: struct {
 	token: Token,
 	name:  Token,
 }
 
+WhileExpr :: struct {
+	token:      Token,
+	is_whilent: bool,
+	condition:  Expr,
+	body:       ^BlockExpr,
+}
+
 Precedence :: enum {
 	NONE,
-	PIPELINE, // |>
 	ASSIGNMENT, // =
+	PIPELINE, // |>
 	CONDITIONAL, // if switch
 	OR, // or
 	AND, // and
@@ -396,7 +433,7 @@ parse :: proc(p: ^Parser) -> (expr: Expr, success: bool) {
 	// }
 	//
 	// return declarations[:], !p.had_error
-	return parse_expression(p), !p.had_error
+	return parse_expression_top(p), !p.had_error
 }
 
 parse_declaration :: proc(p: ^Parser) -> Decl {
@@ -413,30 +450,6 @@ parse_declaration :: proc(p: ^Parser) -> Decl {
 		return parse_pub_decl(p)
 	}
 	return parse_statement(p)
-}
-
-is_start_of_declaration :: proc(p: ^Parser) -> bool {
-	return check_any(
-		p,
-		.VAR,
-		.VAL,
-		.CLASS,
-		.USE,
-		.FUNC,
-		.PUB,
-		.IF,
-		.IFNT,
-		.WHILE,
-		.WHILENT,
-		.BREAK,
-		.CONTINUE,
-		.FOR,
-		.PRINT,
-		.RETURN,
-		.EXIT,
-		.SWITCH,
-		.SEMI,
-	)
 }
 
 parse_var_decl :: proc(p: ^Parser) -> ^VarDecl {
@@ -457,7 +470,7 @@ parse_var_decl :: proc(p: ^Parser) -> ^VarDecl {
 	}
 	decl.bindings = bindings[:]
 
-	consume_semi(p, "variable declaration")
+	consume_newline(p, "variable declaration")
 	return decl
 }
 
@@ -600,8 +613,8 @@ parse_statement :: proc(p: ^Parser) -> Stmt {
 		return parse_continue_stmt(p)
 	case match(p, .FOR):
 		return parse_for_stmt(p)
-	// case match(p, .LSQUIRLY):
-	// 	return parse_block(p)
+	case match(p, .LSQUIRLY):
+		return parse_block(p)
 	case match(p, .PRINT):
 		return parse_print_stmt(p)
 	case match(p, .RETURN):
@@ -649,14 +662,14 @@ parse_while_stmt :: proc(p: ^Parser, is_whilent: bool) -> ^WhileStmt {
 parse_break_stmt :: proc(p: ^Parser) -> ^BreakStmt {
 	stmt := new(BreakStmt)
 	stmt.token = previous(p)
-	consume_semi(p, "break")
+	consume_newline(p, "break")
 	return stmt
 }
 
 parse_continue_stmt :: proc(p: ^Parser) -> ^ContinueStmt {
 	stmt := new(ContinueStmt)
 	stmt.token = previous(p)
-	consume_semi(p, "continue")
+	consume_newline(p, "continue")
 	return stmt
 }
 
@@ -688,7 +701,7 @@ parse_for_stmt :: proc(p: ^Parser) -> Stmt {
 
 	if !match(p, .SEMI) {
 		stmt.condition = parse_expression(p)
-		consume_semi(p, "loop condition")
+		consume_newline(p, "loop condition")
 	}
 
 	if !match(p, .LSQUIRLY) {
@@ -723,7 +736,7 @@ parse_print_stmt :: proc(p: ^Parser) -> ^PrintStmt {
 	stmt := new(PrintStmt)
 	stmt.token = previous(p)
 	stmt.expr = parse_expression(p)
-	consume_semi(p, "value")
+	consume_newline(p, "value")
 	return stmt
 }
 
@@ -732,7 +745,7 @@ parse_return_stmt :: proc(p: ^Parser) -> ^ReturnStmt {
 	stmt.token = previous(p)
 	if !match(p, .SEMI) {
 		stmt.value = parse_expression(p)
-		consume_semi(p, "return value")
+		consume_newline(p, "return value")
 	}
 	return stmt
 }
@@ -742,7 +755,7 @@ parse_exit_stmt :: proc(p: ^Parser) -> ^ExitStmt {
 	stmt.token = previous(p)
 	if !match(p, .SEMI) {
 		stmt.code = parse_expression(p)
-		consume_semi(p, "exit code")
+		consume_newline(p, "exit code")
 	}
 	return stmt
 }
@@ -790,14 +803,34 @@ parse_expression_stmt :: proc(p: ^Parser) -> ^ExprStmt {
 	stmt := new(ExprStmt)
 	stmt.expr = parse_expression(p)
 	stmt.token = previous(p)
-	consume_semi(p, "expression")
+	consume_newline(p, "expression")
 	return stmt
 }
 
 // Expression parsers
 
+// Parse an expression, treating newlines as expression-separating infix operators.
+parse_expression_top :: proc(p: ^Parser) -> Expr {
+	fst := parse_expression(p)
+	if !match(p, .NEWLINE) {
+		return fst
+	}
+
+	seq := new(SequenceExpr)
+	seq.token = previous(p)
+	seq.left = fst
+	seq.operator = previous(p)
+	if is_at_end(p) || check(p, .RSQUIRLY) {
+		seq.right = nil
+	} else {
+		seq.right = parse_expression_top(p)
+	}
+	return seq
+}
+
+// Parse an expression.
 parse_expression :: proc(p: ^Parser) -> Expr {
-	return parse_precedence(p, .PIPELINE)
+	return parse_precedence(p, .ASSIGNMENT)
 }
 
 //---------------------------------------------------------
@@ -839,7 +872,7 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
 			if match(p, .LSQUIRLY) {} 	// for block expressions
 			expr.else_branch = parse_expression(p)
-			if match(p, .SEMI) {}
+			if match(p, .NEWLINE) {}
 			consume(p, .RSQUIRLY, "'else' must be the last case.")
 			break
 		}
@@ -849,7 +882,7 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		consume(p, .FAT_ARROW, "Expect '=>' after case.")
 		if match(p, .LSQUIRLY) {} 	// for block expressions
 		case_node.body = parse_expression(p)
-		if match(p, .SEMI) {}
+		if match(p, .NEWLINE) {}
 		append(&cases, case_node)
 	}
 
@@ -858,6 +891,84 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	}
 
 	expr.cases = cases[:]
+	return expr
+}
+
+parse_while :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(WhileExpr)
+	expr.token = previous(p)
+	expr.is_whilent = expr.token.type == .WHILENT
+	expr.condition = parse_expression(p)
+
+	consume(p, .LSQUIRLY, "Expect '{' after condition.")
+	expr.body = parse_block_expr(p, can_assign).(^BlockExpr)
+	return expr
+}
+
+parse_for :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	token := previous(p)
+
+	// Differentiate between for-in and classic for loop
+	if check(p, .IDENT) && p.tokens[p.current + 1].type == .IN {
+		expr := new(ForInExpr)
+		expr.token = token
+		expr.var_name = advance(p)
+		advance(p) // consume IN
+		expr.iterable = parse_expression(p)
+		consume(p, .LSQUIRLY, "Expect '{' after iterable.")
+		expr.body = parse_block_expr(p, can_assign).(^BlockExpr)
+		return expr
+	}
+
+	stmt := new(ForExpr)
+	stmt.token = token
+	if match(p, .SEMI) {
+		stmt.initializer = nil
+	} else if match(p, .VAR, .VAL) {
+		stmt.initializer = parse_var_decl_expression(p, can_assign)
+	} else {
+		stmt.initializer = parse_expression(p)
+	}
+	consume(p, .SEMI, "Expect ';' after initializer.")
+
+	if !match(p, .SEMI) {
+		stmt.condition = parse_expression(p)
+		consume(p, .SEMI, "Expect ';' after loop condition.")
+	}
+
+	if !match(p, .LSQUIRLY) {
+		stmt.increment = parse_expression(p)
+		consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
+	}
+
+	stmt.body = parse_block_expr(p, can_assign).(^BlockExpr)
+	return stmt
+}
+
+parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(VarDeclExpr)
+	expr.token = previous(p)
+	expr.is_final = expr.token.type == .VAL
+	bindings := make([dynamic]VarBinding)
+
+	for {
+		binding: VarBinding
+		binding.name = consume(p, .IDENT, "Expect variable name.")
+		if match(p, .EQUAL) {
+			binding.initializer = parse_expression(p)
+		}
+		append(&bindings, binding)
+
+		if !match(p, .COMMA) {break}
+	}
+	expr.bindings = bindings[:]
+	return expr
+}
+
+parse_print :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(PrintExpr)
+	expr.token = previous(p)
+	expr.expr = parse_expression(p)
 	return expr
 }
 
@@ -1016,6 +1127,7 @@ parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		assign.value = value
 		return assign
 	}
+
 	var_expr := new(VariableExpr)
 	var_expr.token = name
 	var_expr.name = name
@@ -1074,7 +1186,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_block_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(BlockExpr)
 	expr.token = previous(p) // the '{'
-	expr.expression = parse_expression(p)
+	expr.expression = parse_expression_top(p)
 	consume(p, .RSQUIRLY, "Expect '}' after block.")
 	return expr
 }
@@ -1094,7 +1206,7 @@ parse_continue :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ReturnExpr)
 	expr.token = previous(p)
-	if !match(p, .SEMI) && !check(p, .RSQUIRLY) && !is_at_end(p) {
+	if !match(p, .NEWLINE) && !check(p, .RSQUIRLY) && !is_at_end(p) {
 		expr.value = parse_expression(p)
 	}
 	return expr
@@ -1103,7 +1215,7 @@ parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_exit :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ExitExpr)
 	expr.token = previous(p)
-	if !match(p, .SEMI) && !check(p, .RSQUIRLY) && !is_at_end(p) {
+	if !match(p, .NEWLINE) && !check(p, .RSQUIRLY) && !is_at_end(p) {
 		expr.code = parse_expression(p)
 	}
 	return expr
@@ -1124,29 +1236,6 @@ parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	pipe.operator = operator
 	pipe.right = right
 	return pipe
-}
-
-// very similar to pipe in terms of parsing, but need to account for effects of
-// automatic semicolon insertion
-parse_semi :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
-	operator := previous(p)
-	rule := get_rule(operator.type)
-
-	// a bit of a hacky way to check if the semicolon pipe ended
-	// need this to account for ASI
-	right: Expr
-	if is_at_end(p) || check(p, .RSQUIRLY) {
-		right = nil
-	} else {
-		right = parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
-	}
-
-	semi := new(SemicolonExpr)
-	semi.token = operator
-	semi.left = left
-	semi.operator = operator
-	semi.right = right
-	return semi
 }
 
 parse_logical :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
@@ -1248,7 +1337,7 @@ rules: [TokenType]ParseRule = {
 	.DOT           = {nil, parse_dot, .CALL},
 	.MINUS         = {parse_unary, parse_binary, .TERM},
 	.PLUS          = {nil, parse_binary, .TERM},
-	.SEMI          = {nil, parse_semi, .NONE},
+	.SEMI          = {nil, nil, .NONE},
 	.SLASH         = {nil, parse_binary, .FACTOR},
 	.STAR          = {nil, parse_binary, .FACTOR},
 	.PERCENT       = {nil, parse_binary, .FACTOR},
@@ -1272,16 +1361,16 @@ rules: [TokenType]ParseRule = {
 	.ELSE          = {nil, nil, .NONE},
 	.EXIT          = {parse_exit, nil, .NONE},
 	.FALSE         = {parse_literal, nil, .NONE},
-	.FOR           = {nil, nil, .NONE},
+	.FOR           = {parse_for, nil, .NONE},
 	.FUNC          = {parse_lambda, nil, .NONE},
 	.IF            = {parse_if_expr, nil, .CONDITIONAL},
-	.IFNT          = {nil, nil, .NONE},
+	.IFNT          = {parse_if_expr, nil, .CONDITIONAL},
 	.IN            = {nil, nil, .NONE},
 	.IT            = {parse_it, nil, .NONE},
 	.NIL           = {parse_literal, nil, .NONE},
 	.NOT           = {parse_unary, nil, .NONE},
 	.OR            = {nil, parse_logical, .OR},
-	.PRINT         = {nil, nil, .NONE},
+	.PRINT         = {parse_print, nil, .NONE},
 	.PUB           = {nil, nil, .NONE},
 	.RETURN        = {parse_return, nil, .NONE},
 	.SWITCH        = {parse_switch_expr, nil, .CONDITIONAL},
@@ -1289,10 +1378,10 @@ rules: [TokenType]ParseRule = {
 	.THIS          = {parse_this, nil, .NONE},
 	.TRUE          = {parse_literal, nil, .NONE},
 	.USE           = {nil, nil, .NONE},
-	.WHILE         = {nil, nil, .NONE},
-	.WHILENT       = {nil, nil, .NONE},
-	.VAR           = {nil, nil, .NONE},
-	.VAL           = {nil, nil, .NONE},
+	.WHILE         = {parse_while, nil, .NONE},
+	.WHILENT       = {parse_while, nil, .NONE},
+	.VAR           = {parse_var_decl_expression, nil, .NONE},
+	.VAL           = {parse_var_decl_expression, nil, .NONE},
 	.EOF           = {nil, nil, .NONE},
 }
 
@@ -1313,14 +1402,16 @@ error :: proc(p: ^Parser, token: Token, message: string) {
 
 	color_red(os.stderr, "parse error ")
 
-	if token.type == TokenType.EOF {
-		fmt.eprintf("at end")
+	if token.type == .EOF {
+		fmt.eprint("at end")
+	} else if token.type == .NEWLINE {
+		fmt.eprint("at end of line")
 	} else {
 		fmt.eprintf("at '%s'", token.lexeme)
 	}
 
-	fmt.eprintf(": %s\n", message)
-	fmt.eprintf("  on [line %d]\n", token.line)
+	fmt.eprintfln(": %s", message)
+	fmt.eprintfln("  on [line %d]", token.line)
 	p.had_error = true
 }
 
@@ -1371,15 +1462,15 @@ consume :: proc(p: ^Parser, type: TokenType, message: string) -> Token {
 	return peek(p)
 }
 
-consume_semi :: proc(p: ^Parser, message: string) {
-	consume(p, .SEMI, fmt.tprintf("Expect ';' after %s.", message))
+consume_newline :: proc(p: ^Parser, message: string) {
+	consume(p, .NEWLINE, fmt.tprintf("Expect newline after %s.", message))
 }
 
 synchronize :: proc(p: ^Parser) {
 	p.panic_mode = false
 
 	for !is_at_end(p) {
-		if previous(p).type == .SEMI {return}
+		if previous(p).type == .NEWLINE {return}
 
 		#partial switch peek(p).type {
 		case .BREAK,
@@ -1555,6 +1646,16 @@ free_expr :: proc(expr: Expr) {
 	case ^ExitExpr:
 		free_expr(e.code)
 		free(e)
+	case ^ForInExpr:
+		free_expr(e.iterable)
+		free_expr(e.body)
+		free(e)
+	case ^ForExpr:
+		free_expr(e.initializer)
+		free_expr(e.body)
+		free_expr(e.condition)
+		free_expr(e.increment)
+		free(e)
 	case ^GetExpr:
 		free_expr(e.receiver)
 		free(e)
@@ -1591,10 +1692,13 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.left)
 		free_expr(e.right)
 		free(e)
+	case ^PrintExpr:
+		free_expr(e.expr)
+		free(e)
 	case ^ReturnExpr:
 		free_expr(e.value)
 		free(e)
-	case ^SemicolonExpr:
+	case ^SequenceExpr:
 		free_expr(e.left)
 		free_expr(e.right)
 		free(e)
@@ -1627,7 +1731,17 @@ free_expr :: proc(expr: Expr) {
 	case ^UnaryExpr:
 		free_expr(e.right)
 		free(e)
+	case ^VarDeclExpr:
+		for binding in e.bindings {
+			free_expr(binding.initializer)
+		}
+		delete(e.bindings)
+		free(e)
 	case ^VariableExpr:
+		free(e)
+	case ^WhileExpr:
+		free_expr(e.body)
+		free_expr(e.condition)
 		free(e)
 	}
 }
@@ -1921,6 +2035,34 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 			print_indent(b, indent)
 		}
 		strings.write_string(b, ")\n")
+	case ^ForInExpr:
+		print_indent(b, indent)
+		fmt.sbprintf(b, "(for-in %s\n", e.var_name.lexeme)
+		print_expr(b, e.iterable, indent + 1)
+		print_expr(b, e.body, indent + 1)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
+	case ^ForExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(for\n")
+		print_indent(b, indent + 1)
+		strings.write_string(b, "init:\n")
+		print_expr(b, e.initializer, indent + 2)
+		if e.condition != nil {
+			cond: Expr = e.condition
+			print_indent(b, indent + 1)
+			strings.write_string(b, "cond:\n")
+			print_expr(b, cond, indent + 2)
+		}
+		if e.increment != nil {
+			inc: Expr = e.increment
+			print_indent(b, indent + 1)
+			strings.write_string(b, "inc:\n")
+			print_expr(b, inc, indent + 2)
+		}
+		print_expr(b, e.body, indent + 1)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
 	case ^GetExpr:
 		print_indent(b, indent)
 		fmt.sbprintf(b, "(get %s\n", e.property.lexeme)
@@ -1988,6 +2130,12 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
+	case ^PrintExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(print\n")
+		print_expr(b, e.expr, indent + 1)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
 	case ^ReturnExpr:
 		print_indent(b, indent)
 		strings.write_string(b, "(return")
@@ -1998,9 +2146,9 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 			print_indent(b, indent)
 		}
 		strings.write_string(b, ")\n")
-	case ^SemicolonExpr:
+	case ^SequenceExpr:
 		print_indent(b, indent)
-		strings.write_string(b, "(;\n")
+		strings.write_string(b, "(seq\n")
 		print_expr(b, e.left, indent + 1)
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
@@ -2062,9 +2210,32 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
+	case ^VarDeclExpr:
+		print_indent(b, indent)
+		kind := e.is_final ? "val" : "var"
+		fmt.sbprintf(b, "(%s ", kind)
+		for binding, i in e.bindings {
+			if i > 0 {strings.write_string(b, " ")}
+			strings.write_string(b, binding.name.lexeme)
+			if binding.initializer != nil {
+				init: Expr = binding.initializer
+				strings.write_string(b, " =\n")
+				print_expr(b, init, indent + 1)
+			}
+		}
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
 	case ^VariableExpr:
 		print_indent(b, indent)
 		fmt.sbprintf(b, "(var %s)\n", e.name.lexeme)
+	case ^WhileExpr:
+		print_indent(b, indent)
+		kind := "whilen't" if e.is_whilent else "while"
+		fmt.sbprintf(b, "(%s\n", kind)
+		print_expr(b, e.condition, indent + 1)
+		print_expr(b, e.body, indent + 1)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
 	case:
 		fmt.sbprintf(b, "<Unknown Expr %T>\n", e)
 	}

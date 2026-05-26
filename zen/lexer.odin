@@ -173,23 +173,14 @@ make_token :: proc(l: ^Lexer, type: TokenType) -> Token {
 }
 
 /*
-Insert a "semicolon" at the end of expressions and statements. There aren't
-actually any semicolons actually added in, but I'm using that terminology for
-familiarity. This is done to make the parser simpler to work with.
-This is the way it works:
-1. Insert a semi after a line's final token.
-    a. ONLY when that token is one of these:
-        - identifier
-        - literal
-        - break
-        - return
-        - ) }
-    b. And ONLY when the next token isn't one of these:
-        - infix operator
-        - dot
+Insert a expression separator (newline) appropriately at the end of expressions
+and statements.
+Somewhat of a similar concept to automatic semicolon insertion (ASI), but it
+actually removes newlines when they cause problems and ensures they only
+separate full expressions.
 */
 @(private = "file")
-insert_semis :: proc(tokens: []Token) -> []Token {
+set_separators :: proc(tokens: []Token) -> []Token {
 	defer delete(tokens)
 	result := make([dynamic]Token)
 
@@ -203,12 +194,6 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 	}
 
 	for token, idx in tokens {
-		semi := Token {
-			type   = .SEMI,
-			lexeme = ";",
-			line   = token.line,
-		}
-
 		#partial switch token.type {
 		case .NEWLINE:
 			{
@@ -225,6 +210,10 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 			    token IS one of some particular types AND if the next token IS 
 			    NOT one of some particular types. */
 				#partial switch tokens[idx - 1].type {
+				// if the previous token was a newline, skip it; we want to
+				// collapse multiple newlines into one
+				case .NEWLINE:
+					continue
 				case .IDENT,
 				     .STRING,
 				     .NUMBER,
@@ -265,7 +254,7 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 						/* 
                         Don't add a semicolon when inside a list or parenthesis
                         grouping.
-                        This prevents a semicolon from being added after "b"
+                        This prevents a semicolon from being added after the last
                         element in a situation like this:
                         
                         var lst = [
@@ -279,11 +268,12 @@ insert_semis :: proc(tokens: []Token) -> []Token {
 
 						/* Do NOT insert a semi after the end of the expression 
                         in a block, as blocks return it. */
-						if len(block_stack) > 0 {
+						if len(block_stack) > 0 && tokens[idx + 1].type == .RSQUIRLY {
 							continue
 						}
 
-						append(&result, semi)
+						// Add the newline separator
+						append(&result, token)
 					}
 				}
 			}
@@ -679,7 +669,7 @@ lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
 		if token.type == TokenType.EOF {break}
 	}
 
-	tokens = insert_semis(toks[:])
+	tokens = set_separators(toks[:])
 
 	return tokens, true
 }

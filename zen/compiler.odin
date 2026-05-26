@@ -1176,7 +1176,6 @@ compile_while_statement :: proc(cg: ^Codegen, s: ^WhileStmt) -> bool {
 	return try(cg, end_loop(cg))
 }
 
-
 @(require_results)
 compile_for_statement :: proc(cg: ^Codegen, s: ^ForStmt) -> bool {
 	initializer := s.initializer
@@ -1560,6 +1559,197 @@ compile_switch_expression :: proc(cg: ^Codegen, e: ^SwitchExpr) -> bool {
 }
 
 @(require_results)
+compile_for_expression :: proc(cg: ^Codegen, e: ^ForExpr) -> bool {
+	initializer := e.initializer
+	condition := e.condition
+	increment := e.increment
+	body := e.body
+
+	loop_variable_slot := -1
+
+	begin_scope(cg)
+	if initializer != nil {
+		#partial switch iz in initializer {
+		case ^VarDeclExpr:
+			compile_var_decl_expression(cg, iz, is_loop_variable = true) or_return
+			loop_variable_slot = cg.current_compiler.local_count - 1
+		case:
+			compile_expression(cg, iz) or_return
+		}
+	}
+
+	loop_start := len(current_chunk(cg).code)
+	exit_jump := -1
+
+	if condition != nil {
+		compile_expression(cg, condition) or_return
+
+		// Jump out of the loop if the condition is false.
+		exit_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
+		emit_pop(cg) // Condition.
+	}
+
+	// Jump over the increment, run the body, and jump back to the
+	// increment, then go to the next iteration.
+	if increment != nil {
+		body_jump := emit_jump(cg, .OP_JUMP)
+		increment_start := len(current_chunk(cg).code)
+
+		compile_expression(cg, increment) or_return
+		emit_pop(cg)
+
+		try(cg, emit_loop(cg, loop_start)) or_return
+		loop_start = increment_start
+		try(cg, patch_jump(cg, body_jump)) or_return
+	}
+
+	try(cg, begin_loop(cg, loop_start)) or_return
+	begin_scope(cg)
+	compile_expression(cg, body) or_return
+	emit_pop(cg) // Pop off the block's return value.
+	end_scope(cg)
+
+	if loop_variable_slot != -1 {
+		loop_var := &cg.current_compiler.locals[loop_variable_slot]
+		if loop_var.is_captured {
+			emit_opcode(cg, .OP_CLOSE_LOOP_VAR)
+			emit_byte(cg, byte(loop_variable_slot))
+		}
+	}
+	try(cg, emit_loop(cg, loop_start)) or_return
+
+	if exit_jump != -1 {
+		try(cg, patch_jump(cg, exit_jump)) or_return
+		emit_pop(cg) // Condition.
+	}
+
+	end_scope(cg)
+	try(cg, end_loop(cg)) or_return
+	emit_opcode(cg, .OP_NIL) // for expressions evaluate to nil
+	return true
+}
+
+@(require_results)
+compile_for_in_expression :: proc(cg: ^Codegen, e: ^ForInExpr) -> bool {
+	iterable := e.iterable
+	var_name := e.var_name
+	body := e.body
+
+	begin_scope(cg)
+
+	emit_opcode(cg, .OP_NIL) // assign it as nil to begin with
+	try(cg, declare_variable(cg, var_name, is_final = true, is_loop_variable = true)) or_return
+	define_variable(cg, 0)
+	loop_variable_slot := cg.current_compiler.local_count - 1
+
+	// Push the iterable on the stack
+	// TODO: perhaps figure out a way to find out if the iterable is a valid
+	// iterable in advance
+	compile_expression(cg, iterable) or_return
+
+	try(
+		cg,
+		add_local(cg, synthetic_token("__iter"), is_final = true, is_loop_variable = true),
+	) or_return
+	mark_initialized(cg)
+	iter_slot := cg.current_compiler.local_count - 1
+
+	try(cg, emit_constant(cg, number_val(0))) or_return
+	try(
+		cg,
+		add_local(cg, synthetic_token("__idx"), is_final = true, is_loop_variable = true),
+	) or_return
+	mark_initialized(cg)
+	idx_slot := cg.current_compiler.local_count - 1
+
+	loop_start := len(current_chunk(cg).code)
+	exit_jump := -1
+
+	// Push idx and iter for ITERATE_NEXT.
+	emit_opcode(cg, .OP_GET_LOCAL)
+	emit_byte(cg, byte(idx_slot))
+
+	emit_opcode(cg, .OP_GET_LOCAL)
+	emit_byte(cg, byte(iter_slot))
+
+	// Pops iter and idx and checks idx < len(iter).
+	// If true, pushs (iter[idx], idx+1, true) or false.
+	emit_opcode(cg, .OP_ITERATE)
+
+	// Jump out of the loop if ITERATE_NEXT said false.
+	exit_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
+	emit_pop(cg) // Condition.
+
+	// updated idx is on top, assign it back to hidden __idx
+	emit_opcode(cg, .OP_SET_LOCAL)
+	emit_byte(cg, byte(idx_slot))
+	emit_pop(cg) // idx.
+
+	emit_opcode(cg, .OP_SET_LOCAL)
+	emit_byte(cg, byte(loop_variable_slot))
+	emit_pop(cg) // iter[idx].
+
+	try(cg, begin_loop(cg, loop_start)) or_return
+	begin_scope(cg)
+	compile_expression(cg, body) or_return
+	emit_pop(cg) // Pop off the block's return value.
+	end_scope(cg)
+
+	// close the loop var's upvalue if it was captured
+	// ensures each iteration's closure gets its own snapshot
+	loop_var := &cg.current_compiler.locals[loop_variable_slot]
+	if loop_var.is_captured {
+		emit_opcode(cg, .OP_CLOSE_LOOP_VAR)
+		emit_byte(cg, byte(loop_variable_slot))
+	}
+	try(cg, emit_loop(cg, loop_start)) or_return
+
+	try(cg, patch_jump(cg, exit_jump)) or_return
+	emit_pop(cg) // Condition.
+
+	end_scope(cg)
+	try(cg, end_loop(cg)) or_return
+	emit_opcode(cg, .OP_NIL) // for-in expressions evaluate to nil
+	return true
+}
+
+@(require_results)
+compile_while_expression :: proc(cg: ^Codegen, e: ^WhileExpr) -> bool {
+	condition := e.condition
+	body := e.body
+
+	loop_start := len(current_chunk(cg).code)
+
+	begin_scope(cg)
+	try(cg, begin_loop(cg, loop_start)) or_return
+	compile_expression(cg, condition) or_return
+
+	when CHAOTIC {
+		exit_jump: int
+		if s.is_whilent {
+			exit_jump = emit_jump(cg, .OP_JUMP_IF_TRUE)
+		} else {
+			exit_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
+		}
+	} else {
+		exit_jump := emit_jump(cg, .OP_JUMP_IF_FALSE)
+	}
+
+	emit_pop(cg)
+	compile_expression(cg, body) or_return
+	emit_pop(cg) // Pop the block's return value
+	try(cg, emit_loop(cg, loop_start)) or_return
+
+	try(cg, patch_jump(cg, exit_jump)) or_return
+	emit_pop(cg)
+
+	end_scope(cg)
+	try(cg, end_loop(cg)) or_return
+	emit_opcode(cg, .OP_NIL) // return value of the while expression
+	return true
+}
+
+@(require_results)
 compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
 	if cg.current_compiler.loop_count == 0 {
 		codegen_error(cg, "Cannot break outside a loop.")
@@ -1603,6 +1793,40 @@ compile_continue_expression :: proc(cg: ^Codegen, s: ^ContinueExpr) -> bool {
 	}
 
 	return try(cg, emit_loop(cg, loop.start))
+}
+
+@(require_results)
+compile_var_decl_expression :: proc(
+	cg: ^Codegen,
+	e: ^VarDeclExpr,
+	is_loop_variable: bool = false,
+) -> bool {
+	bindings := e.bindings
+	is_final := e.is_final
+
+	for binding in bindings {
+		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
+		if binding.initializer == nil {
+			if is_final {
+				codegen_error(cg, "Final variables must be initialized.")
+				return false
+			} else {
+				emit_opcode(cg, .OP_NIL)
+			}
+		} else {
+			/* Allow anonymous functions to recurse by referring to the name they've
+             been bound to. */
+			if _, ok := binding.initializer.(^LambdaExpr); ok {
+				mark_initialized(cg)
+			}
+			compile_expression(cg, binding.initializer) or_return
+		}
+
+		define_variable(cg, global)
+	}
+
+	emit_opcode(cg, .OP_NIL) // return value of a var declaration
+	return true
 }
 
 @(require_results)
@@ -1707,7 +1931,9 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		cg.current_token = e.token
 		begin_scope(cg)
 		compile_expression(cg, e.expression) or_return
-		end_scope(cg)
+		emit_opcode(cg, .OP_SET_SAVE) // save the return value in vm register
+		end_scope(cg) // pop off all local variables
+		emit_opcode(cg, .OP_GET_SAVE) // retrieve the return value
 	case ^CallExpr:
 		cg.current_token = e.token
 		arguments := e.arguments
@@ -1764,6 +1990,12 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ExitExpr:
 		cg.current_token = e.token
 		compile_exit_expression(cg, e) or_return
+	case ^ForExpr:
+		cg.current_token = e.token
+		compile_for_expression(cg, e) or_return
+	case ^ForInExpr:
+		cg.current_token = e.token
+		compile_for_in_expression(cg, e) or_return
 	case ^GetExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
@@ -1882,10 +2114,14 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		cg.pipeline_active = true
 		compile_expression(cg, e.right) or_return
 		cg.pipeline_active = old_pipeline
+	case ^PrintExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.expr) or_return
+		emit_opcode(cg, .OP_PRINT)
 	case ^ReturnExpr:
 		cg.current_token = e.token
 		compile_return_expression(cg, e) or_return
-	case ^SemicolonExpr:
+	case ^SequenceExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
 		emit_opcode(cg, .OP_POP) // discard the result
@@ -1984,6 +2220,12 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^VariableExpr:
 		cg.current_token = e.token
 		try(cg, emit_named_variable(cg, e.token, can_assign = false)) or_return
+	case ^VarDeclExpr:
+		cg.current_token = e.token
+		compile_var_decl_expression(cg, e) or_return
+	case ^WhileExpr:
+		cg.current_token = e.token
+		compile_while_expression(cg, e) or_return
 	}
 
 	return true
@@ -2022,7 +2264,9 @@ codegen_error :: proc(cg: ^Codegen, message: string) {
 	color_red(os.stderr, "compile error ")
 
 	if token.type == .EOF {
-		fmt.eprintf("at end")
+		fmt.eprint("at end")
+	} else if token.type == .NEWLINE {
+		fmt.eprint("at end of line")
 	} else {
 		fmt.eprintf("at '%s'", token.lexeme)
 	}

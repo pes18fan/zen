@@ -194,6 +194,10 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_GET_IT", offset)
 	case .OP_SET_IT:
 		return simple_instruction("OP_SET_IT", offset)
+	case .OP_GET_SAVE:
+		return simple_instruction("OP_GET_SAVE", offset)
+	case .OP_SET_SAVE:
+		return simple_instruction("OP_SET_SAVE", offset)
 	case .OP_GREATER:
 		return simple_instruction("OP_GREATER", offset)
 	case .OP_LESS:
