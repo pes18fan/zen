@@ -1127,14 +1127,18 @@ interpret :: proc(
 		return .INTERPRET_OK
 	}
 
-	// Collect global variables before codegen
-	if !config.repl {
-		// collect_script_globals(&vm.compiler_globals, gc, decls)
-	}
+	// Collect global function definitions before codegen
+	// This allows mutual recursion
+	collect_globals(&vm.compiler_globals, gc, expr)
 
 	fn, cg_ok := codegen_expr(gc, expr, &vm.compiler_globals)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
+	}
+
+	// empty program
+	if fn == nil {
+		return .INTERPRET_OK
 	}
 
 	/* Time the compiler. */

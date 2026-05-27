@@ -2039,13 +2039,15 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		emit_opcode(cg, .OP_GET_IT)
 	case ^LambdaExpr:
 		cg.current_token = e.token
-		f := e.func_decl
+		params := e.params
+		body := e.body
+		bound_to := e.bound_to
 
 		compile_function(
 			cg,
-			synthetic_token("lambda"),
-			f.params,
-			f.body,
+			bound_to.? or_else synthetic_token("lambda"),
+			params,
+			body,
 			.LAMBDA,
 			public = false,
 		) or_return
@@ -2124,8 +2126,10 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^SequenceExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
-		emit_opcode(cg, .OP_POP) // discard the result
-		compile_expression(cg, e.right) or_return
+		if e.right != nil {
+			emit_opcode(cg, .OP_POP) // discard the result
+			compile_expression(cg, e.right) or_return
+		}
 	case ^SubscriptExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
@@ -2311,10 +2315,8 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 	cg.current_compiler = c
 	c.function = new_function(cg.gc)
 
-	if type != .SCRIPT && type != .LAMBDA {
+	if type != .SCRIPT {
 		c.function.name = copy_string(cg.gc, name.lexeme)
-	} else if type == .LAMBDA {
-		c.function.name = copy_string(cg.gc, "lambda")
 	}
 
 	/* The first slot is the function itself. */
@@ -2362,6 +2364,11 @@ codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (fn: ^ObjFunction, s
 }
 
 codegen_expr :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
+	// empty program
+	if expr == nil {
+		return nil, true
+	}
+
 	/* Add all the native function names to the global table, for variable
      * existence checks. */
 	for fn_name in gc.global_native_fns {
@@ -2380,37 +2387,43 @@ codegen_expr :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction,
 	c: Compiler
 	init_compiler(&c, &cg, synthetic_token(""), .SCRIPT)
 
-	compile_expression(&cg, expr) or_return
+	_ = compile_expression(&cg, expr)
 	res_fn := end_compiler(&cg)
 	gc.mark_roots_arg = cg.prev_mark_roots
 	return res_fn, !cg.had_error
 }
 
-@(private = "file")
-collect_decl_globals :: proc(globals: ^Table, gc: ^GC, decl: Decl) {
-	switch d in decl {
-	case ^VarDecl:
-	case ^FuncDecl:
-		name := copy_string(gc, d.name.lexeme)
-		if _, ok := table_get(globals, name); ok {
-			return
+collect_expr_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
+	if expr == nil {return}
+
+	#partial switch e in expr {
+	case ^VarDeclExpr:
+		for binding in e.bindings {
+			// just hoist function declarations and bound lambdas
+			if _, ok := binding.initializer.(^LambdaExpr); !ok {
+				continue
+			}
+
+			name := copy_string(gc, binding.name.lexeme)
+			if _, ok := table_get(globals, name); ok {
+				return
+			}
+			table_set(globals, name, bool_val(e.is_final))
 		}
-		table_set(globals, name, bool_val(false))
-	case ^ClassDecl:
-	case ^PubDecl:
-		collect_decl_globals(globals, gc, d.decl)
-	case ^ModuleDecl:
-	case Stmt:
+	case ^SequenceExpr:
+		collect_expr_globals(globals, gc, e.left)
+		collect_expr_globals(globals, gc, e.right)
+	case:
+	// other cases don't matter
 	}
 }
 
 /* Collect all global functions declared in the file and put them into the
 `globals` table. */
-collect_script_globals :: proc(globals: ^Table, gc: ^GC, decls: []Decl) {
+collect_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
 	for fn_name in gc.global_native_fns {
 		table_set(globals, copy_string(gc, fn_name), bool_val(true))
 	}
-	for decl in decls {
-		collect_decl_globals(globals, gc, decl)
-	}
+
+	collect_expr_globals(globals, gc, expr)
 }

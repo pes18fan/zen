@@ -272,8 +272,10 @@ ItExpr :: struct {
 }
 
 LambdaExpr :: struct {
-	token:     Token,
-	func_decl: ^FuncDecl,
+	token:    Token,
+	params:   []Token,
+	body:     Expr,
+	bound_to: Maybe(Token),
 }
 
 ListExpr :: struct {
@@ -433,6 +435,9 @@ parse :: proc(p: ^Parser) -> (expr: Expr, success: bool) {
 	// }
 	//
 	// return declarations[:], !p.had_error
+	if is_at_end(p) {
+		return nil, true
+	}
 	return parse_expression_top(p), !p.had_error
 }
 
@@ -521,7 +526,15 @@ parse_func_body :: proc(p: ^Parser, name: Token) -> ^FuncDecl {
 	decl.name = name
 	params := make([dynamic]Token)
 
-	consume(p, .LPAREN, "Expect '(' after function name.")
+	consume(
+		p,
+		.LPAREN,
+		fmt.tprintf(
+			"Expect '(' after %s.",
+			"function name" if decl.token.type == .IDENT else "'func'",
+		),
+	)
+
 	if !check(p, .RPAREN) {
 		for {
 			append(&params, consume(p, .IDENT, "Expect parameter name."))
@@ -535,7 +548,7 @@ parse_func_body :: proc(p: ^Parser, name: Token) -> ^FuncDecl {
 		decl.body = parse_expression(p)
 	} else {
 		consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
-		decl.body = parse_block(p)
+		decl.body = parse_block_expr(p, rules[.RSQUIRLY].precedence <= .ASSIGNMENT)
 	}
 
 	return decl
@@ -814,6 +827,10 @@ parse_expression_top :: proc(p: ^Parser) -> Expr {
 	fst := parse_expression(p)
 	if !match(p, .NEWLINE) {
 		return fst
+	}
+
+	if p.panic_mode {
+		synchronize(p)
 	}
 
 	seq := new(SequenceExpr)
@@ -1176,17 +1193,70 @@ parse_it :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	return it_expr
 }
 
-parse_lambda :: proc(p: ^Parser, can_assign: bool) -> Expr {
+/* Handles both anonymous functions (LambdaExpr) and function declarations,
+which are interpreted as a syntactic sugar on top of a VarDeclExpr */
+parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	if !check(p, .IDENT) {
+		// just a good ol' anonymous function
+		return parse_lambda(p, can_assign, nil)
+	} else {
+		// a function declaration. We interpret it as syntactic sugar over a
+		// VarDeclExpr
+		expr := new(VarDeclExpr)
+		expr.token = previous(p)
+		expr.is_final = false // func decls are reassignable
+		bindings := make([dynamic]VarBinding)
+
+		func_binding: VarBinding
+		func_binding.name = consume(p, .IDENT, "Expect variable name.")
+		func_binding.initializer = parse_lambda(p, can_assign, func_binding.name)
+		append(&bindings, func_binding)
+		expr.bindings = bindings[:]
+		return expr
+	}
+}
+
+parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Expr {
 	lambda := new(LambdaExpr)
 	lambda.token = previous(p)
-	lambda.func_decl = parse_func_body(p, Token{type = .IDENT, lexeme = "lambda"})
+	lambda.bound_to = bound_to
+	params := make([dynamic]Token)
+
+	// TODO: improve this error message
+	consume(
+		p,
+		.LPAREN,
+		fmt.tprintf("Expect '(' after %s.", bound_to.?.lexeme if bound_to != nil else "'func'"),
+	)
+
+	if !check(p, .RPAREN) {
+		for {
+			append(&params, consume(p, .IDENT, "Expect parameter name."))
+			if !match(p, .COMMA) {break}
+		}
+	}
+	lambda.params = params[:]
+	consume(p, .RPAREN, "Expect ')' after function parameters.")
+
+	if match(p, .FAT_ARROW) {
+		// as parse_expression also parses blocks, you can technically have
+		// something like func() => {}, which means func() {} is essentially
+		// syntactic sugar
+		lambda.body = parse_expression(p)
+	} else {
+		consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
+		lambda.body = parse_block_expr(p, can_assign)
+	}
+
 	return lambda
 }
 
 parse_block_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(BlockExpr)
 	expr.token = previous(p) // the '{'
-	expr.expression = parse_expression_top(p)
+	if !check(p, .RSQUIRLY) {
+		expr.expression = parse_expression_top(p)
+	}
 	consume(p, .RSQUIRLY, "Expect '}' after block.")
 	return expr
 }
@@ -1362,7 +1432,7 @@ rules: [TokenType]ParseRule = {
 	.EXIT          = {parse_exit, nil, .NONE},
 	.FALSE         = {parse_literal, nil, .NONE},
 	.FOR           = {parse_for, nil, .NONE},
-	.FUNC          = {parse_lambda, nil, .NONE},
+	.FUNC          = {parse_function, nil, .NONE},
 	.IF            = {parse_if_expr, nil, .CONDITIONAL},
 	.IFNT          = {parse_if_expr, nil, .CONDITIONAL},
 	.IN            = {nil, nil, .NONE},
@@ -1670,7 +1740,8 @@ free_expr :: proc(expr: Expr) {
 	case ^ItExpr:
 		free(e)
 	case ^LambdaExpr:
-		free_decl(e.func_decl)
+		free_expr(e.body)
+		delete(e.params)
 		free(e)
 	case ^ListExpr:
 		for element in e.elements {
@@ -2094,7 +2165,17 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, "it\n")
 	case ^LambdaExpr:
 		print_indent(b, indent)
-		print_decl(b, e.func_decl, indent)
+		fmt.sbprintf(b, "(func (")
+		for param, i in e.params {
+			if i > 0 {strings.write_string(b, " ")}
+			strings.write_string(b, param.lexeme)
+		}
+		strings.write_string(b, ")\n")
+		print_indent(b, indent + 1)
+		strings.write_string(b, "=>\n")
+		print_expr(b, e.body, indent + 2)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
 	case ^ListExpr:
 		print_indent(b, indent)
 		strings.write_string(b, "(list\n")

@@ -216,11 +216,7 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 			config.stress_gc = true
 		case:
 			{
-				if argv[1][:2] == "--" {
-					fmt.eprintf("Unknown option: %s\n", argv[1])
-					print_help(os.stderr)
-					return 1
-				} else if argv[1][0] == '-' {
+				if argv[1][0] == '-' {
 					if len(argv[1]) == 1 {
 						script = argv[1]
 						break outer
@@ -252,6 +248,10 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 							return 1
 						}
 					}
+				} else if argv[1][:2] == "--" {
+					fmt.eprintf("Unknown option: %s\n", argv[1])
+					print_help(os.stderr)
+					return 1
 				} else {
 					script = argv[1]
 					argv = argv[1:]
