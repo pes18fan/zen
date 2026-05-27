@@ -1,4 +1,4 @@
-var i = 0;
+var i = 0
 while i < 5 {
     if i == 2 {
         i = i + 1
@@ -14,7 +14,7 @@ while i < 5 {
 // expect: 3
 // expect: 4
 
-i = 0;
+i = 0
 while i < 5 {
     if i == 2 {
         break

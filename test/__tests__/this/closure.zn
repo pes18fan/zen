@@ -6,7 +6,7 @@ class Foo {
     return closure
   }
 
-  toString() { return "Foo"; }
+  toString() { return "Foo" }
 }
 
 var closure = Foo().getClosure()

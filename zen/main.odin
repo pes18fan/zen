@@ -6,7 +6,7 @@ import "core:os"
 import "core:path/filepath"
 import ic "isocline"
 
-VERSION :: #load("../.zen_version")
+VERSION :: string(#load("../.zen_version"))
 
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)

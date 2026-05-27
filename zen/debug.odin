@@ -304,7 +304,7 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_MODULE_USER_LONG:
 		return user_module_instruction("OP_MODULE_USER_LONG", c, offset, long = true)
 	case .OP_ITERATE:
-		return simple_instruction("OP_ITERATE_NEXT", offset)
+		return simple_instruction("OP_ITERATE", offset)
 	case .OP_EXIT:
 		return simple_instruction("OP_EXIT", offset)
 	case:

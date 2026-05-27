@@ -1119,9 +1119,7 @@ interpret :: proc(
 	}
 
 	if config.dump_ast {
-		// TODO: make the ast representation a bit nicer
-		str := ast_string_expr(expr)
-		defer delete(str)
+		str := ast_string(expr)
 		fmt.println(str)
 
 		return .INTERPRET_OK
@@ -1131,7 +1129,7 @@ interpret :: proc(
 	// This allows mutual recursion
 	collect_globals(&vm.compiler_globals, gc, expr)
 
-	fn, cg_ok := codegen_expr(gc, expr, &vm.compiler_globals)
+	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}

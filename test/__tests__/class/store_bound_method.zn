@@ -1,6 +1,6 @@
 class Adder {
     init(n) { 
-        this.n = n; 
+        this.n = n 
     }
     add(x) => this.n + x
 }

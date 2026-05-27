@@ -1,5 +1,5 @@
 class Base {
-  toString() { return "Base"; }
+  toString() { return "Base" }
 }
 
 class Derived < Base {
@@ -10,7 +10,7 @@ class Derived < Base {
     return closure
   }
 
-  toString() { return "Derived"; }
+  toString() { return "Derived" }
 }
 
 var closure = Derived().getClosure()

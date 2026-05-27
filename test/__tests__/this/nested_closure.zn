@@ -12,7 +12,7 @@ class Foo {
     return f
   }
 
-  toString() { return "Foo"; }
+  toString() { return "Foo" }
 }
 
 var closure = Foo().getClosure()

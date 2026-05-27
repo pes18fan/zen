@@ -13,6 +13,7 @@ Expr :: union {
 	^BlockExpr,
 	^BreakExpr,
 	^CallExpr,
+	^ClassExpr,
 	^ContinueExpr,
 	^ExitExpr,
 	^ForExpr,
@@ -36,165 +37,18 @@ Expr :: union {
 	^SwitchExpr,
 	^ThisExpr,
 	^UnaryExpr,
+	^UseExpr,
 	^VariableExpr,
 	^VarDeclExpr,
 	^WhileExpr,
 }
-
-Stmt :: union {
-	^BlockStmt,
-	^BreakStmt,
-	^ContinueStmt,
-	^EmptyStmt,
-	^ExitStmt,
-	^ExprStmt,
-	^ForInStmt,
-	^ForStmt,
-	^IfStmt,
-	^PrintStmt,
-	^ReturnStmt,
-	^SwitchStmt,
-	^WhileStmt,
-}
-
-Decl :: union {
-	^ClassDecl,
-	^FuncDecl,
-	^ModuleDecl,
-	^PubDecl,
-	^VarDecl,
-	Stmt,
-}
-
-// Declarations
 
 VarBinding :: struct {
 	name:        Token,
 	initializer: Expr,
 }
 
-VarDecl :: struct {
-	token:    Token,
-	is_final: bool,
-	bindings: []VarBinding,
-}
-
-ClassDecl :: struct {
-	token:      Token,
-	name:       Token,
-	superclass: Maybe(Token),
-	methods:    []^FuncDecl,
-}
-
-ModuleDecl :: struct {
-	token: Token,
-	path:  Token,
-}
-
-FunctionBody :: union #no_nil {
-	^BlockStmt,
-	Expr,
-}
-
-FuncDecl :: struct {
-	token:  Token,
-	name:   Token,
-	params: []Token,
-	body:   FunctionBody,
-}
-
-PubDecl :: struct {
-	token: Token,
-	decl:  Decl,
-}
-
-// Statements
-
-BlockStmt :: struct {
-	token:        Token,
-	declarations: []Decl,
-}
-
-BreakStmt :: struct {
-	token: Token,
-}
-
-ContinueStmt :: struct {
-	token: Token,
-}
-
-EmptyStmt :: struct {
-	token: Token,
-}
-
-ExitStmt :: struct {
-	token: Token,
-	code:  Expr,
-}
-
-ExprStmt :: struct {
-	token: Token,
-	expr:  Expr,
-}
-
-ForInStmt :: struct {
-	token:    Token,
-	var_name: Token,
-	iterable: Expr,
-	body:     ^BlockStmt,
-}
-
-ForStmt :: struct {
-	token:       Token,
-	initializer: union #no_nil {
-		^VarDecl,
-		^ExprStmt,
-		^EmptyStmt,
-	},
-	condition:   Expr,
-	increment:   Expr,
-	body:        ^BlockStmt,
-}
-
-IfStmt :: struct {
-	token:       Token,
-	is_ifnt:     bool,
-	condition:   Expr,
-	then_branch: ^BlockStmt,
-	else_branch: ^BlockStmt,
-}
-
-PrintStmt :: struct {
-	token: Token,
-	expr:  Expr,
-}
-
-ReturnStmt :: struct {
-	token: Token,
-	value: Expr,
-}
-
-SwitchCase :: struct {
-	condition: Expr,
-	body:      Stmt,
-}
-
-SwitchStmt :: struct {
-	token:       Token,
-	condition:   Expr,
-	cases:       []SwitchCase,
-	else_branch: Stmt,
-}
-
-WhileStmt :: struct {
-	token:      Token,
-	is_whilent: bool,
-	condition:  Expr,
-	body:       ^BlockStmt,
-}
-
 // Expressions
-
 AssignExpr :: struct {
 	token: Token,
 	name:  Token,
@@ -271,11 +125,25 @@ ItExpr :: struct {
 	token: Token,
 }
 
+ClassExpr :: struct {
+	token:      Token,
+	name:       Token,
+	superclass: Maybe(Token),
+	methods:    []^LambdaExpr,
+	public:     bool,
+}
+
+UseExpr :: struct {
+	token: Token,
+	path:  Token,
+}
+
 LambdaExpr :: struct {
 	token:    Token,
 	params:   []Token,
 	body:     Expr,
 	bound_to: Maybe(Token),
+	public:   bool,
 }
 
 ListExpr :: struct {
@@ -425,419 +293,79 @@ ParseRule :: struct {
 a list of tokens stored in a parser. */
 parse :: proc(p: ^Parser) -> (expr: Expr, success: bool) {
 	// declarations := make([dynamic]Decl)
-	// for !is_at_end(p) {
+	// for !parser_is_at_end(p) {
 	// 	decl := parse_declaration(p)
 	// 	append(&declarations, decl)
 	//
 	// 	if p.panic_mode {
-	// 		synchronize(p)
+	// 		parser_synchronize(p)
 	// 	}
 	// }
 	//
-	// return declarations[:], !p.had_error
-	if is_at_end(p) {
+	// return declarations[:], !p.had_parser_error
+	if parser_is_at_end(p) {
 		return nil, true
 	}
-	return parse_expression_top(p), !p.had_error
+	return parse_expression_top(p), !p.had_parser_error
 }
 
-parse_declaration :: proc(p: ^Parser) -> Decl {
-	switch {
-	case match(p, .VAR, .VAL):
-		return parse_var_decl(p)
-	case match(p, .CLASS):
-		return parse_class_decl(p)
-	case match(p, .USE):
-		return parse_module_decl(p)
-	case match(p, .FUNC):
-		return parse_func_decl(p, "function")
-	case match(p, .PUB):
-		return parse_pub_decl(p)
-	}
-	return parse_statement(p)
+parse_method :: proc(p: ^Parser, can_assign: bool) -> ^LambdaExpr {
+	name := parser_consume(p, .IDENT, "Expect method name.")
+	return parse_lambda(p, can_assign, name).(^LambdaExpr)
 }
 
-parse_var_decl :: proc(p: ^Parser) -> ^VarDecl {
-	decl := new(VarDecl)
-	decl.token = previous(p)
-	decl.is_final = decl.token.type == .VAL
-	bindings := make([dynamic]VarBinding)
-
-	for {
-		binding: VarBinding
-		binding.name = consume(p, .IDENT, "Expect variable name.")
-		if match(p, .EQUAL) {
-			binding.initializer = parse_expression(p)
-		}
-		append(&bindings, binding)
-
-		if !match(p, .COMMA) {break}
-	}
-	decl.bindings = bindings[:]
-
-	consume_newline(p, "variable declaration")
-	return decl
-}
-
-parse_class_decl :: proc(p: ^Parser) -> ^ClassDecl {
-	decl := new(ClassDecl)
-	decl.token = previous(p)
-	decl.name = consume(p, .IDENT, "Expect class name.")
-	methods := make([dynamic]^FuncDecl)
-
-	if match(p, .LESS) {
-		decl.superclass = consume(p, .IDENT, "Expect superclass name.")
-	}
-
-	consume(p, .LSQUIRLY, "Expect '{' before class body.")
-	for !check(p, .RSQUIRLY) && !is_at_end(p) {
-		append(&methods, parse_method(p))
-		if match(p, .SEMI) {}
-	}
-	decl.methods = methods[:]
-
-	consume(p, .RSQUIRLY, "Expect '}' after class body.")
-	return decl
-}
-
-parse_method :: proc(p: ^Parser) -> ^FuncDecl {
-	name := consume(p, .IDENT, "Expect method name.")
-	return parse_func_body(p, name)
-}
-
-parse_module_decl :: proc(p: ^Parser) -> ^ModuleDecl {
-	decl := new(ModuleDecl)
-	decl.token = previous(p)
-	decl.path = consume(p, .STRING, "Expect module path.")
-	return decl
-}
-
-parse_func_decl :: proc(p: ^Parser, kind: string) -> ^FuncDecl {
-	token := previous(p)
-	name := consume(p, .IDENT, fmt.tprintf("Expect %s name.", kind))
-	decl := parse_func_body(p, name)
-	decl.token = token
-	return decl
-}
-
-parse_func_body :: proc(p: ^Parser, name: Token) -> ^FuncDecl {
-	decl := new(FuncDecl)
-	decl.token = previous(p) // NOTE: this should probably be the keyword and not the name
-	decl.name = name
-	params := make([dynamic]Token)
-
-	consume(
-		p,
-		.LPAREN,
-		fmt.tprintf(
-			"Expect '(' after %s.",
-			"function name" if decl.token.type == .IDENT else "'func'",
-		),
-	)
-
-	if !check(p, .RPAREN) {
-		for {
-			append(&params, consume(p, .IDENT, "Expect parameter name."))
-			if !match(p, .COMMA) {break}
-		}
-	}
-	decl.params = params[:]
-	consume(p, .RPAREN, "Expect ')' after function parameters.")
-
-	if match(p, .FAT_ARROW) {
-		decl.body = parse_expression(p)
-	} else {
-		consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
-		decl.body = parse_block_expr(p, rules[.RSQUIRLY].precedence <= .ASSIGNMENT)
-	}
-
-	return decl
-}
-
-parse_pub_decl :: proc(p: ^Parser) -> ^PubDecl {
-	decl := new(PubDecl)
-	decl.token = previous(p)
-	if match(p, .FUNC) {
-		decl.decl = parse_func_decl(p, "function")
-	} else if match(p, .CLASS) {
-		decl.decl = parse_class_decl(p)
-	} else {
-		error(p, peek(p), "Only functions or classes can be set as public.")
-	}
-	return decl
-}
-
-
-get_rule :: proc(type: TokenType) -> ^ParseRule {
+parser_get_rule :: proc(type: TokenType) -> ^ParseRule {
 	return &rules[type]
 }
 
 parse_precedence :: proc(p: ^Parser, precedence: Precedence) -> Expr {
-	advance(p)
+	parser_advance(p)
 
-	// if is_at_end(p) {
-	// 	error(p, previous(p), "Expect expression.")
-	// 	return nil
-	// }
+	if p.prev_was_eof {
+		parser_error(p, parser_previous(p), "Expect expression.")
+		return nil
+	}
 
-	prefix_rule := get_rule(previous(p).type).prefix
+	prefix_rule := parser_get_rule(parser_previous(p).type).prefix
 	if prefix_rule == nil {
-		error(p, previous(p), "Expect expression.")
+		parser_error(p, parser_previous(p), "Expect expression.")
 		return nil
 	}
 
 	can_assign := precedence <= .ASSIGNMENT
 	expr := prefix_rule(p, can_assign)
 
-	for precedence <= get_rule(peek(p).type).precedence {
-		advance(p)
-		infix_rule := get_rule(previous(p).type).infix
+	for precedence <= parser_get_rule(parser_peek(p).type).precedence {
+		parser_advance(p)
+		infix_rule := parser_get_rule(parser_previous(p).type).infix
 		if infix_rule != nil {
 			expr = infix_rule(p, expr, can_assign)
 		}
 	}
 
-	if can_assign && match(p, .EQUAL) {
-		error(p, previous(p), "Invalid assignment target.")
+	if can_assign && parser_match(p, .EQUAL) {
+		parser_error(p, parser_previous(p), "Invalid assignment target.")
 	}
 
 	return expr
 }
 
-// Statement parsers
-
-parse_statement :: proc(p: ^Parser) -> Stmt {
-	when CHAOTIC {
-		if match(p, .IFNT) {
-			return parse_if_stmt(p, true)
-		} else if match(p, .WHILENT) {
-			return parse_while_stmt(p, true)
-		}
-	}
-
-	switch {
-	case match(p, .IF):
-		return parse_if_stmt(p, false)
-	case match(p, .WHILE):
-		return parse_while_stmt(p, false)
-	case match(p, .BREAK):
-		return parse_break_stmt(p)
-	case match(p, .CONTINUE):
-		return parse_continue_stmt(p)
-	case match(p, .FOR):
-		return parse_for_stmt(p)
-	case match(p, .LSQUIRLY):
-		return parse_block(p)
-	case match(p, .PRINT):
-		return parse_print_stmt(p)
-	case match(p, .RETURN):
-		return parse_return_stmt(p)
-	case match(p, .EXIT):
-		return parse_exit_stmt(p)
-	case match(p, .SWITCH):
-		return parse_switch_stmt(p)
-	case match(p, .SEMI):
-		stmt := new(EmptyStmt)
-		stmt.token = previous(p)
-		return stmt
-	}
-
-	return parse_expression_stmt(p)
-}
-
-parse_if_stmt :: proc(p: ^Parser, is_ifnt: bool) -> ^IfStmt {
-	stmt := new(IfStmt)
-	stmt.token = previous(p)
-	stmt.is_ifnt = is_ifnt
-	stmt.condition = parse_expression(p)
-
-	consume(p, .LSQUIRLY, "Expect '{' after condition.")
-	stmt.then_branch = parse_block(p)
-
-	if match(p, .ELSE) {
-		consume(p, .LSQUIRLY, "Expect '{' after else.")
-		stmt.else_branch = parse_block(p)
-	}
-	return stmt
-}
-
-parse_while_stmt :: proc(p: ^Parser, is_whilent: bool) -> ^WhileStmt {
-	stmt := new(WhileStmt)
-	stmt.token = previous(p)
-	stmt.is_whilent = is_whilent
-	stmt.condition = parse_expression(p)
-
-	consume(p, .LSQUIRLY, "Expect '{' after condition.")
-	stmt.body = parse_block(p)
-	return stmt
-}
-
-parse_break_stmt :: proc(p: ^Parser) -> ^BreakStmt {
-	stmt := new(BreakStmt)
-	stmt.token = previous(p)
-	consume_newline(p, "break")
-	return stmt
-}
-
-parse_continue_stmt :: proc(p: ^Parser) -> ^ContinueStmt {
-	stmt := new(ContinueStmt)
-	stmt.token = previous(p)
-	consume_newline(p, "continue")
-	return stmt
-}
-
-parse_for_stmt :: proc(p: ^Parser) -> Stmt {
-	token := previous(p)
-	// Differentiate between for-in and classic for loop
-	if check(p, .IDENT) && p.tokens[p.current + 1].type == .IN {
-		stmt := new(ForInStmt)
-		stmt.token = token
-		stmt.var_name = advance(p)
-		advance(p) // consume IN
-		stmt.iterable = parse_expression(p)
-		consume(p, .LSQUIRLY, "Expect '{' after iterable.")
-		stmt.body = parse_block(p)
-		return stmt
-	}
-
-	stmt := new(ForStmt)
-	stmt.token = token
-	if match(p, .SEMI) {
-		empty := new(EmptyStmt)
-		empty.token = previous(p)
-		stmt.initializer = empty
-	} else if match(p, .VAR, .VAL) {
-		stmt.initializer = parse_var_decl(p)
-	} else {
-		stmt.initializer = parse_expression_stmt(p)
-	}
-
-	if !match(p, .SEMI) {
-		stmt.condition = parse_expression(p)
-		consume_newline(p, "loop condition")
-	}
-
-	if !match(p, .LSQUIRLY) {
-		stmt.increment = parse_expression(p)
-		consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
-	}
-
-	stmt.body = parse_block(p)
-	return stmt
-}
-
-parse_block :: proc(p: ^Parser) -> ^BlockStmt {
-	stmt := new(BlockStmt)
-	stmt.token = previous(p)
-	declarations := make([dynamic]Decl)
-
-	for !check(p, .RSQUIRLY) && !is_at_end(p) {
-		decl := parse_declaration(p)
-		append(&declarations, decl)
-
-		if p.panic_mode {
-			synchronize(p)
-		}
-	}
-	stmt.declarations = declarations[:]
-	consume(p, .RSQUIRLY, "Expect '}' after block.")
-
-	return stmt
-}
-
-parse_print_stmt :: proc(p: ^Parser) -> ^PrintStmt {
-	stmt := new(PrintStmt)
-	stmt.token = previous(p)
-	stmt.expr = parse_expression(p)
-	consume_newline(p, "value")
-	return stmt
-}
-
-parse_return_stmt :: proc(p: ^Parser) -> ^ReturnStmt {
-	stmt := new(ReturnStmt)
-	stmt.token = previous(p)
-	if !match(p, .SEMI) {
-		stmt.value = parse_expression(p)
-		consume_newline(p, "return value")
-	}
-	return stmt
-}
-
-parse_exit_stmt :: proc(p: ^Parser) -> ^ExitStmt {
-	stmt := new(ExitStmt)
-	stmt.token = previous(p)
-	if !match(p, .SEMI) {
-		stmt.code = parse_expression(p)
-		consume_newline(p, "exit code")
-	}
-	return stmt
-}
-
-parse_switch_stmt :: proc(p: ^Parser) -> ^SwitchStmt {
-	stmt := new(SwitchStmt)
-	stmt.token = previous(p)
-	cases := make([dynamic]SwitchCase)
-	has_else_clause := false
-
-	if match(p, .LSQUIRLY) {
-		// No condition
-	} else {
-		stmt.condition = parse_expression(p)
-		consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
-	}
-
-	for !match(p, .RSQUIRLY) && !is_at_end(p) {
-		if match(p, .ELSE) {
-			has_else_clause = true
-			consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
-			stmt.else_branch = parse_statement(p)
-			if check(p, .SEMI) {advance(p)}
-			consume(p, .RSQUIRLY, "'else' must be the last case.")
-			break
-		}
-
-		case_node: SwitchCase
-		case_node.condition = parse_expression(p)
-		consume(p, .FAT_ARROW, "Expect '=>' after case.")
-		case_node.body = parse_statement(p)
-		if check(p, .SEMI) {advance(p)}
-		append(&cases, case_node)
-	}
-
-	if !has_else_clause {
-		error(p, peek(p), "Switch statement must have an 'else' case.")
-	}
-
-	stmt.cases = cases[:]
-	return stmt
-}
-
-parse_expression_stmt :: proc(p: ^Parser) -> ^ExprStmt {
-	stmt := new(ExprStmt)
-	stmt.expr = parse_expression(p)
-	stmt.token = previous(p)
-	consume_newline(p, "expression")
-	return stmt
-}
-
-// Expression parsers
-
 // Parse an expression, treating newlines as expression-separating infix operators.
 parse_expression_top :: proc(p: ^Parser) -> Expr {
 	fst := parse_expression(p)
-	if !match(p, .NEWLINE) {
+	if !parser_match(p, .NEWLINE, .SEMI) {
 		return fst
 	}
 
 	if p.panic_mode {
-		synchronize(p)
+		parser_synchronize(p)
 	}
 
 	seq := new(SequenceExpr)
-	seq.token = previous(p)
+	seq.token = parser_previous(p)
 	seq.left = fst
-	seq.operator = previous(p)
-	if is_at_end(p) || check(p, .RSQUIRLY) {
+	seq.operator = parser_previous(p)
+	if parser_is_at_end(p) || parser_check(p, .RSQUIRLY) {
 		seq.right = nil
 	} else {
 		seq.right = parse_expression_top(p)
@@ -856,15 +384,15 @@ parse_expression :: proc(p: ^Parser) -> Expr {
 
 parse_if_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(IfExpr)
-	expr.token = previous(p)
+	expr.token = parser_previous(p)
 	expr.is_ifnt = expr.token.type == .IFNT
 	expr.condition = parse_expression(p)
 
-	consume(p, .LSQUIRLY, "Expect '{' after condition.")
+	parser_consume(p, .LSQUIRLY, "Expect '{' after condition.")
 	expr.then_branch = parse_block_expr(p, can_assign).(^BlockExpr)
 
-	if match(p, .ELSE) {
-		consume(p, .LSQUIRLY, "Expect '{' after else.")
+	if parser_match(p, .ELSE) {
+		parser_consume(p, .LSQUIRLY, "Expect '{' after else.")
 		expr.else_branch = parse_block_expr(p, can_assign).(^BlockExpr)
 	}
 	return expr
@@ -872,39 +400,37 @@ parse_if_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(SwitchExpr)
-	expr.token = previous(p)
+	expr.token = parser_previous(p)
 	cases := make([dynamic]ExprSwitchCase)
 	has_else_clause := false
 
-	if match(p, .LSQUIRLY) {
+	if parser_match(p, .LSQUIRLY) {
 		// No condition
 	} else {
 		expr.condition = parse_expression(p)
-		consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
+		parser_consume(p, .LSQUIRLY, "Expect '{' after switch condition.")
 	}
 
-	for !match(p, .RSQUIRLY) && !is_at_end(p) {
-		if match(p, .ELSE) {
+	for !parser_match(p, .RSQUIRLY) && !parser_is_at_end(p) {
+		if parser_match(p, .ELSE) {
 			has_else_clause = true
-			consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
-			if match(p, .LSQUIRLY) {} 	// for block expressions
+			parser_consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
 			expr.else_branch = parse_expression(p)
-			if match(p, .NEWLINE) {}
-			consume(p, .RSQUIRLY, "'else' must be the last case.")
+			if parser_match(p, .NEWLINE) {}
+			parser_consume(p, .RSQUIRLY, "'else' must be the last case.")
 			break
 		}
 
 		case_node: ExprSwitchCase
 		case_node.condition = parse_expression(p)
-		consume(p, .FAT_ARROW, "Expect '=>' after case.")
-		if match(p, .LSQUIRLY) {} 	// for block expressions
+		parser_consume(p, .FAT_ARROW, "Expect '=>' after case.")
 		case_node.body = parse_expression(p)
-		if match(p, .NEWLINE) {}
+		if parser_match(p, .NEWLINE) {}
 		append(&cases, case_node)
 	}
 
 	if !has_else_clause {
-		error(p, peek(p), "Switch expression must have an 'else' case.")
+		parser_error(p, parser_peek(p), "Switch expression must have an 'else' case.")
 	}
 
 	expr.cases = cases[:]
@@ -913,70 +439,123 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 parse_while :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(WhileExpr)
-	expr.token = previous(p)
+	expr.token = parser_previous(p)
 	expr.is_whilent = expr.token.type == .WHILENT
 	expr.condition = parse_expression(p)
 
-	consume(p, .LSQUIRLY, "Expect '{' after condition.")
+	parser_consume(p, .LSQUIRLY, "Expect '{' after condition.")
 	expr.body = parse_block_expr(p, can_assign).(^BlockExpr)
 	return expr
 }
 
 parse_for :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	token := previous(p)
+	token := parser_previous(p)
 
 	// Differentiate between for-in and classic for loop
-	if check(p, .IDENT) && p.tokens[p.current + 1].type == .IN {
+	if parser_check(p, .IDENT) && p.tokens[p.current + 1].type == .IN {
 		expr := new(ForInExpr)
 		expr.token = token
-		expr.var_name = advance(p)
-		advance(p) // consume IN
+		expr.var_name = parser_advance(p)
+		parser_advance(p) // parser_consume IN
 		expr.iterable = parse_expression(p)
-		consume(p, .LSQUIRLY, "Expect '{' after iterable.")
+		parser_consume(p, .LSQUIRLY, "Expect '{' after iterable.")
 		expr.body = parse_block_expr(p, can_assign).(^BlockExpr)
 		return expr
 	}
 
 	stmt := new(ForExpr)
 	stmt.token = token
-	if match(p, .SEMI) {
+	if parser_match(p, .SEMI) {
 		stmt.initializer = nil
-	} else if match(p, .VAR, .VAL) {
+	} else if parser_match(p, .VAR, .VAL) {
 		stmt.initializer = parse_var_decl_expression(p, can_assign)
+		parser_consume(p, .SEMI, "Expect ';' after initializer.")
 	} else {
 		stmt.initializer = parse_expression(p)
+		parser_consume(p, .SEMI, "Expect ';' after initializer.")
 	}
-	consume(p, .SEMI, "Expect ';' after initializer.")
 
-	if !match(p, .SEMI) {
+	if !parser_match(p, .SEMI) {
 		stmt.condition = parse_expression(p)
-		consume(p, .SEMI, "Expect ';' after loop condition.")
+		parser_consume(p, .SEMI, "Expect ';' after loop condition.")
 	}
 
-	if !match(p, .LSQUIRLY) {
+	if !parser_match(p, .LSQUIRLY) {
 		stmt.increment = parse_expression(p)
-		consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
+		parser_consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
 	}
 
 	stmt.body = parse_block_expr(p, can_assign).(^BlockExpr)
 	return stmt
 }
 
+parse_class_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(ClassExpr)
+	expr.token = parser_previous(p)
+	expr.name = parser_consume(p, .IDENT, "Expect class name.")
+	expr.public = false
+	methods := make([dynamic]^LambdaExpr)
+
+	if parser_match(p, .LESS) {
+		expr.superclass = parser_consume(p, .IDENT, "Expect superclass name.")
+	}
+
+	parser_consume(p, .LSQUIRLY, "Expect '{' before class body.")
+	for !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
+		append(&methods, parse_method(p, can_assign))
+		if parser_match(p, .SEMI) || parser_match(p, .NEWLINE) {}
+	}
+	expr.methods = methods[:]
+
+	parser_consume(p, .RSQUIRLY, "Expect '}' after class body.")
+	return expr
+}
+
+parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(UseExpr)
+	expr.token = parser_previous(p)
+	expr.path = parser_consume(p, .STRING, "Expect module path.")
+	return expr
+}
+
+parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	if parser_match(p, .FUNC) {
+		expr := parse_function(p, can_assign)
+		if var_e, v_ok := expr.(^VarDeclExpr); v_ok {
+			if len(var_e.bindings) > 0 {
+				if lambda, l_ok := var_e.bindings[0].initializer.(^LambdaExpr); l_ok {
+					lambda.public = true
+				}
+			}
+		}
+		return expr
+	} else if parser_match(p, .CLASS) {
+		expr := parse_class_expr(p, can_assign)
+		if class_e, ok := expr.(^ClassExpr); ok {
+			class_e.public = true
+		}
+		return expr
+	} else {
+		parser_error(p, parser_peek(p), "Only functions or classes can be set as public.")
+		return nil
+	}
+}
+
 parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(VarDeclExpr)
-	expr.token = previous(p)
+	expr.token = parser_previous(p)
 	expr.is_final = expr.token.type == .VAL
 	bindings := make([dynamic]VarBinding)
 
 	for {
 		binding: VarBinding
-		binding.name = consume(p, .IDENT, "Expect variable name.")
-		if match(p, .EQUAL) {
+		binding.name = parser_consume(p, .IDENT, "Expect variable name.")
+		if parser_match(p, .EQUAL) {
 			binding.initializer = parse_expression(p)
 		}
 		append(&bindings, binding)
 
-		if !match(p, .COMMA) {break}
+		if !parser_match(p, .COMMA) {break}
 	}
 	expr.bindings = bindings[:]
 	return expr
@@ -984,15 +563,15 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 parse_print :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(PrintExpr)
-	expr.token = previous(p)
+	expr.token = parser_previous(p)
 	expr.expr = parse_expression(p)
 	return expr
 }
 
 parse_grouping :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	token := previous(p)
+	token := parser_previous(p)
 	expr := parse_expression(p)
-	consume(p, .RPAREN, "Expect ')' after expression.")
+	parser_consume(p, .RPAREN, "Expect ')' after expression.")
 	grouping := new(GroupingExpr)
 	grouping.token = token
 	grouping.expression = expr
@@ -1001,21 +580,21 @@ parse_grouping :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 parse_list :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	list := new(ListExpr)
-	list.token = previous(p)
+	list.token = parser_previous(p)
 	elements := make([dynamic]Expr)
-	if !check(p, .RSQUARE) {
+	if !parser_check(p, .RSQUARE) {
 		for {
 			append(&elements, parse_expression(p))
-			if !match(p, .COMMA) {break}
+			if !parser_match(p, .COMMA) {break}
 		}
 	}
 	list.elements = elements[:]
-	consume(p, .RSQUARE, "Expect ']' after list elements.")
+	parser_consume(p, .RSQUARE, "Expect ']' after list elements.")
 	return list
 }
 
 parse_unary :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	operator := previous(p)
+	operator := parser_previous(p)
 	right := parse_precedence(p, .UNARY)
 	unary := new(UnaryExpr)
 	unary.token = operator
@@ -1064,7 +643,7 @@ add_escape_sequences :: proc(str: string) -> string {
 
 parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	literal := new(LiteralExpr)
-	literal.token = previous(p)
+	literal.token = parser_previous(p)
 
 	#partial switch literal.token.type {
 	case .STRING:
@@ -1072,7 +651,7 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	case .NUMBER:
 		value, ok := strconv.parse_f64(literal.token.lexeme)
 		if !ok {
-			error(
+			parser_error(
 				p,
 				literal.token,
 				fmt.tprintf(
@@ -1089,7 +668,7 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	case .NIL:
 		literal.value = nil
 	case:
-		error(
+		parser_error(
 			p,
 			literal.token,
 			fmt.tprintf(
@@ -1103,13 +682,13 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 }
 
 parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	name := previous(p)
+	name := parser_previous(p)
 
 	// No-paren string call: `puts "hello"`
 	// Only valid as a call, not as an assignment target
-	if match(p, .STRING) {
+	if parser_match(p, .STRING) {
 		str_literal := new(LiteralExpr)
-		str_literal.token = previous(p)
+		str_literal.token = parser_previous(p)
 		str_literal.value = add_escape_sequences(
 			str_literal.token.lexeme[1:len(str_literal.token.lexeme) - 1],
 		)
@@ -1122,7 +701,7 @@ parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		// Therefore, `token` for this case is the function name and `rparen`
 		// is the string.
 		call.token = name
-		call.rdelimiter = previous(p)
+		call.rdelimiter = parser_previous(p)
 		call.arguments = make([]Expr, 1)
 
 		// The no-paren function call is a bit limited as only functions assigned
@@ -1136,7 +715,7 @@ parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		return call
 	}
 
-	if can_assign && match(p, .EQUAL) {
+	if can_assign && parser_match(p, .EQUAL) {
 		value := parse_expression(p)
 		assign := new(AssignExpr)
 		assign.token = name
@@ -1153,9 +732,9 @@ parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 parse_super :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	super_expr := new(SuperExpr)
-	super_expr.token = previous(p)
-	consume(p, .DOT, "Expect '.' after 'super'.")
-	super_expr.method = consume(p, .IDENT, "Expect superclass method name.")
+	super_expr.token = parser_previous(p)
+	parser_consume(p, .DOT, "Expect '.' after 'super'.")
+	super_expr.method = parser_consume(p, .IDENT, "Expect superclass method name.")
 
 	invoked := false
 	method_args := make([dynamic]Expr, 0, 1)
@@ -1164,16 +743,16 @@ parse_super :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	}
 
 	// was the retrieved method immediately invoked?
-	if match(p, .LPAREN) {
+	if parser_match(p, .LPAREN) {
 		invoked = true
-		if !check(p, .RPAREN) {
+		if !parser_check(p, .RPAREN) {
 			for {
 				append(&method_args, parse_expression(p))
-				if !match(p, .COMMA) {break}
+				if !parser_match(p, .COMMA) {break}
 			}
 		}
 		super_expr.method_args = method_args[:]
-		consume(p, .RPAREN, "Expect ')' after method parameters.")
+		parser_consume(p, .RPAREN, "Expect ')' after method parameters.")
 	} else {
 		super_expr.method_args = nil
 	}
@@ -1183,32 +762,32 @@ parse_super :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 parse_this :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	this_expr := new(ThisExpr)
-	this_expr.token = previous(p)
+	this_expr.token = parser_previous(p)
 	return this_expr
 }
 
 parse_it :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	it_expr := new(ItExpr)
-	it_expr.token = previous(p)
+	it_expr.token = parser_previous(p)
 	return it_expr
 }
 
 /* Handles both anonymous functions (LambdaExpr) and function declarations,
 which are interpreted as a syntactic sugar on top of a VarDeclExpr */
 parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	if !check(p, .IDENT) {
+	if !parser_check(p, .IDENT) {
 		// just a good ol' anonymous function
 		return parse_lambda(p, can_assign, nil)
 	} else {
 		// a function declaration. We interpret it as syntactic sugar over a
 		// VarDeclExpr
 		expr := new(VarDeclExpr)
-		expr.token = previous(p)
+		expr.token = parser_previous(p)
 		expr.is_final = false // func decls are reassignable
 		bindings := make([dynamic]VarBinding)
 
 		func_binding: VarBinding
-		func_binding.name = consume(p, .IDENT, "Expect variable name.")
+		func_binding.name = parser_consume(p, .IDENT, "Expect variable name.")
 		func_binding.initializer = parse_lambda(p, can_assign, func_binding.name)
 		append(&bindings, func_binding)
 		expr.bindings = bindings[:]
@@ -1218,33 +797,33 @@ parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Expr {
 	lambda := new(LambdaExpr)
-	lambda.token = previous(p)
+	lambda.token = parser_previous(p)
 	lambda.bound_to = bound_to
 	params := make([dynamic]Token)
 
-	// TODO: improve this error message
-	consume(
+	// TODO: improve this parser_error message
+	parser_consume(
 		p,
 		.LPAREN,
 		fmt.tprintf("Expect '(' after %s.", bound_to.?.lexeme if bound_to != nil else "'func'"),
 	)
 
-	if !check(p, .RPAREN) {
+	if !parser_check(p, .RPAREN) {
 		for {
-			append(&params, consume(p, .IDENT, "Expect parameter name."))
-			if !match(p, .COMMA) {break}
+			append(&params, parser_consume(p, .IDENT, "Expect parameter name."))
+			if !parser_match(p, .COMMA) {break}
 		}
 	}
 	lambda.params = params[:]
-	consume(p, .RPAREN, "Expect ')' after function parameters.")
+	parser_consume(p, .RPAREN, "Expect ')' after function parameters.")
 
-	if match(p, .FAT_ARROW) {
+	if parser_match(p, .FAT_ARROW) {
 		// as parse_expression also parses blocks, you can technically have
 		// something like func() => {}, which means func() {} is essentially
 		// syntactic sugar
 		lambda.body = parse_expression(p)
 	} else {
-		consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
+		parser_consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
 		lambda.body = parse_block_expr(p, can_assign)
 	}
 
@@ -1253,30 +832,31 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 
 parse_block_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(BlockExpr)
-	expr.token = previous(p) // the '{'
-	if !check(p, .RSQUIRLY) {
+	expr.token = parser_previous(p) // the '{'
+	for parser_match(p, .NEWLINE) {}
+	if !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
 		expr.expression = parse_expression_top(p)
 	}
-	consume(p, .RSQUIRLY, "Expect '}' after block.")
+	parser_consume(p, .RSQUIRLY, "Expect '}' after block.")
 	return expr
 }
 
 parse_break :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(BreakExpr)
-	expr.token = previous(p)
+	expr.token = parser_previous(p)
 	return expr
 }
 
 parse_continue :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ContinueExpr)
-	expr.token = previous(p)
+	expr.token = parser_previous(p)
 	return expr
 }
 
 parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ReturnExpr)
-	expr.token = previous(p)
-	if !match(p, .NEWLINE) && !check(p, .RSQUIRLY) && !is_at_end(p) {
+	expr.token = parser_previous(p)
+	if !parser_check(p, .NEWLINE) && !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
 		expr.value = parse_expression(p)
 	}
 	return expr
@@ -1284,8 +864,8 @@ parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 parse_exit :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ExitExpr)
-	expr.token = previous(p)
-	if !match(p, .NEWLINE) && !check(p, .RSQUIRLY) && !is_at_end(p) {
+	expr.token = parser_previous(p)
+	if !parser_check(p, .NEWLINE) && !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
 		expr.code = parse_expression(p)
 	}
 	return expr
@@ -1296,8 +876,8 @@ parse_exit :: proc(p: ^Parser, can_assign: bool) -> Expr {
 //---------------------------------------------------------
 
 parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
-	operator := previous(p)
-	rule := get_rule(operator.type)
+	operator := parser_previous(p)
+	rule := parser_get_rule(operator.type)
 	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
 
 	pipe := new(PipeExpr)
@@ -1309,8 +889,8 @@ parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 }
 
 parse_logical :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
-	operator := previous(p)
-	rule := get_rule(operator.type)
+	operator := parser_previous(p)
+	rule := parser_get_rule(operator.type)
 	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
 
 	logical := new(LogicalExpr)
@@ -1322,8 +902,8 @@ parse_logical :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 }
 
 parse_binary :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
-	operator := previous(p)
-	rule := get_rule(operator.type)
+	operator := parser_previous(p)
+	rule := parser_get_rule(operator.type)
 	// Add 1 to precedence for left-associative operators
 	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
 
@@ -1337,26 +917,26 @@ parse_binary :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 
 parse_call :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	call := new(CallExpr)
-	call.token = previous(p) // The '(' token
+	call.token = parser_previous(p) // The '(' token
 	call.callee = left
 	arguments := make([dynamic]Expr)
 
-	if !check(p, .RPAREN) {
+	if !parser_check(p, .RPAREN) {
 		for {
 			append(&arguments, parse_expression(p))
-			if !match(p, .COMMA) {break}
+			if !parser_match(p, .COMMA) {break}
 		}
 	}
 	call.arguments = arguments[:]
-	call.rdelimiter = consume(p, .RPAREN, "Expect ')' after arguments.")
+	call.rdelimiter = parser_consume(p, .RPAREN, "Expect ')' after arguments.")
 	return call
 }
 
 parse_dot :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
-	dot := previous(p) // The '.' token
-	property := consume(p, .IDENT, "Expect property name after '.'.")
-	if can_assign && match(p, .EQUAL) {
-		equals := previous(p)
+	dot := parser_previous(p) // The '.' token
+	property := parser_consume(p, .IDENT, "Expect property name after '.'.")
+	if can_assign && parser_match(p, .EQUAL) {
+		equals := parser_previous(p)
 		value := parse_expression(p)
 		set_expr := new(SetExpr)
 		set_expr.token = equals // The '=' token
@@ -1373,10 +953,10 @@ parse_dot :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 }
 
 parse_subscript :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
-	bracket := previous(p) // The '[' token
+	bracket := parser_previous(p) // The '[' token
 	index := parse_expression(p)
-	consume(p, .RSQUARE, "Expect ']' after index.")
-	if can_assign && match(p, .EQUAL) {
+	parser_consume(p, .RSQUARE, "Expect ']' after index.")
+	if can_assign && parser_match(p, .EQUAL) {
 		value := parse_expression(p)
 		sub_set := new(SubscriptSetExpr)
 		sub_set.token = bracket
@@ -1427,7 +1007,7 @@ rules: [TokenType]ParseRule = {
 	.AND           = {nil, parse_logical, .AND},
 	.BREAK         = {parse_break, nil, .NONE},
 	.CONTINUE      = {parse_continue, nil, .NONE},
-	.CLASS         = {nil, nil, .NONE},
+	.CLASS         = {parse_class_expr, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
 	.EXIT          = {parse_exit, nil, .NONE},
 	.FALSE         = {parse_literal, nil, .NONE},
@@ -1441,13 +1021,13 @@ rules: [TokenType]ParseRule = {
 	.NOT           = {parse_unary, nil, .NONE},
 	.OR            = {nil, parse_logical, .OR},
 	.PRINT         = {parse_print, nil, .NONE},
-	.PUB           = {nil, nil, .NONE},
+	.PUB           = {parse_pub, nil, .NONE},
 	.RETURN        = {parse_return, nil, .NONE},
 	.SWITCH        = {parse_switch_expr, nil, .CONDITIONAL},
 	.SUPER         = {parse_super, nil, .NONE},
 	.THIS          = {parse_this, nil, .NONE},
 	.TRUE          = {parse_literal, nil, .NONE},
-	.USE           = {nil, nil, .NONE},
+	.USE           = {parse_use_expr, nil, .NONE},
 	.WHILE         = {parse_while, nil, .NONE},
 	.WHILENT       = {parse_while, nil, .NONE},
 	.VAR           = {parse_var_decl_expression, nil, .NONE},
@@ -1456,21 +1036,28 @@ rules: [TokenType]ParseRule = {
 }
 
 Parser :: struct {
-	tokens:     []Token,
-	current:    int,
-	had_error:  bool,
-	panic_mode: bool,
+	tokens:           []Token,
+	current:          int,
+	had_parser_error: bool,
+	panic_mode:       bool,
+	prev_was_eof:     bool,
 }
 
 init_parser :: proc(tokens: []Token) -> Parser {
-	return Parser{tokens = tokens, current = 0, had_error = false, panic_mode = false}
+	return Parser {
+		tokens = tokens,
+		current = 0,
+		had_parser_error = false,
+		panic_mode = false,
+		prev_was_eof = false,
+	}
 }
 
-error :: proc(p: ^Parser, token: Token, message: string) {
+parser_error :: proc(p: ^Parser, token: Token, message: string) {
 	if p.panic_mode {return}
 	p.panic_mode = true
 
-	color_red(os.stderr, "parse error ")
+	color_red(os.stderr, "parse parser_error ")
 
 	if token.type == .EOF {
 		fmt.eprint("at end")
@@ -1482,67 +1069,68 @@ error :: proc(p: ^Parser, token: Token, message: string) {
 
 	fmt.eprintfln(": %s", message)
 	fmt.eprintfln("  on [line %d]", token.line)
-	p.had_error = true
+	p.had_parser_error = true
 }
 
-peek :: proc(p: ^Parser) -> Token {
+parser_peek :: proc(p: ^Parser) -> Token {
 	return p.tokens[p.current]
 }
 
-previous :: proc(p: ^Parser) -> Token {
+parser_previous :: proc(p: ^Parser) -> Token {
 	return p.tokens[p.current - 1]
 }
 
-is_at_end :: proc(p: ^Parser) -> bool {
-	return peek(p).type == .EOF
+parser_is_at_end :: proc(p: ^Parser) -> bool {
+	return parser_peek(p).type == .EOF
 }
 
-check :: proc(p: ^Parser, type: TokenType) -> bool {
-	if is_at_end(p) {return false}
-	return peek(p).type == type
+parser_check :: proc(p: ^Parser, type: TokenType) -> bool {
+	if parser_is_at_end(p) {return false}
+	return parser_peek(p).type == type
 }
 
-/* Like match() but doesn't advance */
-check_any :: proc(p: ^Parser, types: ..TokenType) -> bool {
-	if is_at_end(p) {return false}
+/* Like parser_match() but doesn't parser_advance */
+parser_check_any :: proc(p: ^Parser, types: ..TokenType) -> bool {
+	if parser_is_at_end(p) {return false}
 	for type in types {
-		if check(p, type) {return true}
+		if parser_check(p, type) {return true}
 	}
 	return false
 }
 
-advance :: proc(p: ^Parser) -> Token {
-	if !is_at_end(p) {p.current += 1}
-	return previous(p)
+parser_advance :: proc(p: ^Parser) -> Token {
+	p.prev_was_eof = parser_is_at_end(p)
+	if !p.prev_was_eof {p.current += 1}
+	return parser_previous(p)
 }
 
-match :: proc(p: ^Parser, types: ..TokenType) -> bool {
+parser_match :: proc(p: ^Parser, types: ..TokenType) -> bool {
 	for type in types {
-		if check(p, type) {
-			advance(p)
+		if parser_check(p, type) {
+			parser_advance(p)
 			return true
 		}
 	}
 	return false
 }
 
-consume :: proc(p: ^Parser, type: TokenType, message: string) -> Token {
-	if check(p, type) {return advance(p)}
-	error(p, peek(p), message)
-	return peek(p)
+parser_consume :: proc(p: ^Parser, type: TokenType, message: string) -> Token {
+	if parser_check(p, type) {return parser_advance(p)}
+	parser_error(p, parser_peek(p), message)
+	return parser_peek(p)
 }
 
-consume_newline :: proc(p: ^Parser, message: string) {
-	consume(p, .NEWLINE, fmt.tprintf("Expect newline after %s.", message))
+parser_consume_newline :: proc(p: ^Parser, message: string) {
+	parser_consume(p, .NEWLINE, fmt.tprintf("Expect newline after %s.", message))
 }
 
-synchronize :: proc(p: ^Parser) {
+parser_synchronize :: proc(p: ^Parser) {
 	p.panic_mode = false
 
-	for !is_at_end(p) {
-		if previous(p).type == .NEWLINE {return}
+	for !parser_is_at_end(p) {
+		if parser_previous(p).type == .NEWLINE {return}
 
-		#partial switch peek(p).type {
+		#partial switch parser_peek(p).type {
 		case .BREAK,
 		     .CONTINUE,
 		     .CLASS,
@@ -1564,128 +1152,11 @@ synchronize :: proc(p: ^Parser) {
 		case: // do nothing.
 		}
 
-		advance(p)
+		parser_advance(p)
 	}
 }
 
 // AST freeing functions
-
-free_decls :: proc(decls: []Decl) {
-	for decl in decls {
-		free_decl(decl)
-	}
-	delete(decls)
-}
-
-free_decl :: proc(decl: Decl) {
-	if decl == nil {
-		return
-	}
-
-	switch d in decl {
-	case ^ClassDecl:
-		for method in d.methods {
-			free_decl(method)
-		}
-		delete(d.methods)
-		free(d)
-	case ^FuncDecl:
-		switch b in d.body {
-		case ^BlockStmt:
-			free_stmt(b)
-		case Expr:
-			free_expr(b)
-		}
-		delete(d.params)
-		free(d)
-	case ^ModuleDecl:
-		free(d)
-	case ^PubDecl:
-		free_decl(d.decl)
-		free(d)
-	case ^VarDecl:
-		for binding in d.bindings {
-			free_expr(binding.initializer)
-		}
-		delete(d.bindings)
-		free(d)
-	case Stmt:
-		free_stmt(d)
-	}
-}
-
-free_stmt :: proc(stmt: Stmt) {
-	if stmt == nil {
-		return
-	}
-
-	switch s in stmt {
-	case ^BlockStmt:
-		free_decls(s.declarations)
-		free(s)
-	case ^BreakStmt:
-		free(s)
-	case ^ContinueStmt:
-		free(s)
-	case ^EmptyStmt:
-		free(s)
-	case ^ExitStmt:
-		free_expr(s.code)
-		free(s)
-	case ^ExprStmt:
-		free_expr(s.expr)
-		free(s)
-	case ^ForInStmt:
-		free_expr(s.iterable)
-		free_stmt(s.body)
-		free(s)
-	case ^ForStmt:
-		switch iz in s.initializer {
-		case ^VarDecl:
-			free_decl(iz)
-		case ^ExprStmt:
-			free_expr(iz.expr)
-			free(iz)
-		case ^EmptyStmt:
-			free(iz)
-		}
-		free_decls(s.body.declarations)
-		free(s.body)
-		free_expr(s.condition)
-		free_expr(s.increment)
-		free(s)
-	case ^IfStmt:
-		free_expr(s.condition)
-		free_decls(s.then_branch.declarations)
-		free(s.then_branch)
-		if s.else_branch != nil {
-			free_decls(s.else_branch.declarations)
-			free(s.else_branch)
-		}
-		free(s)
-	case ^PrintStmt:
-		free_expr(s.expr)
-		free(s)
-	case ^ReturnStmt:
-		free_expr(s.value)
-		free(s)
-	case ^SwitchStmt:
-		free_expr(s.condition)
-		for c in s.cases {
-			free_expr(c.condition)
-			free_stmt(c.body)
-		}
-		delete(s.cases)
-		free_stmt(s.else_branch)
-		free(s)
-	case ^WhileStmt:
-		free_expr(s.condition)
-		free_decls(s.body.declarations)
-		free(s.body)
-		free(s)
-	}
-}
-
 free_expr :: proc(expr: Expr) {
 	if expr == nil {
 		return
@@ -1713,16 +1184,22 @@ free_expr :: proc(expr: Expr) {
 		delete(e.arguments)
 		free_expr(e.callee)
 		free(e)
+	case ^ClassExpr:
+		for method in e.methods {
+			free_expr(method)
+		}
+		delete(e.methods)
+		free(e)
 	case ^ExitExpr:
 		free_expr(e.code)
 		free(e)
 	case ^ForInExpr:
 		free_expr(e.iterable)
-		free_expr(e.body)
+		if e.body != nil {free_expr(e.body)}
 		free(e)
 	case ^ForExpr:
 		free_expr(e.initializer)
-		free_expr(e.body)
+		if e.body != nil {free_expr(e.body)}
 		free_expr(e.condition)
 		free_expr(e.increment)
 		free(e)
@@ -1734,8 +1211,8 @@ free_expr :: proc(expr: Expr) {
 		free(e)
 	case ^IfExpr:
 		free_expr(e.condition)
-		free_expr(e.then_branch)
-		free_expr(e.else_branch)
+		if e.then_branch != nil {free_expr(e.then_branch)}
+		if e.else_branch != nil {free_expr(e.else_branch)}
 		free(e)
 	case ^ItExpr:
 		free(e)
@@ -1802,16 +1279,18 @@ free_expr :: proc(expr: Expr) {
 	case ^UnaryExpr:
 		free_expr(e.right)
 		free(e)
+	case ^UseExpr:
+		free(e)
+	case ^VariableExpr:
+		free(e)
 	case ^VarDeclExpr:
 		for binding in e.bindings {
 			free_expr(binding.initializer)
 		}
 		delete(e.bindings)
 		free(e)
-	case ^VariableExpr:
-		free(e)
 	case ^WhileExpr:
-		free_expr(e.body)
+		if e.body != nil {free_expr(e.body)}
 		free_expr(e.condition)
 		free(e)
 	}
@@ -1820,239 +1299,17 @@ free_expr :: proc(expr: Expr) {
 
 // AST pretty-printer
 
-// allocates a string
-ast_string :: proc(decls: []Decl) -> string {
-	b := strings.builder_make()
-	defer strings.builder_destroy(&b)
-
-	for decl in decls {
-		print_decl(&b, decl, 0)
-	}
-	return strings.clone(strings.to_string(b))
-}
-
-// allocates a string
-ast_string_expr :: proc(expr: Expr) -> string {
+ast_string :: proc(expr: Expr) -> string {
 	b := strings.builder_make()
 	defer strings.builder_destroy(&b)
 
 	print_expr(&b, expr, 0)
-	return strings.clone(strings.to_string(b))
+	return fmt.tprint(strings.to_string(b))
 }
 
 print_indent :: proc(b: ^strings.Builder, indent: int) {
 	for i := 0; i < indent; i += 1 {
 		strings.write_string(b, "  ")
-	}
-}
-
-print_decl :: proc(b: ^strings.Builder, decl: Decl, indent: int) {
-	if decl == nil {
-		return
-	}
-
-	switch d in decl {
-	case ^ClassDecl:
-		print_indent(b, indent)
-		fmt.sbprintf(b, "(class %s", d.name.lexeme)
-		if d.superclass != nil {
-			superclass: Token = d.superclass.?
-			fmt.sbprintf(b, " < %s", superclass.lexeme)
-		}
-		strings.write_string(b, "\n")
-		for method in d.methods {
-			print_decl(b, method, indent + 1)
-		}
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^FuncDecl:
-		print_indent(b, indent)
-		fmt.sbprintf(b, "(func %s (", d.name.lexeme)
-		for param, i in d.params {
-			if i > 0 {strings.write_string(b, " ")}
-			strings.write_string(b, param.lexeme)
-		}
-		strings.write_string(b, ")\n")
-
-		#partial switch body in d.body {
-		case ^BlockStmt:
-			print_stmt(b, body, indent + 1)
-		case Expr:
-			print_indent(b, indent + 1)
-			strings.write_string(b, "=>\n")
-			print_expr(b, body, indent + 2)
-		}
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^ModuleDecl:
-		print_indent(b, indent)
-		fmt.sbprintf(b, "(use %s)\n", d.path.lexeme)
-	case ^PubDecl:
-		print_indent(b, indent)
-		strings.write_string(b, "(pub\n")
-		print_decl(b, d.decl, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^VarDecl:
-		print_indent(b, indent)
-		kind := d.is_final ? "val" : "var"
-		fmt.sbprintf(b, "(%s ", kind)
-		for binding, i in d.bindings {
-			if i > 0 {strings.write_string(b, " ")}
-			strings.write_string(b, binding.name.lexeme)
-			if binding.initializer != nil {
-				init: Expr = binding.initializer
-				strings.write_string(b, " =\n")
-				print_expr(b, init, indent + 1)
-			}
-		}
-		strings.write_string(b, ")\n")
-	case Stmt:
-		print_stmt(b, d, indent)
-	case:
-		fmt.sbprintf(b, "<Unknown Decl %T>\n", d)
-	}
-}
-
-print_stmt :: proc(b: ^strings.Builder, stmt: Stmt, indent: int) {
-	if stmt == nil {
-		return
-	}
-
-	switch s in stmt {
-	case ^BlockStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(block\n")
-		for d in s.declarations {
-			print_decl(b, d, indent + 1)
-		}
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^BreakStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(break)\n")
-	case ^ContinueStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(continue)\n")
-	case ^EmptyStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(empty)\n")
-	case ^ExitStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(exit")
-		if s.code != nil {
-			code: Expr = s.code
-			strings.write_string(b, "\n")
-			print_expr(b, code, indent + 1)
-			print_indent(b, indent)
-		}
-		strings.write_string(b, ")\n")
-	case ^ExprStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(expr\n")
-		print_expr(b, s.expr, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^ForInStmt:
-		print_indent(b, indent)
-		fmt.sbprintf(b, "(for-in %s\n", s.var_name.lexeme)
-		print_expr(b, s.iterable, indent + 1)
-		print_stmt(b, s.body, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^ForStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(for\n")
-		if true {
-			print_indent(b, indent + 1)
-			strings.write_string(b, "init:\n")
-			#partial switch init in s.initializer {
-			case ^VarDecl:
-				print_decl(b, init, indent + 2)
-			case ^ExprStmt:
-				print_stmt(b, init, indent + 2)
-			case ^EmptyStmt:
-				print_stmt(b, init, indent + 2)
-			}
-		}
-		if s.condition != nil {
-			cond: Expr = s.condition
-			print_indent(b, indent + 1)
-			strings.write_string(b, "cond:\n")
-			print_expr(b, cond, indent + 2)
-		}
-		if s.increment != nil {
-			inc: Expr = s.increment
-			print_indent(b, indent + 1)
-			strings.write_string(b, "inc:\n")
-			print_expr(b, inc, indent + 2)
-		}
-		print_stmt(b, s.body, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^IfStmt:
-		print_indent(b, indent)
-		kind := s.is_ifnt ? "ifn't" : "if"
-		fmt.sbprintf(b, "(%s\n", kind)
-		print_expr(b, s.condition, indent + 1)
-		print_stmt(b, s.then_branch, indent + 1)
-		if s.else_branch != nil {
-			else_b: ^BlockStmt = s.else_branch
-			print_indent(b, indent + 1)
-			strings.write_string(b, "else:\n")
-			print_stmt(b, else_b, indent + 2)
-		}
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^PrintStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(print\n")
-		print_expr(b, s.expr, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^ReturnStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(return")
-		if s.value != nil {
-			val: Expr = s.value
-			strings.write_string(b, "\n")
-			print_expr(b, val, indent + 1)
-			print_indent(b, indent)
-		}
-		strings.write_string(b, ")\n")
-	case ^SwitchStmt:
-		print_indent(b, indent)
-		strings.write_string(b, "(switch")
-		if s.condition != nil {
-			cond: Expr = s.condition
-			strings.write_string(b, "\n")
-			print_expr(b, cond, indent + 1)
-		} else {
-			strings.write_string(b, " true\n")
-		}
-		for c in s.cases {
-			print_indent(b, indent + 1)
-			strings.write_string(b, "case:\n")
-			print_expr(b, c.condition, indent + 2)
-			print_stmt(b, c.body, indent + 2)
-		}
-		if s.else_branch != nil {
-			print_indent(b, indent + 1)
-			strings.write_string(b, "else:\n")
-			print_stmt(b, s.else_branch, indent + 2)
-		}
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^WhileStmt:
-		print_indent(b, indent)
-		kind := "whilen't" if s.is_whilent else "while"
-		fmt.sbprintf(b, "(%s\n", kind)
-		print_expr(b, s.condition, indent + 1)
-		print_stmt(b, s.body, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case:
-		fmt.sbprintf(b, "<Unknown Stmt %T>\n", s)
 	}
 }
 
@@ -2090,6 +1347,19 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.callee, indent + 1)
 		for arg in e.arguments {
 			print_expr(b, arg, indent + 1)
+		}
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
+	case ^ClassExpr:
+		print_indent(b, indent)
+		fmt.sbprintf(b, "(class %s", e.name.lexeme)
+		if e.superclass != nil {
+			superclass: Token = e.superclass.?
+			fmt.sbprintf(b, " < %s", superclass.lexeme)
+		}
+		strings.write_string(b, "\n")
+		for method in e.methods {
+			print_expr(b, method, indent + 1)
 		}
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
@@ -2291,6 +1561,9 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
+	case ^UseExpr:
+		print_indent(b, indent)
+		fmt.sbprintf(b, "(use %s)\n", e.path.lexeme)
 	case ^VarDeclExpr:
 		print_indent(b, indent)
 		kind := e.is_final ? "val" : "var"
