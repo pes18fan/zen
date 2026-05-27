@@ -1057,7 +1057,7 @@ parser_error :: proc(p: ^Parser, token: Token, message: string) {
 	if p.panic_mode {return}
 	p.panic_mode = true
 
-	color_red(os.stderr, "parse parser_error ")
+	color_red(os.stderr, "parse error ")
 
 	if token.type == .EOF {
 		fmt.eprint("at end")

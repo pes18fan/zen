@@ -945,10 +945,10 @@ compile_if_expression :: proc(cg: ^Codegen, e: ^IfExpr) -> bool {
 
 	when CHAOTIC {
 		then_jump: int
-		if s.is_ifnt {
-			then_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
-		} else {
+		if e.is_ifnt {
 			then_jump = emit_jump(cg, .OP_JUMP_IF_TRUE)
+		} else {
+			then_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
 		}
 	} else {
 		then_jump := emit_jump(cg, .OP_JUMP_IF_FALSE)
@@ -1195,7 +1195,7 @@ compile_while_expression :: proc(cg: ^Codegen, e: ^WhileExpr) -> bool {
 
 	when CHAOTIC {
 		exit_jump: int
-		if s.is_whilent {
+		if e.is_whilent {
 			exit_jump = emit_jump(cg, .OP_JUMP_IF_TRUE)
 		} else {
 			exit_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
