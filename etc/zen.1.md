@@ -8,7 +8,7 @@ zen - a dynamically typed programming language
 SYNOPSIS
 ====
 
-`zen [-hvtCDTLSc?] [--dump-tokens] [FILE] [--] [ARGUMENTS]`
+`zen [-hvtCDTLS?] [--dump-tokens] [--dump-ast] [FILE] [--] [ARGUMENTS]`
 
 DESCRIPTION
 ====
@@ -16,7 +16,7 @@ DESCRIPTION
 zen is a dynamically typed programming language written in Odin. The zen program
 is a bytecode interpreter for this language.
 
-It aims to have a familiar syntax while being easy to use with new features.
+It aims to have a familiar syntax while being easy to use with various features.
 It supports both object oriented and functional programming paradigms. More
 information about the language can be found in the documentation at 
 `https://github.com/pes18fan/zen/blob/main/DOCUMENTATION.md`.
@@ -64,10 +64,11 @@ OPTIONS
 
 :   Dump tokens from lexer and exit
 
+`--dump-ast`
+
+: Dump the abstract syntax tree from the parser and exit
+
 BUGS
 ====
-
-It is known that programs making use of OOP patterns may have unexpected problems
-while running. However, its not yet known what exactly the issue is or why it occurs.
 
 Bugs can be reported and filed at https://www.github.com/pes18fan/zen/issues

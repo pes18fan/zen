@@ -71,6 +71,10 @@ VM :: struct {
 
 	/* Arguments passed to the program. */
 	args:             ^ObjList,
+
+	/* "Registers" of the VM. */
+	it:               Value,
+	save:             Value,
 }
 
 /* The result of the interpreting. */
@@ -177,6 +181,8 @@ init_VM :: proc() -> VM {
 		compiler_globals = init_table(),
 		stack_top        = -1,
 		frame_count      = 0,
+		it               = nil_val(),
+		save             = nil_val(),
 	}
 
 	return vm
@@ -185,6 +191,10 @@ init_VM :: proc() -> VM {
 /* Free's the VM's memory. */
 free_VM :: proc(vm: ^VM) {
 	free_table(&vm.compiler_globals)
+
+	// don't free explicitly, let gc do it
+	vm.it = nil_val()
+	vm.save = nil_val()
 }
 
 /* Reads a byte from the chunk and increments the instruction pointer. */
@@ -309,10 +319,6 @@ one by one.
 @(private = "file")
 run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult #no_bounds_check {
 	frame := &vm.frames[vm.frame_count - 1]
-
-	/* This variable stores the value of the built-in `it` variable, which
-	refers to the value of the last expression in a pipeline. */
-	pipeline_it: Value = nil_val()
 
 	for {
 		if config.trace_exec {
@@ -529,9 +535,13 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				return .INTERPRET_RUNTIME_ERROR
 			}
 		case .OP_GET_IT:
-			vm_push(vm, pipeline_it)
+			vm_push(vm, vm.it)
 		case .OP_SET_IT:
-			pipeline_it = vm_pop(vm)
+			vm.it = vm_pop(vm)
+		case .OP_GET_SAVE:
+			vm_push(vm, vm.save)
+		case .OP_SET_SAVE:
+			vm.save = vm_pop(vm)
 		case .OP_EQUAL:
 			b := vm_pop(vm)
 			a := vm_pop(vm)
@@ -576,7 +586,12 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				vm_push(vm, number_val(-as_number(vm_pop(vm))))
 			}
 		case .OP_PRINT:
-			print_value(vm_pop(vm))
+			// leave the value on the stack
+			print_value(vm_peek(vm, 0))
+		case .OP_PRINT_REPL:
+			fmt.print("=> ")
+			print_value(vm_peek(vm, 0))
+			fmt.println()
 		case .OP_JUMP:
 			{
 				offset := read_short(frame)
@@ -1029,6 +1044,9 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					vm_panic(vm, "Exit code must be a number, not %v.", type_of_value(top))
 				}
 
+				// clear the stack
+				reset_stack(vm)
+
 				code := cast(int)as_number(top)
 				config.__exit_code = code
 				return .INTERPRET_VOLUNTARY_EXIT
@@ -1086,8 +1104,8 @@ interpret :: proc(
 	}
 
 	p := init_parser(tokens)
-	decls, ps_ok := parse(&p)
-	defer free_decls(decls)
+	expr, ps_ok := parse(&p)
+	defer free_expr(expr)
 	if !ps_ok {
 		return .INTERPRET_PARSE_ERROR
 	}
@@ -1101,28 +1119,24 @@ interpret :: proc(
 	}
 
 	if config.dump_ast {
-		// TODO: make the ast representation a bit nicer
-		str := ast_string(decls)
-		defer delete(str)
+		str := ast_string(expr)
 		fmt.println(str)
 
 		return .INTERPRET_OK
 	}
 
-	// Collect global variables before codegen
-	if !config.repl {
-		collect_global_functions(&vm.compiler_globals, gc, decls)
-	}
+	// Collect global function definitions before codegen
+	// This allows mutual recursion
+	collect_globals(&vm.compiler_globals, gc, expr)
 
-	// semantic analysis pass
-
-	when TYPE_CHECK {
-		// implement typechecking pass here
-	}
-
-	fn, cg_ok := codegen(gc, decls, &vm.compiler_globals)
+	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
+	}
+
+	// empty program
+	if fn == nil {
+		return .INTERPRET_OK
 	}
 
 	/* Time the compiler. */

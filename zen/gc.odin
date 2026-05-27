@@ -68,8 +68,8 @@ as_vm :: #force_inline proc(source: RootSource) -> ^VM {
 	return source.(^VM)
 }
 
-/* Cast the `source` to a parser pointer. */
-as_parser :: #force_inline proc(source: RootSource) -> ^Codegen {
+/* Cast the `source` to a codegen parserpointer. */
+as_codegen :: #force_inline proc(source: RootSource) -> ^Codegen {
 	return source.(^Codegen)
 }
 
@@ -201,6 +201,10 @@ mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
 		value := vm.stack[i]
 		mark_value(gc, value)
 	}
+
+	/* Mark the VM's registers. */
+	if is_obj(vm.it) {mark_object(gc, as_obj(vm.it))}
+	if is_obj(vm.save) {mark_object(gc, as_obj(vm.save))}
 
 	/* Mark closure objects in the CallFrames. These need to be marked to 
     access constants and upvalues. */

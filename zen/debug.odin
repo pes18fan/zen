@@ -194,6 +194,10 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_GET_IT", offset)
 	case .OP_SET_IT:
 		return simple_instruction("OP_SET_IT", offset)
+	case .OP_GET_SAVE:
+		return simple_instruction("OP_GET_SAVE", offset)
+	case .OP_SET_SAVE:
+		return simple_instruction("OP_SET_SAVE", offset)
 	case .OP_GREATER:
 		return simple_instruction("OP_GREATER", offset)
 	case .OP_LESS:
@@ -214,6 +218,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_NEGATE", offset)
 	case .OP_PRINT:
 		return simple_instruction("OP_PRINT", offset)
+	case .OP_PRINT_REPL:
+		return simple_instruction("OP_PRINT_REPL", offset)
 	case .OP_JUMP:
 		return jump_instruction("OP_JUMP", 1, c, offset)
 	case .OP_JUMP_IF_FALSE:
@@ -298,7 +304,7 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	case .OP_MODULE_USER_LONG:
 		return user_module_instruction("OP_MODULE_USER_LONG", c, offset, long = true)
 	case .OP_ITERATE:
-		return simple_instruction("OP_ITERATE_NEXT", offset)
+		return simple_instruction("OP_ITERATE", offset)
 	case .OP_EXIT:
 		return simple_instruction("OP_EXIT", offset)
 	case:

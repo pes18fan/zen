@@ -5,7 +5,7 @@ class Toggle {
     this.state = startState
   }
 
-  value() { return this.state; }
+  value() { return this.state }
 
   activate() {
     this.state = not this.state

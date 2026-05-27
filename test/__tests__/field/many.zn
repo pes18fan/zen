@@ -86,163 +86,163 @@ func setFields() {
 setFields()
 
 func printFields() {
-  print foo.apple; // expect: apple
+  print foo.apple // expect: apple
   print "\n"
-  print foo.apricot; // expect: apricot
+  print foo.apricot // expect: apricot
   print "\n"
-  print foo.avocado; // expect: avocado
+  print foo.avocado // expect: avocado
   print "\n"
-  print foo.banana; // expect: banana
+  print foo.banana // expect: banana
   print "\n"
-  print foo.bilberry; // expect: bilberry
+  print foo.bilberry // expect: bilberry
   print "\n"
-  print foo.blackberry; // expect: blackberry
+  print foo.blackberry // expect: blackberry
   print "\n"
-  print foo.blackcurrant; // expect: blackcurrant
+  print foo.blackcurrant // expect: blackcurrant
   print "\n"
-  print foo.blueberry; // expect: blueberry
+  print foo.blueberry // expect: blueberry
   print "\n"
-  print foo.boysenberry; // expect: boysenberry
+  print foo.boysenberry // expect: boysenberry
   print "\n"
-  print foo.cantaloupe; // expect: cantaloupe
+  print foo.cantaloupe // expect: cantaloupe
   print "\n"
-  print foo.cherimoya; // expect: cherimoya
+  print foo.cherimoya // expect: cherimoya
   print "\n"
-  print foo.cherry; // expect: cherry
+  print foo.cherry // expect: cherry
   print "\n"
-  print foo.clementine; // expect: clementine
+  print foo.clementine // expect: clementine
   print "\n"
-  print foo.cloudberry; // expect: cloudberry
+  print foo.cloudberry // expect: cloudberry
   print "\n"
-  print foo.coconut; // expect: coconut
+  print foo.coconut // expect: coconut
   print "\n"
-  print foo.cranberry; // expect: cranberry
+  print foo.cranberry // expect: cranberry
   print "\n"
-  print foo.currant; // expect: currant
+  print foo.currant // expect: currant
   print "\n"
-  print foo.damson; // expect: damson
+  print foo.damson // expect: damson
   print "\n"
-  print foo.date; // expect: date
+  print foo.date // expect: date
   print "\n"
-  print foo.dragonfruit; // expect: dragonfruit
+  print foo.dragonfruit // expect: dragonfruit
   print "\n"
-  print foo.durian; // expect: durian
+  print foo.durian // expect: durian
   print "\n"
-  print foo.elderberry; // expect: elderberry
+  print foo.elderberry // expect: elderberry
   print "\n"
-  print foo.feijoa; // expect: feijoa
+  print foo.feijoa // expect: feijoa
   print "\n"
-  print foo.fig; // expect: fig
+  print foo.fig // expect: fig
   print "\n"
-  print foo.gooseberry; // expect: gooseberry
+  print foo.gooseberry // expect: gooseberry
   print "\n"
-  print foo.grape; // expect: grape
+  print foo.grape // expect: grape
   print "\n"
-  print foo.grapefruit; // expect: grapefruit
+  print foo.grapefruit // expect: grapefruit
   print "\n"
-  print foo.guava; // expect: guava
+  print foo.guava // expect: guava
   print "\n"
-  print foo.honeydew; // expect: honeydew
+  print foo.honeydew // expect: honeydew
   print "\n"
-  print foo.huckleberry; // expect: huckleberry
+  print foo.huckleberry // expect: huckleberry
   print "\n"
-  print foo.jabuticaba; // expect: jabuticaba
+  print foo.jabuticaba // expect: jabuticaba
   print "\n"
-  print foo.jackfruit; // expect: jackfruit
+  print foo.jackfruit // expect: jackfruit
   print "\n"
-  print foo.jambul; // expect: jambul
+  print foo.jambul // expect: jambul
   print "\n"
-  print foo.jujube; // expect: jujube
+  print foo.jujube // expect: jujube
   print "\n"
-  print foo.juniper; // expect: juniper
+  print foo.juniper // expect: juniper
   print "\n"
-  print foo.kiwifruit; // expect: kiwifruit
+  print foo.kiwifruit // expect: kiwifruit
   print "\n"
-  print foo.kumquat; // expect: kumquat
+  print foo.kumquat // expect: kumquat
   print "\n"
-  print foo.lemon; // expect: lemon
+  print foo.lemon // expect: lemon
   print "\n"
-  print foo.lime; // expect: lime
+  print foo.lime // expect: lime
   print "\n"
-  print foo.longan; // expect: longan
+  print foo.longan // expect: longan
   print "\n"
-  print foo.loquat; // expect: loquat
+  print foo.loquat // expect: loquat
   print "\n"
-  print foo.lychee; // expect: lychee
+  print foo.lychee // expect: lychee
   print "\n"
-  print foo.mandarine; // expect: mandarine
+  print foo.mandarine // expect: mandarine
   print "\n"
-  print foo.mango; // expect: mango
+  print foo.mango // expect: mango
   print "\n"
-  print foo.marionberry; // expect: marionberry
+  print foo.marionberry // expect: marionberry
   print "\n"
-  print foo.melon; // expect: melon
+  print foo.melon // expect: melon
   print "\n"
-  print foo.miracle; // expect: miracle
+  print foo.miracle // expect: miracle
   print "\n"
-  print foo.mulberry; // expect: mulberry
+  print foo.mulberry // expect: mulberry
   print "\n"
-  print foo.nance; // expect: nance
+  print foo.nance // expect: nance
   print "\n"
-  print foo.nectarine; // expect: nectarine
+  print foo.nectarine // expect: nectarine
   print "\n"
-  print foo.olive; // expect: olive
+  print foo.olive // expect: olive
   print "\n"
-  print foo.orange; // expect: orange
+  print foo.orange // expect: orange
   print "\n"
-  print foo.papaya; // expect: papaya
+  print foo.papaya // expect: papaya
   print "\n"
-  print foo.passionfruit; // expect: passionfruit
+  print foo.passionfruit // expect: passionfruit
   print "\n"
-  print foo.peach; // expect: peach
+  print foo.peach // expect: peach
   print "\n"
-  print foo.pear; // expect: pear
+  print foo.pear // expect: pear
   print "\n"
-  print foo.persimmon; // expect: persimmon
+  print foo.persimmon // expect: persimmon
   print "\n"
-  print foo.physalis; // expect: physalis
+  print foo.physalis // expect: physalis
   print "\n"
-  print foo.pineapple; // expect: pineapple
+  print foo.pineapple // expect: pineapple
   print "\n"
-  print foo.plantain; // expect: plantain
+  print foo.plantain // expect: plantain
   print "\n"
-  print foo.plum; // expect: plum
+  print foo.plum // expect: plum
   print "\n"
-  print foo.plumcot; // expect: plumcot
+  print foo.plumcot // expect: plumcot
   print "\n"
-  print foo.pomegranate; // expect: pomegranate
+  print foo.pomegranate // expect: pomegranate
   print "\n"
-  print foo.pomelo; // expect: pomelo
+  print foo.pomelo // expect: pomelo
   print "\n"
-  print foo.quince; // expect: quince
+  print foo.quince // expect: quince
   print "\n"
-  print foo.raisin; // expect: raisin
+  print foo.raisin // expect: raisin
   print "\n"
-  print foo.rambutan; // expect: rambutan
+  print foo.rambutan // expect: rambutan
   print "\n"
-  print foo.raspberry; // expect: raspberry
+  print foo.raspberry // expect: raspberry
   print "\n"
-  print foo.redcurrant; // expect: redcurrant
+  print foo.redcurrant // expect: redcurrant
   print "\n"
-  print foo.salak; // expect: salak
+  print foo.salak // expect: salak
   print "\n"
-  print foo.salmonberry; // expect: salmonberry
+  print foo.salmonberry // expect: salmonberry
   print "\n"
-  print foo.satsuma; // expect: satsuma
+  print foo.satsuma // expect: satsuma
   print "\n"
-  print foo.strawberry; // expect: strawberry
+  print foo.strawberry // expect: strawberry
   print "\n"
-  print foo.tamarillo; // expect: tamarillo
+  print foo.tamarillo // expect: tamarillo
   print "\n"
-  print foo.tamarind; // expect: tamarind
+  print foo.tamarind // expect: tamarind
   print "\n"
-  print foo.tangerine; // expect: tangerine
+  print foo.tangerine // expect: tangerine
   print "\n"
-  print foo.tomato; // expect: tomato
+  print foo.tomato // expect: tomato
   print "\n"
-  print foo.watermelon; // expect: watermelon
+  print foo.watermelon // expect: watermelon
   print "\n"
-  print foo.yuzu; // expect: yuzu
+  print foo.yuzu // expect: yuzu
   print "\n"
 }
 
