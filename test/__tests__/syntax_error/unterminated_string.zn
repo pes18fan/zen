@@ -1,1 +1,1 @@
-"hello   // ERR: Unterminated string.
+"this string has no closing quote // ERR: Unterminated string
