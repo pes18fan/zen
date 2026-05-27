@@ -319,7 +319,7 @@ main :: proc() {
 	status: int
 	defer os.exit(status)
 
-	// so the compiler's -vet flag doesn't complain about the unused "mem" import on release build
+	// need to add this otherwise -vet would complain on release builds
 	_ = mem.Allocator
 
 	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
