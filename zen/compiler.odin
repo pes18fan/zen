@@ -265,7 +265,11 @@ emit_return :: proc(cg: ^Codegen) {
 		emit_opcode(cg, .OP_GET_LOCAL)
 		emit_byte(cg, 0) /* Since the receiver is always stored in slot zero. */
 	} else {
-		emit_opcode(cg, .OP_NIL)
+		// emit_opcode(cg, .OP_NIL)
+	}
+
+	if config.repl {
+		emit_opcode(cg, .OP_PRINT_REPL)
 	}
 
 	emit_opcode(cg, .OP_RETURN)
@@ -293,7 +297,7 @@ Free the dynamic array of break jump offsets.
 free_loops :: proc(cg: ^Codegen) {
 	for i in 0 ..< cg.current_compiler.loop_count {
 		loop := &cg.current_compiler.loops[i]
-		delete(loop.breaks)
+		if loop.breaks != nil {delete(loop.breaks)}
 	}
 }
 
@@ -353,7 +357,7 @@ end_loop :: proc(cg: ^Codegen) -> ErrorMessage {
 	cg.current_compiler.loop_count -= 1
 
 	/* Remove all the break statements that were in the loop we just ended. */
-	clear(&loop.breaks)
+	delete(loop.breaks)
 	return nil
 }
 
@@ -686,7 +690,7 @@ compile_binding :: proc(
 	if cg.current_compiler.scope_depth > 0 {return 0, nil}
 
 	global_o_str := copy_string(cg.gc, name.lexeme)
-	if value, ok := table_get(cg.globals, global_o_str); ok {
+	if value, ok := table_get(cg.globals, global_o_str); ok && !is_nil(value) {
 		if values_equal(value, bool_val(true)) {
 			return 0,
 				is_final ? "Cannot redefine a final variable." : "Cannot redefine a final variable as normal variable."
@@ -701,44 +705,11 @@ compile_binding :: proc(
 }
 
 @(require_results)
-compile_var_declaration :: proc(
-	cg: ^Codegen,
-	d: ^VarDecl,
-	is_loop_variable: bool = false,
-) -> bool {
-	bindings := d.bindings
-	is_final := d.is_final
-
-	for binding in bindings {
-		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
-		if binding.initializer == nil {
-			if is_final {
-				codegen_error(cg, "Final variables must be initialized.")
-				return false
-			} else {
-				emit_opcode(cg, .OP_NIL)
-			}
-		} else {
-			/* Allow anonymous functions to recurse by referring to the name they've
-             been bound to. */
-			if _, ok := binding.initializer.(^LambdaExpr); ok {
-				mark_initialized(cg)
-			}
-			compile_expression(cg, binding.initializer) or_return
-		}
-
-		define_variable(cg, global)
-	}
-
-	return true
-}
-
-@(require_results)
 compile_function :: proc(
 	cg: ^Codegen,
 	name: Token,
 	params: []Token,
-	body: FunctionBody,
+	body: Expr,
 	type: FunctionType,
 	public: bool,
 ) -> bool {
@@ -766,22 +737,22 @@ compile_function :: proc(
 		define_variable(cg, constant)
 	}
 
-	switch b in body {
-	case ^BlockStmt:
-		// I'm not handing off to compile_statement() here, because it will
-		// create a new scope for the block which will end up allowing function
-		// parameter shadowing. Not a bad thing, but not intended behavior for zen.
-		cg.current_token = b.token
-		for decl in b.declarations {
-			compile_declaration(cg, decl) or_return
+	if block, ok := body.(^BlockExpr); ok {
+		cg.current_token = block.token
+		if block.expression == nil {
+			emit_opcode(cg, .OP_NIL)
+		} else {
+			compile_expression(cg, block.expression) or_return
 		}
-	case Expr:
-		/* This is the case of an arrow function which implicitly returns an
-         expression, so we need to add an OP_RETURN here */
-		compile_expression(cg, b) or_return
-		emit_opcode(cg, .OP_RETURN)
-		cg.current_compiler.function.has_returned = true
+	} else {
+		compile_expression(cg, body) or_return
 	}
+	if cg.current_compiler.type == .INITIALIZER {
+		emit_opcode(cg, .OP_GET_LOCAL)
+		emit_byte(cg, 0)
+	}
+	emit_opcode(cg, .OP_RETURN)
+	cg.current_compiler.function.has_returned = true
 
 	function := end_compiler(cg)
 
@@ -812,24 +783,9 @@ compile_function :: proc(
 }
 
 @(require_results)
-compile_func_declaration :: proc(cg: ^Codegen, d: ^FuncDecl, public: bool) -> bool {
-	name := d.name
-	params := d.params
-	body := d.body
-
-	global := try2(
-		cg,
-		compile_binding(cg, name, is_final = false, is_loop_variable = false),
-	) or_return
-	mark_initialized(cg)
-	compile_function(cg, name, params, body, .FUNCTION, public) or_return
-	define_variable(cg, global)
-	return true
-}
-
-@(require_results)
-compile_method :: proc(cg: ^Codegen, m: ^FuncDecl) -> bool {
-	name := m.name
+compile_method :: proc(cg: ^Codegen, m: ^LambdaExpr) -> bool {
+	assert(m.bound_to != nil, "method lambda must be bound to a name")
+	name := m.bound_to.?
 	params := m.params
 	body := m.body
 	constant := try2(cg, identifier_constant(cg, name)) or_return
@@ -846,21 +802,16 @@ compile_method :: proc(cg: ^Codegen, m: ^FuncDecl) -> bool {
 }
 
 @(require_results)
-compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> bool {
-	class_name := d.name
-	methods := d.methods
-	superclass := d.superclass
+compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
+	class_name := e.name
+	methods := e.methods
+	superclass := e.superclass
+	public := e.public
 
-	/* The class name is captured to push it back on the stack later on while
-	   compiling methods. */
 	name_constant := try2(cg, identifier_constant(cg, class_name)) or_return
-	try(
-		cg,
-		declare_variable(cg, class_name, is_final = false, is_loop_variable = true),
-	) or_return /* Classes are reassignable. */
+	try(cg, declare_variable(cg, class_name, is_final = false, is_loop_variable = true)) or_return
 
 	global_o_str := copy_string(cg.gc, class_name.lexeme)
-	/* Add the value onto the globals table. */
 	if cg.current_compiler.scope_depth == 0 {
 		if global_exists(cg, global_o_str) {
 			codegen_error(cg, "Cannot redeclare a class.")
@@ -881,13 +832,11 @@ compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> 
 	}
 	define_variable(cg, name_constant)
 
-	/* Push the current class to the linked list of classes. */
 	class_compiler: ClassCompiler
 	class_compiler.has_superclass = false
 	class_compiler.enclosing = cg.current_class
 	cg.current_class = &class_compiler
 
-	/* Check if this class inherits from another. */
 	if superclass != nil {
 		superclass := superclass.?
 		if identifiers_equal(class_name, superclass) {
@@ -895,56 +844,38 @@ compile_class_declaration :: proc(cg: ^Codegen, d: ^ClassDecl, public: bool) -> 
 			return false
 		}
 
-		/* Push the superclass on the stack. */
 		try(cg, emit_named_variable(cg, superclass, can_assign = false)) or_return
 
-		/* Create a local variable as the reference to the superclass. */
 		begin_scope(cg)
 		try(cg, add_local(cg, synthetic_token("super"), is_final = true)) or_return
 		define_variable(cg, 0)
 
-		/* Push the inheriting class on the stack. */
 		try(cg, emit_named_variable(cg, class_name, can_assign = false)) or_return
 
 		emit_opcode(cg, .OP_INHERIT)
 		class_compiler.has_superclass = true
 	}
 
-	/* Note that we don't need to do anything extra to allow method overrides.
-	 * The OP_INHERIT instruction which copies all methods of the superclass
-	 * into the subclass runs before any methods of the subclass itself are
-	 * compiled, so if a method of the same name appears in the subclass it
-	 * will override that inherited entry. */
-
-	/* This call to named_variable() pushes the class back on the stack. */
 	try(cg, emit_named_variable(cg, class_name, can_assign = false)) or_return
 
-	/* Compile methods until the final curly brace. The EOF check ensures that
-	   the compiler doesn't get stuck in an infinite loop if the closing brace
-	   is forgotten.
-
-	   Note that currently, classes can only have method declarations; fields
-	   aren't explicitly declared but rather freely added. This may be changed
-	   in the future.
-	*/
 	for method in methods {
 		cg.current_token = method.token
 		compile_method(cg, method) or_return
 	}
 
-	emit_pop(cg) /* Pop the class object off. */
+	emit_pop(cg)
 	if class_compiler.has_superclass {
 		end_scope(cg)
 	}
 
-	/* Set the current class to its enclosing one. */
 	cg.current_class = cg.current_class.enclosing
+	emit_opcode(cg, .OP_NIL)
 	return true
 }
 
 @(require_results)
-compile_module_declaration :: proc(cg: ^Codegen, d: ^ModuleDecl) -> bool {
-	path_str := d.path.lexeme
+compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
+	path_str := e.path.lexeme
 
 	mod_type: ModuleType
 
@@ -956,7 +887,6 @@ compile_module_declaration :: proc(cg: ^Codegen, d: ^ModuleDecl) -> bool {
 	}
 	defer delete(abs_path)
 
-	// look for the path in the stdlib, if not present look for a file at the path
 	builtin_found := slice.contains(cg.gc.std_modules[:], path)
 	if builtin_found {
 		mod_type = .BUILTIN
@@ -966,14 +896,9 @@ compile_module_declaration :: proc(cg: ^Codegen, d: ^ModuleDecl) -> bool {
 			codegen_error(cg, fmt.tprintf("Module '%s' not found.", abs_path))
 			return false
 		}
-
 		mod_type = .USER
 	}
 
-	// TODO: allows `use "module" as "m"` notation
-
-	// the mod_name here is path, but will be turned into just the filename
-	// in the VM if it is a user module
 	mod_name: string
 	switch mod_type {
 	case .BUILTIN:
@@ -983,17 +908,12 @@ compile_module_declaration :: proc(cg: ^Codegen, d: ^ModuleDecl) -> bool {
 	}
 	name_constant := try2(cg, string_constant(cg, mod_name)) or_return
 
-	/* Standard library modules and user modules are implemented differently, so
-       we need to emit the correct opcode. */
 	switch mod_type {
 	case .BUILTIN:
 		emit_op_with_constant(cg, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, name_constant)
 	case .USER:
-		/* Provide the name of the module and the path as bytecode args. */
 		path_constant := try2(cg, string_constant(cg, abs_path)) or_return
 
-		/* Use OP_MODULE_USER_LONG if the path_constant needs to be encoded
-        as 2 bytes, even if the name_constant fits in 1. */
 		if path_constant <= U8_MAX {
 			emit_opcode(cg, .OP_MODULE_USER)
 			emit_constant_only(cg, name_constant)
@@ -1010,55 +930,16 @@ compile_module_declaration :: proc(cg: ^Codegen, d: ^ModuleDecl) -> bool {
 	}
 	define_variable(cg, name_constant)
 
-	/* Set the module as a global variable for variable existence checks.
-     * The `true` is to ensure that the variable cannot be reassigned to. */
 	table_set(cg.globals, copy_string(cg.gc, mod_name), bool_val(true))
+	emit_opcode(cg, .OP_NIL)
 	return true
 }
 
 @(require_results)
-compile_declaration :: proc(cg: ^Codegen, decl: Decl) -> bool {
-	if decl == nil {
-		return true
-	}
-
-	switch d in decl {
-	case ^VarDecl:
-		cg.current_token = d.token
-		compile_var_declaration(cg, d) or_return
-	case ^FuncDecl:
-		cg.current_token = d.token
-		compile_func_declaration(cg, d, public = false) or_return
-	case ^ClassDecl:
-		cg.current_token = d.token
-		compile_class_declaration(cg, d, public = false) or_return
-	case ^ModuleDecl:
-		cg.current_token = d.token
-		compile_module_declaration(cg, d) or_return
-	case ^PubDecl:
-		cg.current_token = d.token
-		#partial switch inner in d.decl {
-		case ^VarDecl:
-		case ^FuncDecl:
-			compile_func_declaration(cg, inner, public = true) or_return
-		case ^ClassDecl:
-			compile_class_declaration(cg, inner, public = true) or_return
-		case:
-			codegen_error(cg, "Only functions or classes can be set as public.")
-			return false
-		}
-	case Stmt:
-		compile_statement(cg, d) or_return
-	}
-
-	return true
-}
-
-@(require_results)
-compile_if_statement :: proc(cg: ^Codegen, s: ^IfStmt) -> bool {
-	condition := s.condition
-	then_branch := s.then_branch
-	else_branch := s.else_branch
+compile_if_expression :: proc(cg: ^Codegen, e: ^IfExpr) -> bool {
+	condition := e.condition
+	then_branch := e.then_branch
+	else_branch := e.else_branch
 
 	compile_expression(cg, condition) or_return
 
@@ -1076,7 +957,7 @@ compile_if_statement :: proc(cg: ^Codegen, s: ^IfStmt) -> bool {
 	emit_pop(cg)
 
 	begin_scope(cg)
-	compile_statement(cg, then_branch) or_return
+	compile_expression(cg, then_branch) or_return
 	end_scope(cg)
 
 	else_jump := emit_jump(cg, .OP_JUMP)
@@ -1085,15 +966,18 @@ compile_if_statement :: proc(cg: ^Codegen, s: ^IfStmt) -> bool {
 	emit_pop(cg)
 
 	if else_branch != nil {
-		compile_statement(cg, else_branch) or_return
+		compile_expression(cg, else_branch) or_return
+	} else {
+		emit_opcode(cg, .OP_NIL)
 	}
 	return try(cg, patch_jump(cg, else_jump))
 }
 
-compile_switch_statement :: proc(cg: ^Codegen, s: ^SwitchStmt) -> bool {
-	condition := s.condition
-	cases := s.cases
-	else_branch := s.else_branch
+@(require_results)
+compile_switch_expression :: proc(cg: ^Codegen, e: ^SwitchExpr) -> bool {
+	condition := e.condition
+	cases := e.cases
+	else_branch := e.else_branch
 
 	case_jumps_to_end := make([dynamic]int)
 	defer delete(case_jumps_to_end)
@@ -1118,7 +1002,7 @@ compile_switch_statement :: proc(cg: ^Codegen, s: ^SwitchStmt) -> bool {
 		// is exhaustive.
 		emit_pop(cg)
 		emit_pop(cg)
-		compile_statement(cg, switch_case.body) or_return
+		compile_expression(cg, switch_case.body) or_return
 
 		append(&case_jumps_to_end, emit_jump(cg, .OP_JUMP))
 
@@ -1128,8 +1012,7 @@ compile_switch_statement :: proc(cg: ^Codegen, s: ^SwitchStmt) -> bool {
 	}
 
 	emit_pop(cg) // Pop the switch value.
-	compile_statement(cg, else_branch) or_return
-	// append(&case_jumps_to_end, emit_jump(cg, .OP_JUMP))
+	compile_expression(cg, else_branch) or_return
 
 	// Patch all the case-to-end jumps.
 	for jump in case_jumps_to_end {
@@ -1140,57 +1023,24 @@ compile_switch_statement :: proc(cg: ^Codegen, s: ^SwitchStmt) -> bool {
 }
 
 @(require_results)
-compile_while_statement :: proc(cg: ^Codegen, s: ^WhileStmt) -> bool {
-	condition := s.condition
-	body := s.body
-
-	loop_start := len(current_chunk(cg).code)
-
-	begin_scope(cg)
-	try(cg, begin_loop(cg, loop_start)) or_return
-	compile_expression(cg, condition) or_return
-
-	when CHAOTIC {
-		exit_jump: int
-		if s.is_whilent {
-			exit_jump = emit_jump(cg, .OP_JUMP_IF_TRUE)
-		} else {
-			exit_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
-		}
-	} else {
-		exit_jump := emit_jump(cg, .OP_JUMP_IF_FALSE)
-	}
-
-	emit_pop(cg)
-	compile_statement(cg, body) or_return
-	try(cg, emit_loop(cg, loop_start)) or_return
-
-	try(cg, patch_jump(cg, exit_jump)) or_return
-	emit_pop(cg)
-
-	end_scope(cg)
-	return try(cg, end_loop(cg))
-}
-
-
-@(require_results)
-compile_for_statement :: proc(cg: ^Codegen, s: ^ForStmt) -> bool {
-	initializer := s.initializer
-	condition := s.condition
-	increment := s.increment
-	body := s.body
+compile_for_expression :: proc(cg: ^Codegen, e: ^ForExpr) -> bool {
+	initializer := e.initializer
+	condition := e.condition
+	increment := e.increment
+	body := e.body
 
 	loop_variable_slot := -1
 
 	begin_scope(cg)
-	switch iz in initializer {
-	case ^VarDecl:
-		compile_var_declaration(cg, iz, is_loop_variable = true) or_return
-		loop_variable_slot = cg.current_compiler.local_count - 1
-	case ^ExprStmt:
-		compile_statement(cg, iz) or_return
-	case ^EmptyStmt:
-	// do nothing.
+	if initializer != nil {
+		#partial switch iz in initializer {
+		case ^VarDeclExpr:
+			compile_var_declaration(cg, iz, is_loop_variable = true) or_return
+			loop_variable_slot = cg.current_compiler.local_count - 1
+			emit_pop(cg) // pop var decl return value (OP_NIL)
+		case:
+			compile_expression(cg, iz) or_return
+		}
 	}
 
 	loop_start := len(current_chunk(cg).code)
@@ -1220,7 +1070,8 @@ compile_for_statement :: proc(cg: ^Codegen, s: ^ForStmt) -> bool {
 
 	try(cg, begin_loop(cg, loop_start)) or_return
 	begin_scope(cg)
-	compile_statement(cg, body) or_return
+	compile_expression(cg, body) or_return
+	emit_pop(cg) // Pop off the block's return value.
 	end_scope(cg)
 
 	if loop_variable_slot != -1 {
@@ -1238,14 +1089,16 @@ compile_for_statement :: proc(cg: ^Codegen, s: ^ForStmt) -> bool {
 	}
 
 	end_scope(cg)
-	return try(cg, end_loop(cg))
+	try(cg, end_loop(cg)) or_return
+	emit_opcode(cg, .OP_NIL) // for expressions evaluate to nil
+	return true
 }
 
 @(require_results)
-compile_for_in_statement :: proc(cg: ^Codegen, s: ^ForInStmt) -> bool {
-	iterable := s.iterable
-	var_name := s.var_name
-	body := s.body
+compile_for_in_expression :: proc(cg: ^Codegen, e: ^ForInExpr) -> bool {
+	iterable := e.iterable
+	var_name := e.var_name
+	body := e.body
 
 	begin_scope(cg)
 
@@ -1265,6 +1118,8 @@ compile_for_in_statement :: proc(cg: ^Codegen, s: ^ForInStmt) -> bool {
 	) or_return
 	mark_initialized(cg)
 	iter_slot := cg.current_compiler.local_count - 1
+	emit_opcode(cg, .OP_SET_LOCAL)
+	emit_byte(cg, byte(iter_slot))
 
 	try(cg, emit_constant(cg, number_val(0))) or_return
 	try(
@@ -1273,6 +1128,8 @@ compile_for_in_statement :: proc(cg: ^Codegen, s: ^ForInStmt) -> bool {
 	) or_return
 	mark_initialized(cg)
 	idx_slot := cg.current_compiler.local_count - 1
+	emit_opcode(cg, .OP_SET_LOCAL)
+	emit_byte(cg, byte(idx_slot))
 
 	loop_start := len(current_chunk(cg).code)
 	exit_jump := -1
@@ -1303,7 +1160,8 @@ compile_for_in_statement :: proc(cg: ^Codegen, s: ^ForInStmt) -> bool {
 
 	try(cg, begin_loop(cg, loop_start)) or_return
 	begin_scope(cg)
-	compile_statement(cg, body) or_return
+	compile_expression(cg, body) or_return
+	emit_pop(cg) // Pop off the block's return value.
 	end_scope(cg)
 
 	// close the loop var's upvalue if it was captured
@@ -1319,11 +1177,49 @@ compile_for_in_statement :: proc(cg: ^Codegen, s: ^ForInStmt) -> bool {
 	emit_pop(cg) // Condition.
 
 	end_scope(cg)
-	return try(cg, end_loop(cg))
+	try(cg, end_loop(cg)) or_return
+	emit_opcode(cg, .OP_NIL) // for-in expressions evaluate to nil
+	return true
 }
 
 @(require_results)
-compile_break_statement :: proc(cg: ^Codegen, s: ^BreakStmt) -> bool {
+compile_while_expression :: proc(cg: ^Codegen, e: ^WhileExpr) -> bool {
+	condition := e.condition
+	body := e.body
+
+	loop_start := len(current_chunk(cg).code)
+
+	begin_scope(cg)
+	try(cg, begin_loop(cg, loop_start)) or_return
+	compile_expression(cg, condition) or_return
+
+	when CHAOTIC {
+		exit_jump: int
+		if s.is_whilent {
+			exit_jump = emit_jump(cg, .OP_JUMP_IF_TRUE)
+		} else {
+			exit_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
+		}
+	} else {
+		exit_jump := emit_jump(cg, .OP_JUMP_IF_FALSE)
+	}
+
+	emit_pop(cg)
+	compile_expression(cg, body) or_return
+	emit_pop(cg) // Pop the block's return value
+	try(cg, emit_loop(cg, loop_start)) or_return
+
+	try(cg, patch_jump(cg, exit_jump)) or_return
+	emit_pop(cg)
+
+	end_scope(cg)
+	try(cg, end_loop(cg)) or_return
+	emit_opcode(cg, .OP_NIL) // return value of the while expression
+	return true
+}
+
+@(require_results)
+compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
 	if cg.current_compiler.loop_count == 0 {
 		codegen_error(cg, "Cannot break outside a loop.")
 		return false
@@ -1345,7 +1241,7 @@ compile_break_statement :: proc(cg: ^Codegen, s: ^BreakStmt) -> bool {
 }
 
 @(require_results)
-compile_continue_statement :: proc(cg: ^Codegen, s: ^ContinueStmt) -> bool {
+compile_continue_expression :: proc(cg: ^Codegen, s: ^ContinueExpr) -> bool {
 	if cg.current_compiler.loop_count == 0 {
 		codegen_error(cg, "Cannot use 'continue' outside a loop.")
 		return false
@@ -1369,7 +1265,41 @@ compile_continue_statement :: proc(cg: ^Codegen, s: ^ContinueStmt) -> bool {
 }
 
 @(require_results)
-compile_return_statement :: proc(cg: ^Codegen, s: ^ReturnStmt) -> bool {
+compile_var_declaration :: proc(
+	cg: ^Codegen,
+	e: ^VarDeclExpr,
+	is_loop_variable: bool = false,
+) -> bool {
+	bindings := e.bindings
+	is_final := e.is_final
+
+	for binding in bindings {
+		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
+		if binding.initializer == nil {
+			if is_final {
+				codegen_error(cg, "Final variables must be initialized.")
+				return false
+			} else {
+				emit_opcode(cg, .OP_NIL)
+			}
+		} else {
+			/* Allow anonymous functions to recurse by referring to the name they've
+				  * been bound to. */
+			if _, ok := binding.initializer.(^LambdaExpr); ok {
+				mark_initialized(cg)
+			}
+			compile_expression(cg, binding.initializer) or_return
+		}
+
+		define_variable(cg, global)
+	}
+
+	emit_opcode(cg, .OP_NIL) // return value of a var declaration
+	return true
+}
+
+@(require_results)
+compile_return_expression :: proc(cg: ^Codegen, s: ^ReturnExpr) -> bool {
 	value := s.value
 
 	if cg.current_compiler.type == .SCRIPT {
@@ -1398,7 +1328,7 @@ compile_return_statement :: proc(cg: ^Codegen, s: ^ReturnStmt) -> bool {
 }
 
 @(require_results)
-compile_exit_statement :: proc(cg: ^Codegen, s: ^ExitStmt) -> bool {
+compile_exit_expression :: proc(cg: ^Codegen, s: ^ExitExpr) -> bool {
 	code := s.code
 
 	/* A bare exit will exit the program successfully (with status code 0),
@@ -1411,74 +1341,6 @@ compile_exit_statement :: proc(cg: ^Codegen, s: ^ExitStmt) -> bool {
 	}
 
 	emit_opcode(cg, .OP_EXIT)
-	return true
-}
-
-@(require_results)
-compile_statement :: proc(cg: ^Codegen, stmt: Stmt) -> bool {
-	if stmt == nil {
-		return true
-	}
-
-	switch s in stmt {
-	case ^ExprStmt:
-		cg.current_token = s.token
-		compile_expression(cg, s.expr) or_return
-		if config.repl && cg.current_compiler.type == .SCRIPT {
-			try(cg, emit_constant(cg, obj_val(copy_string(cg.gc, "=> ")))) or_return
-			emit_opcode(cg, .OP_PRINT)
-
-			// print the expression itself
-			emit_opcode(cg, .OP_PRINT)
-
-			/* Add a newline, since OP_PRINT does not append a newline. */
-			try(cg, emit_constant(cg, obj_val(copy_string(cg.gc, "\n")))) or_return
-			emit_opcode(cg, .OP_PRINT)
-		} else {
-			emit_pop(cg)
-		}
-	case ^IfStmt:
-		cg.current_token = s.token
-		compile_if_statement(cg, s) or_return
-	case ^WhileStmt:
-		cg.current_token = s.token
-		compile_while_statement(cg, s) or_return
-	case ^BlockStmt:
-		cg.current_token = s.token
-		begin_scope(cg)
-		for decl in s.declarations {
-			compile_declaration(cg, decl) or_return
-		}
-		end_scope(cg)
-	case ^BreakStmt:
-		cg.current_token = s.token
-		compile_break_statement(cg, s) or_return
-	case ^ContinueStmt:
-		cg.current_token = s.token
-		compile_continue_statement(cg, s) or_return
-	case ^EmptyStmt:
-		return true
-	case ^ExitStmt:
-		cg.current_token = s.token
-		compile_exit_statement(cg, s) or_return
-	case ^ForInStmt:
-		cg.current_token = s.token
-		compile_for_in_statement(cg, s) or_return
-	case ^ForStmt:
-		cg.current_token = s.token
-		compile_for_statement(cg, s) or_return
-	case ^PrintStmt:
-		cg.current_token = s.token
-		compile_expression(cg, s.expr) or_return
-		emit_opcode(cg, .OP_PRINT)
-	case ^ReturnStmt:
-		cg.current_token = s.token
-		compile_return_statement(cg, s) or_return
-	case ^SwitchStmt:
-		cg.current_token = s.token
-		compile_switch_statement(cg, s) or_return
-	}
-
 	return true
 }
 
@@ -1531,6 +1393,20 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			)
 			return false
 		}
+	case ^BreakExpr:
+		cg.current_token = e.token
+		compile_break_expression(cg, e) or_return
+	case ^BlockExpr:
+		cg.current_token = e.token
+		begin_scope(cg)
+		if e.expression == nil {
+			emit_opcode(cg, .OP_NIL)
+		} else {
+			compile_expression(cg, e.expression) or_return
+		}
+		emit_opcode(cg, .OP_SET_SAVE) // save the return value in vm register
+		end_scope(cg) // pop off all local variables
+		emit_opcode(cg, .OP_GET_SAVE) // retrieve the return value
 	case ^CallExpr:
 		cg.current_token = e.token
 		arguments := e.arguments
@@ -1581,6 +1457,18 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 
 			emit_instruction(cg, .OP_CALL, u8(arg_count))
 		}
+	case ^ContinueExpr:
+		cg.current_token = e.token
+		compile_continue_expression(cg, e) or_return
+	case ^ExitExpr:
+		cg.current_token = e.token
+		compile_exit_expression(cg, e) or_return
+	case ^ForExpr:
+		cg.current_token = e.token
+		compile_for_expression(cg, e) or_return
+	case ^ForInExpr:
+		cg.current_token = e.token
+		compile_for_in_expression(cg, e) or_return
 	case ^GetExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
@@ -1608,14 +1496,12 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 
 		property_name := try2(cg, identifier_constant(cg, property)) or_return
 		emit_op_with_constant(cg, .OP_SET_PROPERTY, .OP_SET_PROPERTY_LONG, property_name)
-
-	// TODO: Writeback for COW, I'll enable it once the rest is stable
-	// if var_expr, ok := e.object.(^VariableExpr); ok {
-	//     try(cg, emit_named_variable_set(cg, var_expr.name)) or_return
-	// }
 	case ^GroupingExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expression) or_return
+	case ^IfExpr:
+		cg.current_token = e.token
+		compile_if_expression(cg, e) or_return
 	case ^ItExpr:
 		cg.current_token = e.token
 		if !cg.pipeline_active {
@@ -1624,17 +1510,22 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		}
 
 		emit_opcode(cg, .OP_GET_IT)
+	case ^ClassExpr:
+		cg.current_token = e.token
+		compile_class_declaration(cg, e) or_return
 	case ^LambdaExpr:
 		cg.current_token = e.token
-		f := e.func_decl
+		params := e.params
+		body := e.body
+		bound_to := e.bound_to
 
 		compile_function(
 			cg,
-			synthetic_token("lambda"),
-			f.params,
-			f.body,
+			bound_to.? or_else synthetic_token("lambda"),
+			params,
+			body,
 			.LAMBDA,
-			public = false,
+			public = e.public,
 		) or_return
 	case ^ListExpr:
 		cg.current_token = e.token
@@ -1701,6 +1592,20 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		cg.pipeline_active = true
 		compile_expression(cg, e.right) or_return
 		cg.pipeline_active = old_pipeline
+	case ^PrintExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.expr) or_return
+		emit_opcode(cg, .OP_PRINT)
+	case ^ReturnExpr:
+		cg.current_token = e.token
+		compile_return_expression(cg, e) or_return
+	case ^SequenceExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.left) or_return
+		if e.right != nil {
+			emit_opcode(cg, .OP_POP) // discard the result
+			compile_expression(cg, e.right) or_return
+		}
 	case ^SubscriptExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
@@ -1759,6 +1664,9 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			) or_return
 			emit_op_with_constant(cg, .OP_GET_SUPER, .OP_GET_SUPER_LONG, name)
 		}
+	case ^SwitchExpr:
+		cg.current_token = e.token
+		compile_switch_expression(cg, e) or_return
 	case ^ThisExpr:
 		cg.current_token = e.token
 		if cg.current_class == nil {
@@ -1789,9 +1697,18 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			)
 			return false
 		}
+	case ^UseExpr:
+		cg.current_token = e.token
+		compile_module_declaration(cg, e) or_return
 	case ^VariableExpr:
 		cg.current_token = e.token
 		try(cg, emit_named_variable(cg, e.token, can_assign = false)) or_return
+	case ^VarDeclExpr:
+		cg.current_token = e.token
+		compile_var_declaration(cg, e) or_return
+	case ^WhileExpr:
+		cg.current_token = e.token
+		compile_while_expression(cg, e) or_return
 	}
 
 	return true
@@ -1830,7 +1747,9 @@ codegen_error :: proc(cg: ^Codegen, message: string) {
 	color_red(os.stderr, "compile error ")
 
 	if token.type == .EOF {
-		fmt.eprintf("at end")
+		fmt.eprint("at end")
+	} else if token.type == .NEWLINE {
+		fmt.eprint("at end of line")
 	} else {
 		fmt.eprintf("at '%s'", token.lexeme)
 	}
@@ -1875,10 +1794,8 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 	cg.current_compiler = c
 	c.function = new_function(cg.gc)
 
-	if type != .SCRIPT && type != .LAMBDA {
+	if type != .SCRIPT {
 		c.function.name = copy_string(cg.gc, name.lexeme)
-	} else if type == .LAMBDA {
-		c.function.name = copy_string(cg.gc, "lambda")
 	}
 
 	/* The first slot is the function itself. */
@@ -1889,15 +1806,20 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 
 	/* If the function is a method, the first slot is repurposed to store that
 	 * method's receiver instead. */
-	if type != .FUNCTION {
+	if type == .METHOD || type == .INITIALIZER {
 		local.name.lexeme = "this"
 	} else {
 		local.name.lexeme = ""
 	}
 }
 
-/* Compile the provided abstract syntax tree (array of declarations) into a bytecode chunk. */
-codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
+/* Compile the provided abstract syntax tree (expression) into a bytecode chunk. */
+codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
+	// empty program
+	if expr == nil {
+		return nil, true
+	}
+
 	/* Add all the native function names to the global table, for variable
      * existence checks. */
 	for fn_name in gc.global_native_fns {
@@ -1916,40 +1838,43 @@ codegen :: proc(gc: ^GC, decls: []Decl, globals: ^Table) -> (fn: ^ObjFunction, s
 	c: Compiler
 	init_compiler(&c, &cg, synthetic_token(""), .SCRIPT)
 
-	for decl in decls {
-		compile_declaration(&cg, decl) or_break
-	}
-
+	_ = compile_expression(&cg, expr)
 	res_fn := end_compiler(&cg)
 	gc.mark_roots_arg = cg.prev_mark_roots
 	return res_fn, !cg.had_error
 }
 
-@(private = "file")
-collect_decl_globals :: proc(globals: ^Table, gc: ^GC, decl: Decl) {
-	switch d in decl {
-	case ^VarDecl:
-	case ^FuncDecl:
-		name := copy_string(gc, d.name.lexeme)
-		if _, ok := table_get(globals, name); ok {
-			return
+collect_expr_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
+	if expr == nil {return}
+
+	#partial switch e in expr {
+	case ^VarDeclExpr:
+		for binding in e.bindings {
+			// just hoist function declarations and bound lambdas
+			if _, ok := binding.initializer.(^LambdaExpr); !ok {
+				continue
+			}
+
+			name := copy_string(gc, binding.name.lexeme)
+			if _, ok := table_get(globals, name); ok {
+				return
+			}
+			table_set(globals, name, nil_val())
 		}
-		table_set(globals, name, bool_val(false))
-	case ^ClassDecl:
-	case ^PubDecl:
-		collect_decl_globals(globals, gc, d.decl)
-	case ^ModuleDecl:
-	case Stmt:
+	case ^SequenceExpr:
+		collect_expr_globals(globals, gc, e.left)
+		collect_expr_globals(globals, gc, e.right)
+	case:
+	// other cases don't matter
 	}
 }
 
 /* Collect all global functions declared in the file and put them into the
 `globals` table. */
-collect_script_globals :: proc(globals: ^Table, gc: ^GC, decls: []Decl) {
+collect_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
 	for fn_name in gc.global_native_fns {
 		table_set(globals, copy_string(gc, fn_name), bool_val(true))
 	}
-	for decl in decls {
-		collect_decl_globals(globals, gc, decl)
-	}
+
+	collect_expr_globals(globals, gc, expr)
 }

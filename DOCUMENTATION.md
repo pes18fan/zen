@@ -2,19 +2,24 @@
 
 Reference for the zen programming language.
 
-Get started now with the `print` statement to print to standard out:
+Get started now with the `print` expression to print to standard out:
 
 ```zen
 print "Hello, world!\n" //=> Hello, world!
 ```
 
-Note that the `print` statement does not append a newline. You can use the
+Note that the `print` expression does not append a newline. You can use the
 `puts()` function if you want that.
 
-Statements are seperated by semicolons. While they can be manually added, it
-is not necessary as they are automatically inserted at newlines whenever the 
-next line doesn't continue an expression, after the last statement of a 
-single-line block, and never within lists.
+Expressions are seperated by newlines. Semicolons can be used to separate
+expressions on a single line. Newlines are suppressed when inside parentheses,
+within lists, and when the next token continues the expression (e.g. after `+`,
+`,`, `|>`, etc.).
+
+Every piece of code in zen is an **expression** that produces a value. Statements
+like `if`, `while`, `for`, `switch`, blocks `{ ... }`, and variable declarations
+`var`/`val` all produce values and can be composed together. In fact, a zen
+program is in itself one large expression.
 
 ## Datatypes
 
@@ -44,6 +49,21 @@ val nice = 69
 nice = 68 // ERROR!
 ```
 
+With `val` however, only the binding is final; objects like lists and instances
+can still be mutated.
+
+Multiple variables can be declared together using comma separation on the same
+line or spanning multiple lines. A `var` or `val` declaration returns `nil`.
+
+```
+var
+    age = 21,
+    is_cool = true,
+    unknown
+```
+
+Uninitialized variables default to `nil`.
+
 > [!NOTE]
 > Like in Python, zen uses aliasing. What that means is that doing
 > something like `b = a` causes `b` and `a` to both refer to the same object in
@@ -56,7 +76,7 @@ nice = 68 // ERROR!
 
 ## Exiting early
 
-You can use the `exit` statement to exit a program early.
+You can use the `exit` expression to exit a program early.
 
 ```
 puts "hello"
@@ -69,11 +89,25 @@ This will print "hello" and exit.
 You can add a number after `exit` to exit with that status code. Without any
 number, it defaults to a status code of 0 (success).
 
+## Blocks
+
+A block `{ ... }` is an expression that groups multiple expressions together and
+produces the value of its last expression. Blocks create a new lexical scope, such
+that variables declared inside a block are not visible outside it.
+
+```
+var x = {
+    var y = 2
+    y * 10
+}
+puts(x) //=> 20
+```
+
 ## Conditionals
 
 ### if-else
 
-Use an `if` statement to execute some code if a condition is true.
+Use an `if` expression to evaluate some code if a condition is true.
 
 ```
 if false {
@@ -81,11 +115,11 @@ if false {
 }
 ```
 
-There is no need for parentheses between the condition, but the body MUST be
+There is no need for parentheses around the condition, but the body MUST be
 enclosed in braces.
 
-Use an `else` statement following an `if` statement to execute code if the `if`
-condition evaluates to false:
+Optionally, use an `else` branch following an `if` to execute code if the condition
+evaluates to false:
 
 ```
 if false {
@@ -95,12 +129,15 @@ if false {
 }
 ```
 
+The entire `if`/`else` expression produces the value of whichever branch is taken.
+An `if` without an `else` branch produces `nil`.
+
 ### switch
 
-zen has no `else if` / `elif` statement. However, the `switch` statement can be
-used in such a situation. A `switch` statement checks for equality between a
-selected value and an assortment of cases, from top to bottom. If a case matches,
-the code associated with it is executed and the statement exits. 
+zen has no `else if` / `elif` expression. However, `switch` can be used in such
+a situation. A `switch` expression checks for equality between a selected value
+and an assortment of cases, from top to bottom. If a case matches, the expression
+associated with it is evaluated and returned as the value of the entire expression.
 
 ```
 use "math"
@@ -118,11 +155,10 @@ switch a {
 }
 ```
 
-Note that the `else` clause is mandatory.
+An `else` clause at the end is mandatory, and is evaluated if none of the other
+clauses match.
 
-A `switch true` can be used to easily emulate an `else if` statement. In fact,
-by default if you don't specify any variable for the switch, the default value
-is `true`.
+A `switch true` can be used to easily emulate an `else if` expression:
 
 ```zen
 switch {
@@ -134,7 +170,7 @@ switch {
 
 ## Looping
 
-zen has the traditional `while` and `for` loops.
+zen has the traditional `while` and `for` loops. All loops produce `nil`.
 
 ```
 var awesome = true
@@ -160,12 +196,21 @@ for x in "hello" {
 }
 ```
 
+There are two expressions used for loop control:
+
+- `break` exits the innermost loop
+- `continue` skips to the next iteration.
+
+Both can only be used inside a loop.
+
 ## Functions
 
 zen has powerful and flexible functions. All functions are first-class, so they can
 be assigned to variables and passed to other functions.
 
-Define a function with the `func` keyword, and call it with the `()` syntax:
+Define a function with the `func` keyword, and call it with the `()` syntax.
+A named function declaration like `func name() { ... }` is syntactic sugar over
+`var name = func() { ... }`.
 
 ```
 func a_function() {
@@ -223,11 +268,11 @@ the parentheses.
 puts "hey, no parens!"
 ```
 
-## Pipes
+## Pipelines
 
 zen supports a unique feature inspired by the Elixir programming language called
-pipes. Pipes allow one to pass expressions to other expressions, or pass values
-to functions.
+the pipe operator. This operator allow one to pass expressions to other expressions,
+or pass values to functions; in chains known as pipelines.
 
 ```zen
 use "string"
@@ -237,13 +282,19 @@ print string.upcase("hello")
 print "hello" |> string.upcase()
 ```
 
-The previous expression in a pipeline can be accessed using the `it` keyword.
+When the right side of a pipe is a function call, the piped value is implicitly
+passed as the first argument. The previous expression in a pipeline can also be
+accessed using the `it` keyword, which is especially useful when passing the
+value to a non-function expression.
 
 ```zen
 print "68"
     |> parse()
     |> it + 1 // 69
 ```
+
+The `it` keyword is only valid inside a pipe expression; using it outside a
+pipe produces a compile error.
 
 ## Lists
 

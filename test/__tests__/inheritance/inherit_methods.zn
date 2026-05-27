@@ -1,11 +1,11 @@
 class Foo {
-  methodOnFoo() { puts("foo"); }
-  override() { puts("foo"); }
+  methodOnFoo() { puts("foo") }
+  override() { puts("foo") }
 }
 
 class Bar < Foo {
-  methodOnBar() { puts("bar"); }
-  override() { puts("bar"); }
+  methodOnBar() { puts("bar") }
+  override() { puts("bar") }
 }
 
 var bar = Bar()

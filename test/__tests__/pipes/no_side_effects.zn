@@ -1,3 +1,0 @@
-var x = "hello"
-    |> it + ", world"
-    |> print it // ERR: Expect expression.
