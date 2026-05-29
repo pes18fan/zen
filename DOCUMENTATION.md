@@ -219,6 +219,9 @@ func a_function() {
 a_function() //=> this is a function!
 ```
 
+Functions return either the final expression in their block or a value from
+an explicit `return`, whichever comes first.
+
 If a function only returns a value, it can be shortened using JS-like
 arrow notation:
 
@@ -497,6 +500,35 @@ pub class Foo {
         puts("baz")
     }
 }
+```
+
+## Discard
+
+The `discard` keyword turns the expression following it into `nil`.
+
+```zen
+discard 1               //=> nil
+discard "hi"            //=> nil
+discard SomeClass()     //=> nil
+discard func(x) => x    //=> nil
+```
+
+This is especially useful when you don't want to return an explicit value from
+a block or a function.
+
+```zen
+var x = 0
+
+func normal() {
+    x = 1
+}
+
+func discarder() {
+    discard x = 1
+}
+
+puts(normal())      //=> 1
+puts(discarder())   //=> nil
 ```
 
 ## Standard library

@@ -1125,15 +1125,15 @@ interpret :: proc(
 		return .INTERPRET_OK
 	}
 
-	// Collect global function definitions before codegen
-	// This allows mutual recursion
-	collect_globals(&vm.compiler_globals, gc, expr)
-	sm_ok := analyze(expr)
+	// Semantic analysis: collect forward refs for mutual recursion,
+	// validate scoping rules, and produce a resolution map for codegen.
+	resolution, sm_ok := analyze(gc, expr, &vm.compiler_globals)
+	defer delete(resolution)
 	if !sm_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
 
-	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
+	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals, resolution)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}

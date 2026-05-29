@@ -113,13 +113,25 @@ def create_release_build():
         print("Compiling in release mode..")
 
         os.makedirs("bin/rel", exist_ok=True)
-        os.makedirs("bin/test", exist_ok=True)
         subprocess.run(
             f"{OC} build {TARGET} -out:bin/rel/{OUT} {RELEASE_FLAGS}".split(), check=True
         )
-        shutil.copy(f"bin/rel/{OUT}", f"bin/test/{OUT}")
     except ProcError as e:
         print(f"Error while creating release build: {e}", file=sys.stderr)
+        exit(1)
+
+
+def create_test_build():
+    try:
+        setup_isocline()
+        print("Compiling test build (debug + leak detection)..")
+
+        os.makedirs("bin/test", exist_ok=True)
+        subprocess.run(
+            f"{OC} build {TARGET} -out:bin/test/{OUT} {DEBUG_FLAGS}".split(), check=True
+        )
+    except ProcError as e:
+        print(f"Error while creating test build: {e}", file=sys.stderr)
         exit(1)
 
 
@@ -139,9 +151,16 @@ def create_chaotic_build():
         exit(1)
 
 
-def test(recompile: bool):
+def test(recompile: bool, strict: bool = False):
     if recompile:
-        create_release_build()
+        if strict:
+            create_debug_build()
+            os.makedirs("bin/test", exist_ok=True)
+            shutil.copy(f"bin/dbg/{DBG_OUT}", f"bin/test/{OUT}")
+        else:
+            create_release_build()
+            os.makedirs("bin/test", exist_ok=True)
+            shutil.copy(f"bin/rel/{OUT}", f"bin/test/{OUT}")
 
     print("Running unit tests:")
     try:
@@ -153,9 +172,11 @@ def test(recompile: bool):
     print("")
 
     print("Running end-to-end tests:")
+    e2e_args = ["python", "./run_tests.py"]
+    if strict:
+        e2e_args.append("--strict")
     try:
-        subprocess.run("python ./run_tests.py".split(),
-                       cwd="test/", check=True)
+        subprocess.run(e2e_args, cwd="test/", check=True)
     except ProcError as e:
         print(f"Error during e2e tests: {e}", file=sys.stderr)
         exit(1)
@@ -244,7 +265,11 @@ def main():
     test_parser.add_argument(
         "--recompile", action="store_true", help="recompile the compiler before testing"
     )
-    test_parser.set_defaults(func=lambda args: test(args.recompile))
+    test_parser.add_argument(
+        "--strict", "-s", action="store_true",
+        help="enable memory leak detection (uses debug build)"
+    )
+    test_parser.set_defaults(func=lambda args: test(args.recompile, args.strict))
 
     # benchmark
     bench_parser = subparsers.add_parser("bench", help="run benchmarks")

@@ -29,6 +29,7 @@ Codegen :: struct {
 	prev_mark_roots:  RootSource,
 	pipeline_active:  bool,
 	had_error:        bool,
+	resolution:       map[uintptr]ResolutionInfo, // Resolution map from the semantic analyzer
 }
 
 /*
@@ -376,7 +377,6 @@ patch_breaks :: proc(cg: ^Codegen) -> ErrorMessage {
 }
 
 /* Check if two idents are equal. */
-@(private = "file")
 identifiers_equal :: proc(a: Token, b: Token) -> bool {
 	if len(a.lexeme) != len(b.lexeme) {return false}
 	if a.lexeme == b.lexeme {
@@ -393,29 +393,8 @@ identifiers_equal :: proc(a: Token, b: Token) -> bool {
 
 /* Create a synthetic token i.e. a token that doesn't actually exist in the
  * source code. Used for `super` and `this`, to create a variable out of them. */
-@(private = "file")
 synthetic_token :: proc(text: string) -> Token {
 	return Token{lexeme = text}
-}
-
-/* 
-Resolve a local name binding from the Compiler struct.
-*/
-@(private = "file")
-resolve_local :: proc(cg: ^Codegen, compiler: ^Compiler, name: Token) -> (int, Maybe(string)) {
-	// Look for the name in the local scopes of the current function.
-	for i := compiler.local_count - 1; i >= 0; i -= 1 {
-		local := &compiler.locals[i]
-		if identifiers_equal(name, local.name) {
-			if local.depth == -1 {
-				return -1, "Cannot read local variable in its own initializer."
-			}
-			return i, nil
-		}
-	}
-
-	// Not found in the scopes of the current function.
-	return -1, nil
 }
 
 /* 
@@ -444,63 +423,6 @@ add_local :: proc(
 	return nil
 }
 
-/*
-Find an upvalue in the function's local scope and scopes above it, and return
-the index to its name in the constant table. Also return whether the upvalue was
-initially declared with `val` or `var`.
-*/
-@(private = "file")
-@(require_results)
-resolve_upvalue :: proc(
-	cg: ^Codegen,
-	compiler: ^Compiler,
-	name: Token,
-) -> (
-	index: int,
-	is_final: bool,
-	error: ErrorMessage,
-) {
-	/* Base case 1: We reached the end of the compiler stack, so the name is probably in the
-	global scope. The .VAR is just a dummy value. */
-	if compiler.enclosing == nil {
-		return -1, false, nil
-	}
-
-	/* Look for the name in the enclosing function's local scope. 
-	Base case 2: If we find the name there, return it. */
-	local := resolve_local(cg, compiler.enclosing, name) or_return
-	if local != -1 {
-		// Mark the local as captured and see if its a `var` or `val`.
-		compiler.enclosing.locals[local].is_captured = true
-		final := compiler.enclosing.locals[local].is_final
-		/* is_local is true since we're capturing a local variable from the
-		immediately enclosing function. */
-		idx, err := add_upvalue(cg, compiler, u8(local), is_local = true)
-		return idx, final, err
-	}
-
-	/* Recursively look for an upvalue in the enclosing function. */
-	upvalue, final := resolve_upvalue(cg, compiler.enclosing, name) or_return
-	if upvalue != -1 {
-		/* Once the local variable is found in the most deeply nested recursive call, 
-		which is the outermost function, capture it as an upvalue, add it to the 
-		current (outermost) function's upvalue list and return the index. That 
-		returns to the inner function's declaration, which captures the upvalue
-		from that surrounding function from where we just returned, and so on, 
-		until we eventually return to the function declaration where the
-		identifier we are looking for appears. */
-		/* The boolean is_local flag is false since here, we're capturing an
-		upvalue which captures either a local variable of its surrounding
-		function or another upvalue. */
-		idx, err := add_upvalue(cg, compiler, u8(upvalue), is_local = false)
-		return idx, final, err
-	}
-
-	// Nope, didn't find anything.
-	// The `false` is just a dummy value.
-	return -1, false, nil
-}
-
 /* Add an upvalue to the function or return it if it already exists. */
 @(private = "file")
 @(require_results)
@@ -525,6 +447,11 @@ add_upvalue :: proc(
 
 	if upvalue_count == U8_COUNT {
 		return 0, "Too many closure variables in function."
+	}
+
+	// Mark the enclosing local as captured if this is a direct capture.
+	if is_local && compiler.enclosing != nil {
+		compiler.enclosing.locals[int(index)].is_captured = true
 	}
 
 	// Add the upvalue.
@@ -590,46 +517,26 @@ global_exists :: proc(cg: ^Codegen, global_o_str: ^ObjString) -> bool {
 }
 
 @(private = "file")
-global_exists_and_is_final :: proc(cg: ^Codegen, global_o_str: ^ObjString) -> bool {
-	if value, ok := table_get(cg.globals, global_o_str); ok {
-		if values_equal(value, bool_val(true)) {
-			return true
-		}
-	}
-	return false
-}
-
-@(private = "file")
-binding_exists_and_is_final :: proc(cg: ^Codegen, name: Token) -> bool {
-	local, _ := resolve_local(cg, cg.current_compiler, name)
-	upvalue, _, _ := resolve_upvalue(cg, cg.current_compiler, name)
-
-	if local != -1 {
-		return true
-	} else if upvalue != -1 {
-		return true
-	} else {
-		global_o_str := copy_string(cg.gc, name.lexeme)
-		return global_exists_and_is_final(cg, global_o_str)
-	}
-}
-
-@(private = "file")
 @(require_results)
-emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> ErrorMessage {
-	local := resolve_local(cg, cg.current_compiler, name) or_return
-	upvalue, _ := resolve_upvalue(cg, cg.current_compiler, name) or_return
+emit_named_variable :: proc(cg: ^Codegen, name: Token, expr_ptr: uintptr) -> ErrorMessage {
+	info, ok := cg.resolution[expr_ptr]
+	if !ok {
+		return "Internal compiler error: variable not resolved by semantic analyzer."
+	}
 
-	if local != -1 {
-		emit_instruction(cg, .OP_GET_LOCAL, byte(local))
-	} else if upvalue != -1 {
-		emit_instruction(cg, .OP_GET_UPVALUE, byte(upvalue))
-	} else {
-		global_o_str := copy_string(cg.gc, name.lexeme)
-		if !global_exists(cg, global_o_str) {
-			return fmt.tprintf("Undefined variable '%s'.", name.lexeme)
+	switch info.kind {
+	case .LOCAL:
+		emit_instruction(cg, .OP_GET_LOCAL, byte(info.index))
+	case .UPVALUE:
+		// Walk the compiler chain by name to create upvalue entries at every
+		// intermediate level (the analyzer only records the final link).
+		upv_idx, upv_err := resolve_upvalue_synthetic(cg, cg.current_compiler, name)
+		if upv_err != nil {return upv_err}
+		if upv_idx == -1 {
+			return fmt.tprintf("Internal compiler error: upvalue '%s' not found.", name.lexeme)
 		}
-
+		emit_instruction(cg, .OP_GET_UPVALUE, byte(upv_idx))
+	case .GLOBAL:
 		arg := identifier_constant(cg, name) or_return
 		emit_op_with_constant(cg, .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG, arg)
 	}
@@ -637,44 +544,117 @@ emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> Erro
 	return nil
 }
 
+/* Emit a variable lookup using only its name (no AST node / resolution map entry).
+Walks locals → upvalues → globals. Used for class-name self-references in
+compile_class_declaration where no VariableExpr exists. */
 @(private = "file")
 @(require_results)
-emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
-	local := resolve_local(cg, cg.current_compiler, name) or_return
-	upvalue, upvalue_is_final := resolve_upvalue(cg, cg.current_compiler, name) or_return
+emit_named_variable_by_name :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
+	for idx := cg.current_compiler.local_count - 1; idx >= 0; idx -= 1 {
+		local := &cg.current_compiler.locals[idx]
+		if local.depth != -1 && identifiers_equal(name, local.name) {
+			emit_instruction(cg, .OP_GET_LOCAL, byte(idx))
+			return nil
+		}
+	}
+	up_idx, up_err := resolve_upvalue_synthetic(cg, cg.current_compiler, name)
+	if up_err != nil {return up_err}
+	if up_idx != -1 {
+		emit_instruction(cg, .OP_GET_UPVALUE, byte(up_idx))
+		return nil
+	}
+	arg := identifier_constant(cg, name) or_return
+	emit_op_with_constant(cg, .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG, arg)
+	return nil
+}
 
-	if local != -1 {
-		if cg.current_compiler.locals[local].is_final {
-			return "Can only set a final variable once."
+@(private = "file")
+@(require_results)
+emit_named_variable_set :: proc(cg: ^Codegen, name: Token, expr_ptr: uintptr) -> ErrorMessage {
+	info, ok := cg.resolution[expr_ptr]
+	if !ok {
+		return "Internal compiler error: variable not resolved by semantic analyzer."
+	}
+
+	switch info.kind {
+	case .LOCAL:
+		emit_instruction(cg, .OP_SET_LOCAL, byte(info.index))
+	case .UPVALUE:
+		// Walk the compiler chain by name to create upvalue entries at every
+		// intermediate level (the analyzer only records the final link).
+		upv_idx, upv_err := resolve_upvalue_synthetic(cg, cg.current_compiler, name)
+		if upv_err != nil {return upv_err}
+		if upv_idx == -1 {
+			return fmt.tprintf("Internal compiler error: upvalue '%s' not found.", name.lexeme)
 		}
-		emit_instruction(cg, .OP_SET_LOCAL, byte(local))
-	} else if upvalue != -1 {
-		if upvalue_is_final {
-			return "Can only set a final variable once."
-		}
-		emit_instruction(cg, .OP_SET_UPVALUE, byte(upvalue))
-	} else {
+		emit_instruction(cg, .OP_SET_UPVALUE, byte(upv_idx))
+	case .GLOBAL:
 		arg := identifier_constant(cg, name) or_return
-
-		global_o_str := copy_string(cg.gc, name.lexeme)
-		if global_exists_and_is_final(cg, global_o_str) {
-			return "Can only set a final variable once."
-		} else {
-			table_set(cg.globals, global_o_str, bool_val(false))
-		}
-
-		emit_op_with_constant(
-			cg,
-			arg <= U8_MAX ? .OP_SET_GLOBAL : .OP_SET_GLOBAL_LONG,
-			.OP_SET_GLOBAL_LONG,
-			arg,
-		)
+		emit_op_with_constant(cg, .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG, arg)
 	}
 
 	return nil
 }
 
+/* Resolve a synthetic variable (e.g. "this", "super") with no AST node.
+Searches the current compiler's locals (for "this") or its enclosing
+compiler's locals (for "super") and creates upvalue chains as needed. */
+@(private = "file")
+@(require_results)
+emit_synthetic_variable :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
+	// Search the current compiler's locals by name (same logic as old resolve_local).
+	for idx := cg.current_compiler.local_count - 1; idx >= 0; idx -= 1 {
+		local := &cg.current_compiler.locals[idx]
+		if local.depth != -1 && identifiers_equal(name, local.name) {
+			emit_instruction(cg, .OP_GET_LOCAL, byte(idx))
+			return nil
+		}
+	}
+
+	// Not found in current scope — search enclosing compilers (as an upvalue).
+	up_idx, up_err := resolve_upvalue_synthetic(cg, cg.current_compiler, name)
+	if up_err != nil {return up_err}
+	if up_idx != -1 {
+		emit_instruction(cg, .OP_GET_UPVALUE, byte(up_idx))
+		return nil
+	}
+
+	return fmt.tprintf("Internal compiler error: synthetic variable '%s' not found.", name.lexeme)
+}
+
+/* Walk the compiler chain to find a variable by name, creating upvalues as needed.
+Mirrors the old resolve_upvalue pattern. */
+@(private = "file")
+@(require_results)
+resolve_upvalue_synthetic :: proc(
+	cg: ^Codegen,
+	compiler: ^Compiler,
+	name: Token,
+) -> (
+	int,
+	ErrorMessage,
+) {
+	if compiler.enclosing == nil {
+		return -1, nil
+	}
+	for idx := compiler.enclosing.local_count - 1; idx >= 0; idx -= 1 {
+		local := &compiler.enclosing.locals[idx]
+		if local.depth != -1 && identifiers_equal(name, local.name) {
+			local.is_captured = true
+			return add_upvalue(cg, compiler, u8(idx), is_local = true)
+		}
+	}
+	// Recursive case: look deeper
+	local_idx, up_err := resolve_upvalue_synthetic(cg, compiler.enclosing, name)
+	if up_err != nil || local_idx == -1 {
+		return -1, up_err
+	}
+	return add_upvalue(cg, compiler, u8(local_idx), is_local = false)
+}
+
 /* Compile a variable binding. */
+/* NOTE: Semantic checks (duplicate declarations, val reassignment) are handled
+by the semantic analyzer. This function only manages bytecode-level concerns. */
 @(require_results)
 compile_binding :: proc(
 	cg: ^Codegen,
@@ -689,14 +669,8 @@ compile_binding :: proc(
 	if cg.current_compiler.scope_depth > 0 {return 0, nil}
 
 	global_o_str := copy_string(cg.gc, name.lexeme)
-	if value, ok := table_get(cg.globals, global_o_str); ok && !is_nil(value) {
-		if values_equal(value, bool_val(true)) {
-			return 0,
-				is_final ? "Cannot redefine a final variable." : "Cannot redefine a final variable as normal variable."
-		} else if is_final {
-			return 0, "Cannot redefine a variable as final variable."
-		}
-	} else {
+	// Only set if not already present (the analyzer may have pre-populated it).
+	if _, ok := table_get(cg.globals, global_o_str); !ok {
 		table_set(cg.globals, global_o_str, bool_val(is_final))
 	}
 
@@ -718,11 +692,6 @@ compile_function :: proc(
 	/* Note that this scope doesn't need to be explicitly closed, since the 
     Compiler itself is ended when we reach the end of the function body. */
 	begin_scope(cg)
-
-	if len(params) > U8_MAX {
-		codegen_error(cg, "Cannot have more than 255 parameters.")
-		return false
-	}
 	cg.current_compiler.function.arity = u8(len(params))
 
 	for param in params {
@@ -802,6 +771,7 @@ compile_method :: proc(cg: ^Codegen, m: ^LambdaExpr) -> bool {
 
 @(require_results)
 compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
+	/* NOTE: Semantic checks (duplicate class declarations) are handled by the analyzer. */
 	class_name := e.name
 	methods := e.methods
 	superclass := e.superclass
@@ -812,10 +782,6 @@ compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
 
 	global_o_str := copy_string(cg.gc, class_name.lexeme)
 	if cg.current_compiler.scope_depth == 0 {
-		if global_exists(cg, global_o_str) {
-			codegen_error(cg, "Cannot redeclare a class.")
-			return false
-		}
 		table_set(cg.globals, global_o_str, bool_val(false))
 	}
 
@@ -843,19 +809,19 @@ compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
 			return false
 		}
 
-		try(cg, emit_named_variable(cg, superclass, can_assign = false)) or_return
+		try(cg, emit_named_variable_by_name(cg, superclass)) or_return
 
 		begin_scope(cg)
 		try(cg, add_local(cg, synthetic_token("super"), is_final = true)) or_return
 		define_variable(cg, 0)
 
-		try(cg, emit_named_variable(cg, class_name, can_assign = false)) or_return
+		try(cg, emit_named_variable_by_name(cg, class_name)) or_return
 
 		emit_opcode(cg, .OP_INHERIT)
 		class_compiler.has_superclass = true
 	}
 
-	try(cg, emit_named_variable(cg, class_name, can_assign = false)) or_return
+	try(cg, emit_named_variable_by_name(cg, class_name)) or_return
 
 	for method in methods {
 		cg.current_token = method.token
@@ -886,15 +852,11 @@ compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
 	}
 	defer delete(abs_path)
 
-	builtin_found := slice.contains(cg.gc.std_modules[:], path)
-	if builtin_found {
+	is_builtin := slice.contains(cg.gc.std_modules[:], path)
+	if is_builtin {
 		mod_type = .BUILTIN
 	} else {
-		user_found := os.exists(abs_path)
-		if !user_found {
-			codegen_error(cg, fmt.tprintf("Module '%s' not found.", abs_path))
-			return false
-		}
+		// we do NOT check if the module path exists, was done by the semantic analyzer
 		mod_type = .USER
 	}
 
@@ -966,10 +928,12 @@ compile_if_expression :: proc(cg: ^Codegen, e: ^IfExpr) -> bool {
 
 	if else_branch != nil {
 		compile_expression(cg, else_branch) or_return
+		return try(cg, patch_jump(cg, else_jump))
 	} else {
+		try(cg, patch_jump(cg, else_jump)) or_return
 		emit_opcode(cg, .OP_NIL)
+		return true
 	}
-	return try(cg, patch_jump(cg, else_jump))
 }
 
 @(require_results)
@@ -1219,11 +1183,7 @@ compile_while_expression :: proc(cg: ^Codegen, e: ^WhileExpr) -> bool {
 
 @(require_results)
 compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
-	if cg.current_compiler.loop_count == 0 {
-		codegen_error(cg, "Cannot break outside a loop.")
-		return false
-	}
-
+	/* NOTE: Loop scope check is handled by the semantic analyzer. */
 	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
 
 	// Discard correct number of values from the stack.
@@ -1241,11 +1201,7 @@ compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
 
 @(require_results)
 compile_continue_expression :: proc(cg: ^Codegen, s: ^ContinueExpr) -> bool {
-	if cg.current_compiler.loop_count == 0 {
-		codegen_error(cg, "Cannot use 'continue' outside a loop.")
-		return false
-	}
-
+	/* NOTE: Loop scope check is handled by the semantic analyzer. */
 	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
 
 	// Discard correct number of values from the stack.
@@ -1272,15 +1228,11 @@ compile_var_declaration :: proc(
 	bindings := e.bindings
 	is_final := e.is_final
 
+	/* NOTE: Semantic checks (val must be initialized) are handled by the analyzer. */
 	for binding in bindings {
 		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
 		if binding.initializer == nil {
-			if is_final {
-				codegen_error(cg, "Final variables must be initialized.")
-				return false
-			} else {
-				emit_opcode(cg, .OP_NIL)
-			}
+			emit_opcode(cg, .OP_NIL)
 		} else {
 			/* Allow anonymous functions to recurse by referring to the name they've
 				  * been bound to. */
@@ -1299,19 +1251,11 @@ compile_var_declaration :: proc(
 
 @(require_results)
 compile_return_expression :: proc(cg: ^Codegen, s: ^ReturnExpr) -> bool {
+	/* NOTE: Semantic checks (return outside function, return value in initializer)
+	are handled by the analyzer. */
 	value := s.value
 
-	if cg.current_compiler.type == .SCRIPT {
-		codegen_error(cg, "Cannot return from the top level.")
-		return false
-	}
-
 	if s.value != nil {
-		if cg.current_compiler.type == .INITIALIZER {
-			codegen_error(cg, "Cannot return a value from an initializer.")
-			return false
-		}
-
 		compile_expression(cg, value) or_return
 		emit_opcode(cg, .OP_RETURN)
 	} else {
@@ -1353,7 +1297,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^AssignExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.value) or_return
-		try(cg, emit_named_variable_set(cg, e.name)) or_return
+		try(cg, emit_named_variable_set(cg, e.name, uintptr(e))) or_return
 	case ^BinaryExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
@@ -1386,7 +1330,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			codegen_error(
 				cg,
 				fmt.tprintf(
-					"Invalid binary operator '%s'. This is a compiler bug.",
+					"Internal compiler error: Invalid binary operator '%s'.",
 					e.operator.lexeme,
 				),
 			)
@@ -1423,13 +1367,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 				arg_count += 1
 			}
 
-			// Arg count can't be more than 255 since it's stuffed in one byte.
-			if len(arguments) > U8_MAX {
-				codegen_error(cg, "Cannot have more than 255 arguments.")
-				return false
-			}
-
-			for arg in e.arguments {
+			for arg in arguments {
 				compile_expression(cg, arg) or_return
 			}
 
@@ -1445,11 +1383,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 				arg_count += 1
 			}
 
-			if len(arguments) > U8_MAX {
-				codegen_error(cg, "Cannot have more than 255 arguments.")
-				return false
-			}
-
 			for arg in arguments {
 				compile_expression(cg, arg) or_return
 			}
@@ -1459,6 +1392,13 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ContinueExpr:
 		cg.current_token = e.token
 		compile_continue_expression(cg, e) or_return
+	case ^DiscardExpr:
+		cg.current_token = e.token
+		compile_expression(cg, e.expression) or_return
+
+		// remove the return value of the previous expression and replace with nil
+		emit_pop(cg)
+		emit_opcode(cg, .OP_NIL)
 	case ^ExitExpr:
 		cg.current_token = e.token
 		compile_exit_expression(cg, e) or_return
@@ -1478,17 +1418,11 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		property_name := try2(cg, identifier_constant(cg, property)) or_return
 		emit_op_with_constant(cg, .OP_GET_PROPERTY, .OP_GET_PROPERTY_LONG, property_name)
 	case ^SetExpr:
+		/* NOTE: Semantic checks (val receivers) are handled by the analyzer. */
 		cg.current_token = e.token
 		receiver := e.receiver
 		property := e.property
 		value := e.value
-
-		if r, ok := receiver.(^VariableExpr); ok {
-			if binding_exists_and_is_final(cg, r.name) {
-				codegen_error(cg, "Can only set a final variable once.")
-				return false
-			}
-		}
 
 		compile_expression(cg, receiver) or_return
 		compile_expression(cg, value) or_return
@@ -1502,11 +1436,8 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		cg.current_token = e.token
 		compile_if_expression(cg, e) or_return
 	case ^ItExpr:
+		/* NOTE: Semantic check (pipeline) is handled by the analyzer. */
 		cg.current_token = e.token
-		if !cg.pipeline_active {
-			codegen_error(cg, "Cannot use 'it' outside of a pipeline.")
-			return false
-		}
 
 		emit_opcode(cg, .OP_GET_IT)
 	case ^ClassExpr:
@@ -1529,11 +1460,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ListExpr:
 		cg.current_token = e.token
 		elements := e.elements
-		if len(elements) > U8_MAX {
-			codegen_error(cg, "Cannot have more than 255 items in a list literal.")
-			return false
-		}
-
 		for element in elements {
 			compile_expression(cg, element) or_return
 		}
@@ -1620,63 +1546,42 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_expression(cg, e.value) or_return
 		emit_opcode(cg, .OP_SUBSCRIPT_SET)
 	case ^SuperExpr:
+		/* NOTE: Semantic checks (class context, superclass) handled by analyzer. */
 		cg.current_token = e.token
 		method := e.method
 		method_args := e.method_args
 
-		if cg.current_class == nil {
-			codegen_error(cg, "Can't use 'super' outside a class.")
-			return false
-		} else if !cg.current_class.has_superclass {
-			codegen_error(cg, "Can't use 'super' in a class with no superclass.")
-			return false
-		}
-
 		name := try2(cg, identifier_constant(cg, method)) or_return
 
 		/* Place both the current receiver and the superclass on the stack. */
-		try(cg, emit_named_variable(cg, synthetic_token("this"), can_assign = false)) or_return
+		try(cg, emit_synthetic_variable(cg, synthetic_token("this"))) or_return
 
 		/* Check if the method is immediately invoked or not; since we can apply
      	an optimization involving no use of bound methods if it is. */
 		if method_args != nil {
-			if len(method_args) > U8_COUNT {
-				codegen_error(cg, "Cannot have more than 255 arguments.")
-				return false
-			}
 			arg_count := u8(len(method_args))
 
 			for arg in method_args {
 				compile_expression(cg, arg) or_return
 			}
 
-			try(
-				cg,
-				emit_named_variable(cg, synthetic_token("super"), can_assign = false),
-			) or_return
+			try(cg, emit_synthetic_variable(cg, synthetic_token("super"))) or_return
 			emit_op_with_constant(cg, .OP_SUPER_INVOKE, .OP_SUPER_INVOKE_LONG, name)
 			emit_byte(cg, arg_count)
 		} else {
-			try(
-				cg,
-				emit_named_variable(cg, synthetic_token("super"), can_assign = false),
-			) or_return
+			try(cg, emit_synthetic_variable(cg, synthetic_token("super"))) or_return
 			emit_op_with_constant(cg, .OP_GET_SUPER, .OP_GET_SUPER_LONG, name)
 		}
 	case ^SwitchExpr:
 		cg.current_token = e.token
 		compile_switch_expression(cg, e) or_return
 	case ^ThisExpr:
+		/* NOTE: Semantic check (class context) is handled by the analyzer. */
 		cg.current_token = e.token
-		if cg.current_class == nil {
-			codegen_error(cg, "Cannot use 'this' outside a class.")
-			return false
-		}
 
 		/* `this` is treated as a lexically scoped local variable whose value is
-        somehow magically initialized. Also, can_assign is set to false because
-        you obviously can't assign to `this`. */
-		try(cg, emit_named_variable(cg, e.token, can_assign = false)) or_return
+        somehow magically initialized. */
+		try(cg, emit_synthetic_variable(cg, synthetic_token("this"))) or_return
 	case ^UnaryExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.right) or_return
@@ -1701,7 +1606,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_module_declaration(cg, e) or_return
 	case ^VariableExpr:
 		cg.current_token = e.token
-		try(cg, emit_named_variable(cg, e.token, can_assign = false)) or_return
+		try(cg, emit_named_variable(cg, e.token, uintptr(e))) or_return
 	case ^VarDeclExpr:
 		cg.current_token = e.token
 		compile_var_declaration(cg, e) or_return
@@ -1790,7 +1695,15 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 }
 
 /* Compile the provided abstract syntax tree (expression) into a bytecode chunk. */
-codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
+codegen :: proc(
+	gc: ^GC,
+	expr: Expr,
+	globals: ^Table,
+	resolution: map[uintptr]ResolutionInfo,
+) -> (
+	fn: ^ObjFunction,
+	success: bool,
+) {
 	// empty program
 	if expr == nil {
 		return nil, true
@@ -1805,6 +1718,7 @@ codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, succ
 	cg := Codegen {
 		globals         = globals,
 		gc              = gc,
+		resolution      = resolution,
 		prev_mark_roots = gc.mark_roots_arg,
 		pipeline_active = false,
 		had_error       = false,
@@ -1818,39 +1732,4 @@ codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, succ
 	res_fn := end_compiler(&cg)
 	gc.mark_roots_arg = cg.prev_mark_roots
 	return res_fn, !cg.had_error
-}
-
-collect_expr_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
-	if expr == nil {return}
-
-	#partial switch e in expr {
-	case ^VarDeclExpr:
-		for binding in e.bindings {
-			// just hoist function declarations and bound lambdas
-			if _, ok := binding.initializer.(^LambdaExpr); !ok {
-				continue
-			}
-
-			name := copy_string(gc, binding.name.lexeme)
-			if _, ok := table_get(globals, name); ok {
-				return
-			}
-			table_set(globals, name, nil_val())
-		}
-	case ^SequenceExpr:
-		collect_expr_globals(globals, gc, e.left)
-		collect_expr_globals(globals, gc, e.right)
-	case:
-	// other cases don't matter
-	}
-}
-
-/* Collect all global functions declared in the file and put them into the
-`globals` table. */
-collect_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
-	for fn_name in gc.global_native_fns {
-		table_set(globals, copy_string(gc, fn_name), bool_val(true))
-	}
-
-	collect_expr_globals(globals, gc, expr)
 }

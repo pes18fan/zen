@@ -60,7 +60,7 @@ contexts:
   keywords:
     - match: \b(use|pub)\b
       scope: keyword.control.zen
-    - match: \b(if|else|while|for|return|break|continue|switch|exit|in)\b
+    - match: \b(if|else|while|for|return|break|continue|switch|exit|in|discard)\b
       scope: keyword.control.zen
     - match: \b(var|val)\b
       scope: storage.type.zen

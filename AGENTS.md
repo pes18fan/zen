@@ -13,7 +13,8 @@ zen/
 │   ├── main.odin         # Entry point, CLI, REPL
 │   ├── lexer.odin        # Tokenizer with ASI
 │   ├── parser.odin       # Pratt parser → AST
-│   ├── compiler.odin     # Bytecode compiler (AST → bytecode)
+│   ├── compiler.odin     # Bytecode compiler (AST → bytecode; consumes resolution map)
+│   ├── semantic.odin     # Semantic analyzer (name resolution, validation, resolution map)
 │   ├── vm.odin           # Bytecode interpreter
 │   ├── value.odin        # Value representation (NaN boxing)
 │   ├── object.odin       # Heap objects (ObjFunction, ObjString, ObjClosure, etc.)
@@ -50,9 +51,11 @@ Requires **Odin compiler** and **Python**. The `isocline` REPL library is auto-d
 | Command | Description |
 |---|---|
 | `./x.py dbg` | Debug build → `./bin/dbg/dzen` |
-| `./x.py rel` | Release build → `./bin/rel/zen` (also copied to `./bin/test/zen`) |
+| `./x.py rel` | Release build → `./bin/rel/zen` |
 | `./x.py chaotic` | Chaotic build → `./bin/chaotic/zen` (`-define:CHAOTIC=true`) |
-| `./x.py test` | Unit tests + end-to-end tests, recompile test interpreter via `--recompile` flag |
+| `./x.py test` | Unit tests + end-to-end tests (release build, no leak checks). Recompile via `--recompile` |
+| `./x.py test --strict` | Same as test but with memory leak detection (debug build). Passes `--strict` to test runner |
+| `./x.py test --recompile --strict` | Recompile with debug flags + run with leak detection |
 | `./x.py bench` | Run benchmarks |
 | `./x.py clean` | Remove build artifacts |
 | `./x.py doc` | Generate docs at `doc/docs.txt` |
@@ -74,11 +77,13 @@ Requires **Odin compiler** and **Python**. The `isocline` REPL library is auto-d
   - `// ERR: <message>` — expected error message substring
   - `// DRAFT` — marks test as draft (skipped)
 - Runner: `test/run_tests.py`, interpreter: `../bin/test/zen`, timeout: 2s
+- Optional `--strict` / `-s` flag: runs test with debug build + tracking allocator;
+  any memory leak in stderr marks the test as failed
 - Categories: `assignment/`, `class/`, `closure/`, `comments/`, `conditionals/`,
-    `constructor/`, `equality/`, `field/`, `for/`, `for_in/`, `function/`,
-    `inheritance/`, `list/`, `loop_control/`, `math/`, `method/`, `modules/`,
-    `native/`, `operators/`, `pipes/`, `string/`, `super/`, `switch/`,
-    `syntax_error/`, `this/`, `variable/`, `while/`
+    `constructor/`, `equality/`, `expression/`, `field/`, `for/`, `for_in/`,
+    `function/`, `inheritance/`, `list/`, `loop_control/`, `math/`, `method/`,
+    `modules/`, `native/`, `operators/`, `pipes/`, `string/`, `super/`,
+    `switch/`, `syntax_error/`, `this/`, `variable/`, `while/`
 
 ### Benchmarks
 
@@ -87,17 +92,24 @@ Requires **Odin compiler** and **Python**. The `isocline` REPL library is auto-d
 ## Architectural Pipeline
 
 ```
-Source string → Lexer → Token stream (with ASI) → Parser → AST (Expr-based, no Stmt/Decl nodes) → Compiler → Bytecode (Chunk) → VM (interpreter) + GC
+Source string ->
+    Lexer -> Token stream (with ASI) ->
+    Parser -> AST (Expr-based, no Stmt/Decl nodes) ->
+    Semantic analysis -> Resolution map ->
+    Compiler -> Bytecode (Chunk) 
+    -> VM (interpreter) + GC
 ```
 
 Everything in zen is an **expression**. There are no statement or declaration AST
 node types — `if`, `while`, `for`, `switch`, `var`/`val`, `class`, `use`, `func`,
 `print`, `return`, `exit`, `break`, `continue` are all parsed as expression nodes
 (`IfExpr`, `WhileExpr`, etc.). Named function declarations (`func name() {}`)
-are syntactic sugar for `var name = func() {}`.
+are syntactic sugar for `var name = func() {}`. The value returned by any
+expression can be explicitly discarded using the `discard` prefix operator,
+which will make the value return `nil` instead.
 
-Expression chaining at the top level uses `SequenceExpr` (left/right chain),
-with `;` and NEWLINE acting as expression separators.
+Expression chaining at the top level and inside blocks uses `SequenceExpr` 
+(left/right chain), with `;` and NEWLINE acting as expression separators.
 
 ## Odin Coding Conventions
 
@@ -119,6 +131,7 @@ import ic "isocline"
 ```
 
 ### Comments
+
 - Line `//` and block `/* */` comments. Block comments used for documentation above procedures and structs.
 
 ### Attributes / Decorators
@@ -153,7 +166,8 @@ try2(cg, some_proc_returning_value()) or_return
 ```
 
 - `ErrorMessage` is `Maybe(string)` (defined in `error.odin`)
-- Error handling with `try`/`try2` polymorphic procedures that accept either `^Codegen` or `^TypeChecker`
+- Error handling with `try`/`try2` polymorphic procedures that accept either 
+    `^Codegen` or `^TypeChecker` or `^Semantic`
 
 ### Memory Management
 
@@ -164,6 +178,7 @@ try2(cg, some_proc_returning_value()) or_return
 - `temp_push`/`temp_pop` for GC root protection during allocations
 
 ### Key Odin Idioms
+
 - Pointer params: `^Type` (e.g., `^Lexer`, `^VM`, `^GC`)
 - Struct embedding: `using obj: Obj`
 - Tagged unions: `Value :: union { bool, f64, ^Obj }` (fallback; NaN boxing is default)
@@ -174,6 +189,7 @@ try2(cg, some_proc_returning_value()) or_return
 - `fmt.eprintf` / `color_red(os.stderr, ...)` for error output
 
 ### Value Representation
+
 - **NaN boxing** (default): `Value :: u64` — numbers are raw f64, others are tagged NaN pointers
 - **Tagged union** fallback: `Value :: union { bool, f64, ^Obj }`
 - Predicate/accessor pattern: `is_bool(v)`, `as_bool(v)`, `bool_val(true)`
@@ -182,26 +198,37 @@ try2(cg, some_proc_returning_value()) or_return
 
 ### Syntax
 
-- **Expressions**: separated by newlines (ASI) or semicolons. ASI does not insert within lists, inside parentheses, or when a line continues an expression.
+- **Expressions**: separated by newlines (ASI) or semicolons. 
+    ASI does not insert within lists, inside parentheses, or when a line continues
+    an expression.
 - **Comments**: `//` line comments
-- **Variables**: `var` (mutable), `val` (single-assign/final). Multiple declarations supported: `var a = 1, b = 2, c`. Multi-line: `var\n    a = 1,\n    b = 2`. Uninitialized vars default to `nil`.
+- **Variables**: `var` (mutable), `val` (single-assign/final). Multiple 
+    declarations supported: `var a = 1, b = 2, c`. Multi-line: `var\n    a = 1,\n    b = 2`. 
+    Uninitialized vars default to `nil`.
 - **Types**: `number` (f64), `bool`, `string` (immutable), `nil`, `list` (mutable, growable)
-- **Functions**: `func name(params) { body }`, arrow `func name(params) => expr`, anonymous `func(params) { body }`
-- **Classes**: `class Name { init() { ... } method() { ... } }`, single inheritance with `class Child < Parent`
+- **Functions**: `func name(params) { body }`, arrow `func name(params) => expr`, 
+    anonymous `func(params) { body }`
+- **Classes**: `class Name { init() { ... } method() { ... } }`, single inheritance 
+    with `class Child < Parent`
 - **Conditionals**: `if/else` (no else-if — use `switch`), `switch { pattern => body; else => body }`
-- **Loops**: `while`, `for` (C-style: `for var i=0; i<n; i=i+1`), `for in` over lists/strings
+- **Loops**: `while`, `for` (C-style: `for var i=0; i<n; i=i+1`), `for in` over 
+    lists/strings
 - **Loop control**: `break`, `continue`
 - **Blocks**: `{ ... }` creates a new scope and returns the last expression's value
-- **Pipes**: `expr |> func()` — passes `expr` as first arg to `func`. `it` keyword references the piped value.
-- **Modules**: `use "module"` for builtins or `use "./path.zn"` for files. `pub` keyword exports from file modules.
-- **Built-in functions**: `puts()`, `gets()`, `len()`, `typeof()`, `str()`, `parse()`, `copy()`, `dirname()`, `filename()`
+- **Pipes**: `expr |> func()` — passes `expr` as first arg to `func`. `it` 
+    keyword references the piped value.
+- **Modules**: `use "module"` for builtins or `use "./path.zn"` for files. 
+    `pub` keyword exports from file modules.
+- **Built-in functions**: `puts()`, `gets()`, `len()`, `typeof()`, `str()`, 
+    `parse()`, `copy()`, `dirname()`, `filename()`
 - **Standard library modules**: `time`, `math`, `os`, `string`, `list`
 - **Chaotic mode**: `ifn't` / `whilen't` available when compiled with `CHAOTIC=true`
 - **Error/exit**: `exit` expression with optional status code
 - **Arithmetic**: `+`, `-`, `*`, `/`, `%`, `and`, `or`
 - **Comparison**: `==`, `!=`, `<`, `>`, `<=`, `>=`
 - **String operations**: `+` for concatenation, `[]` for indexing
-- **List operations**: `[]` for indexing/setting, `list.*` module functions for mutation
+- **List operations**: `[]` for indexing/setting, `list.*` module functions for 
+    mutation
 - **Function calls**: parentheses optional for single string argument
 
 ### Semantic Rules
@@ -219,8 +246,10 @@ try2(cg, some_proc_returning_value()) or_return
 - Uninitialized variables default to `nil`
 - Modules are singletons — only parsed and executed once per import path
 - `it` keyword is only valid inside a pipeline expression
+- An `if` without an `else` branch always evaluates to `nil`
 - Named function declarations (`func name() {}`) are syntactic sugar over `var name = func() {}`
-- Global function declarations and named lambdas are hoisted by `collect_expr_globals` before codegen (enables mutual recursion)
+- Global function declarations and named lambdas are hoisted by `collect_forward_refs` 
+    in the semantic analyzer before codegen (enables mutual recursion)
 
 ## CLI Flags
 
@@ -243,20 +272,28 @@ try2(cg, some_proc_returning_value()) or_return
 - Branches: `main`
 - Branch protection: not enforced; any branch can be pushed to
 
+
+## When Debugging
+
+1. Use the debugging CLI flags
+2. Use the `dbg_*` printing functions for debug printing
+3. Use `gdb` for sneakier bugs like segfaults
+
 ## When Adding Tests
 
 1. Place `.zn` files in `test/__tests__/<category>/`
 2. Add `// expect: <expected output>` for success cases
 3. Add `// ERR: <expected error>` for error cases
 4. Add `// DRAFT` to skip a test
-5. Run with `./x.py test`
+5. Run with `./x.py test` (release) or `./x.py test --strict` (debug + leak checks)
 
 ## When Adding Features
 
 1. The pipeline is: Lexer → Parser → Compiler → VM (+ GC)
 2. Add new tokens to the lexer if needed, new AST nodes to the parser, new opcodes to `chunk.odin`'s `OpCode` enum, codegen in compiler, execution in VM
 3. Update `debug.odin` for disassembly of new opcodes
-4. Add standard library functions in `std.odin` if applicable
-5. Add e2e tests in `test/__tests__/`
-6. Update `DOCUMENTATION.md` if the feature changes the language surface
-7. Add syntax highlighting to `syntaxes/` for VSCode, Sublime, and Vim
+4. Update `semantic.odin` for any new scope/semantic validation rules
+5. Add standard library functions in `std.odin` if applicable
+6. Add e2e tests in `test/__tests__/`
+7. Update `DOCUMENTATION.md` if the feature changes the language surface
+8. Add syntax highlighting to `syntaxes/` for VSCode, Sublime, and Vim

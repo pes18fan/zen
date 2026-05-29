@@ -1,11 +1,20 @@
 import os
 import subprocess
 import platform
+import argparse
 
 COL_RED = "\033[31m"
 COL_GREEN = "\033[32m"
+COL_YELLOW = "\033[33m"
 RESET = "\033[0m"
 TEXT_BOLD = "\033[1m"
+
+LEAK_MARKERS = [
+    "allocations not freed",
+    "incorrect frees",
+]
+
+STRICT = False
 
 
 class OS:
@@ -30,8 +39,7 @@ test_folder = "__tests__"
 interpreter = "../bin/test/zen.exe" if OS.is_windows() else "../bin/test/zen"
 tests = 0
 passed = 0
-failed = 0
-failed_paths = []
+failures = []
 draft_paths = []
 
 if not os.path.exists(interpreter):
@@ -44,7 +52,7 @@ def print_header():
 
 
 def test(folder):
-    global tests, passed, failed
+    global tests, passed
     print(f"Now testing in directory {TEXT_BOLD}{folder}{RESET}...\n")
 
     for file in os.listdir(folder):
@@ -68,7 +76,16 @@ def test(folder):
             output, error, status, timed_out = capture_output(
                 f"{interpreter} {file_path}")
 
-            if status == 0:
+            has_leak = False
+            leak_info = ""
+            if STRICT:
+                has_leak, leak_info = check_for_leaks(error)
+
+            if has_leak:
+                print(f"{COL_RED}FAILED{RESET} with memory leak")
+                print(leak_info)
+                failures.append({"path": file_path, "reason": "memory leak"})
+            elif status == 0:
                 if multiline_output_match(output, expect):
                     print(f"{COL_GREEN}PASSED{RESET} with expected output")
                     passed += 1
@@ -76,14 +93,13 @@ def test(folder):
                     print(f"{COL_RED}FAILED{RESET} with unexpected output")
                     print(f"Expected:\n{expect}")
                     print(f"Actual:\n{output}")
-                    failed_paths.append(file_path)
-                    failed += 1
+                    failures.append(
+                        {"path": file_path, "reason": "unexpected output"})
             else:
                 if timed_out:
                     print(f"{COL_RED}FAILED{RESET} with timeout")
                     print("Timeout expired after 2 seconds, likely infinite loop")
-                    failed_paths.append(file_path)
-                    failed += 1
+                    failures.append({"path": file_path, "reason": "timeout"})
                     continue
 
                 if wants_err:
@@ -94,13 +110,13 @@ def test(folder):
                         print(f"{COL_RED}FAILED{RESET} with unexpected error")
                         print(f"Expected:\n{expected_err}")
                         print(f"Got:\n{error}")
-                        failed_paths.append(file_path)
-                        failed += 1
+                        failures.append(
+                            {"path": file_path, "reason": "unexpected error"})
                 else:
                     print(f"{COL_RED}FAILED{RESET} with error")
                     print(error)
-                    failed_paths.append(file_path)
-                    failed += 1
+                    failures.append(
+                        {"path": file_path, "reason": "unexpected error"})
 
             tests += 1
 
@@ -144,6 +160,13 @@ def multiline_output_match(actual_output, expected_output):
     )
 
 
+def check_for_leaks(stderr: str):
+    for marker in LEAK_MARKERS:
+        if marker in stderr:
+            return True, stderr
+    return False, ""
+
+
 # return values: stdout, stderr, returncode, timeout
 def capture_output(command: str) -> (str, str, int, bool):
     try:
@@ -158,6 +181,14 @@ def capture_output(command: str) -> (str, str, int, bool):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="zen e2e test runner")
+    parser.add_argument(
+        "--strict", "-s", action="store_true",
+        help="enable memory leak detection (requires debug build)",
+    )
+    args = parser.parse_args()
+    STRICT = args.strict
+
     print_header()
 
     try:
@@ -174,13 +205,13 @@ if __name__ == "__main__":
             print(f"\t{path}")
 
     print()
-    if failed > 0:
-        print(f"{COL_RED}FAILED{RESET}: {failed} tests failed.")
+    if len(failures) > 0:
+        print(f"{COL_RED}FAILED{RESET}: {len(failures)} tests failed.")
         print("Failed tests:")
-        for path in failed_paths:
-            print(f"\t{path}")
+        for failure in failures:
+            print(f"\t{failure["path"]} ({failure["reason"]})")
     elif passed == tests:
         print(f"All tests {COL_GREEN}PASSED!{RESET} :)")
     else:
         print(f"{COL_RED}Something went wrong.{RESET}")
-        print(f"{passed} tests passed, {failed} failed.")
+        print(f"{passed} tests passed, {len(failures)} failed.")

@@ -1,0 +1,2 @@
+var result = class Foo {}
+print result // expect: nil

@@ -37,7 +37,7 @@
         "keywords": {
             "patterns": [
                 {
-                    "match": "\\b(if|else|while|for|return|break|continue|switch|exit|in)\\b",
+                    "match": "\\b(if|else|while|for|return|break|continue|switch|exit|in|discard)\\b",
                     "name": "keyword.control.zen"
                 },
                 {

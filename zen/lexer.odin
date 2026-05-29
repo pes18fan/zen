@@ -44,6 +44,7 @@ TokenType :: enum {
 	BREAK,
 	CONTINUE,
 	CLASS,
+	DISCARD,
 	ELSE,
 	EXIT,
 	FALSE,
@@ -262,9 +263,9 @@ set_separators :: proc(tokens: []Token) -> []Token {
                             "b"
                         ]
                         */
-					if len(list_stack) > 0 || (len(paren_stack) > 0 && len(block_stack) == 0) {
-						continue
-					}
+						if len(list_stack) > 0 || (len(paren_stack) > 0 && len(block_stack) == 0) {
+							continue
+						}
 
 						/* Do NOT insert a semi after the end of the expression 
                         in a block, as blocks return it. */
@@ -365,6 +366,8 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 				}
 			}
 		}
+	case 'd':
+		return check_keyword(l, 1, 6, "iscard", .DISCARD)
 	case 'e':
 		{
 			if l.current - l.start > 1 {

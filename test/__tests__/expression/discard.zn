@@ -1,0 +1,6 @@
+class SomeClass {}
+
+puts(discard 1)               // expect: nil
+puts(discard "hi")            // expect: nil
+puts(discard SomeClass())     // expect: nil
+puts(discard func(x) => x)    // expect: nil

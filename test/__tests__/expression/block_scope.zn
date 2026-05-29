@@ -1,0 +1,7 @@
+var x = 1
+var result = {
+    var x = 2
+    x
+}
+puts(result) // expect: 2
+puts(x) // expect: 1

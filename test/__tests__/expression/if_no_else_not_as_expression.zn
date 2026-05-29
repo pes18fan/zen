@@ -1,0 +1,1 @@
+var result = if true { "yes" } // ERR: Cannot use one-armed 'if' as a value.

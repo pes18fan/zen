@@ -15,6 +15,7 @@ Expr :: union {
 	^CallExpr,
 	^ClassExpr,
 	^ContinueExpr,
+	^DiscardExpr,
 	^ExitExpr,
 	^ForExpr,
 	^ForInExpr,
@@ -80,6 +81,15 @@ CallExpr :: struct {
 
 ContinueExpr :: struct {
 	token: Token,
+}
+
+// sometimes we want to run an expression for its side effects but discard
+// its value itself, in this case the `DiscardExpr` is perfect. It evaluates
+// the expression inside of it and returns nil (which will become unit in the
+// future)
+DiscardExpr :: struct {
+	token:      Token,
+	expression: Expr,
 }
 
 ExitExpr :: struct {
@@ -339,7 +349,7 @@ parse_precedence :: proc(p: ^Parser, precedence: Precedence) -> Expr {
 	return expr
 }
 
-// Parse an expression, treating newlines as expression-separating infix operators.
+// Parse an expression, treating newlines and semicolons as expression-separating infix operators.
 parse_expression_top :: proc(p: ^Parser) -> Expr {
 	fst := parse_expression(p)
 	if !parser_match(p, .NEWLINE, .SEMI) {
@@ -414,12 +424,12 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		case_node.condition = parse_expression(p)
 		parser_consume(p, .FAT_ARROW, "Expect '=>' after case.")
 		case_node.body = parse_expression(p)
-		if parser_match(p, .NEWLINE) {}
-		append(&cases, case_node)
-	}
+		if parser_check(p, .RSQUIRLY) {
+			parser_error(p, parser_peek(p), "Switch expression must have an 'else' case.")
+		}
 
-	if !has_else_clause {
-		parser_error(p, parser_peek(p), "Switch expression must have an 'else' case.")
+		parser_consume_newline(p, "switch case")
+		append(&cases, case_node)
 	}
 
 	expr.cases = cases[:]
@@ -593,14 +603,15 @@ parse_unary :: proc(p: ^Parser, can_assign: bool) -> Expr {
 }
 
 /*
-Translate escape sequences in a string literal.
+Translate escape sequences in a string literal. This function allocates a new
+string.
 
-This function allocates a string, but doesn't take ownership of the input; therefore
-the input will still need to be freed if necessary. 
+This function doesn't take ownership of the input; therefore the input will 
+still need to be freed if necessary. 
 
 In this compiler, it is used to create an escape-sequenced string out of a slice 
 of the program input itself, which should **NOT** be freed until the program ends; 
-therefore it is not necessary for it to take ownership.
+which is why it does not take ownership.
 
 So far, only the newline and tab sequences are supported.
 */
@@ -724,16 +735,10 @@ parse_super :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	super_expr.token = parser_previous(p)
 	parser_consume(p, .DOT, "Expect '.' after 'super'.")
 	super_expr.method = parser_consume(p, .IDENT, "Expect superclass method name.")
-
-	invoked := false
 	method_args := make([dynamic]Expr, 0, 1)
-	defer if !invoked {
-		delete(method_args)
-	}
 
 	// was the retrieved method immediately invoked?
 	if parser_match(p, .LPAREN) {
-		invoked = true
 		if !parser_check(p, .RPAREN) {
 			for {
 				append(&method_args, parse_expression(p))
@@ -744,6 +749,7 @@ parse_super :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		parser_consume(p, .RPAREN, "Expect ')' after method parameters.")
 	} else {
 		super_expr.method_args = nil
+		delete(method_args)
 	}
 
 	return super_expr
@@ -759,6 +765,13 @@ parse_it :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	it_expr := new(ItExpr)
 	it_expr.token = parser_previous(p)
 	return it_expr
+}
+
+parse_discard :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	discard := new(DiscardExpr)
+	discard.token = parser_previous(p)
+	discard.expression = parse_expression(p)
+	return discard
 }
 
 /* Handles both anonymous functions (LambdaExpr) and function declarations,
@@ -997,6 +1010,7 @@ rules: [TokenType]ParseRule = {
 	.BREAK         = {parse_break, nil, .NONE},
 	.CONTINUE      = {parse_continue, nil, .NONE},
 	.CLASS         = {parse_class_expr, nil, .NONE},
+	.DISCARD       = {parse_discard, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
 	.EXIT          = {parse_exit, nil, .NONE},
 	.FALSE         = {parse_literal, nil, .NONE},
@@ -1078,7 +1092,6 @@ parser_check :: proc(p: ^Parser, type: TokenType) -> bool {
 	return parser_peek(p).type == type
 }
 
-/* Like parser_match() but doesn't parser_advance */
 parser_check_any :: proc(p: ^Parser, types: ..TokenType) -> bool {
 	if parser_is_at_end(p) {return false}
 	for type in types {
@@ -1179,6 +1192,9 @@ free_expr :: proc(expr: Expr) {
 		}
 		delete(e.methods)
 		free(e)
+	case ^DiscardExpr:
+		free_expr(e.expression)
+		free(e)
 	case ^ExitExpr:
 		free_expr(e.code)
 		free(e)
@@ -1253,6 +1269,7 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.value)
 		free(e)
 	case ^SuperExpr:
+		if e.method_args != nil {delete(e.method_args)}
 		free(e)
 	case ^SwitchExpr:
 		free_expr(e.condition)
@@ -1337,6 +1354,12 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		for arg in e.arguments {
 			print_expr(b, arg, indent + 1)
 		}
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
+	case ^DiscardExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(discard\n")
+		print_expr(b, e.expression, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ClassExpr:
