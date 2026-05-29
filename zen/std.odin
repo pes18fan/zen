@@ -158,11 +158,7 @@ gets_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 /* Convert any value to a string. */
 str_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	str, was_allocation := stringify_value(args[0])
-	defer if was_allocation {
-		delete(str)
-	}
-	return obj_val(copy_string(vm.gc, str)), true
+	return obj_val(copy_string(vm.gc, stringify_value(args[0]))), true
 }
 
 /* Return the type of any value, represented as a string. */

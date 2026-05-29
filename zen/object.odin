@@ -410,20 +410,20 @@ stringify_function :: proc(fn: ^ObjFunction) -> string {
 	return fmt.tprintf("<func %s>", fn.name.chars)
 }
 
-stringify_object :: proc(obj: ^Obj) -> (res: string, was_allocation: bool) {
+stringify_object :: proc(obj: ^Obj) -> string {
 	switch obj.type {
 	case .BOUND_METHOD:
 		/* Bound methods are an implementation detail, we don't expose that
 			 * since from the user's perspective they're just functions. */
-		return stringify_function(as_bound_method(obj_val(obj)).method.function), false
+		return stringify_function(as_bound_method(obj_val(obj)).method.function)
 	case .CLASS:
-		return fmt.tprintf("<class %s>", as_class(obj_val(obj)).name.chars), false
+		return fmt.tprintf("<class %s>", as_class(obj_val(obj)).name.chars)
 	case .CLOSURE:
-		return stringify_function(as_closure(obj_val(obj)).function), false
+		return stringify_function(as_closure(obj_val(obj)).function)
 	case .FUNCTION:
-		return stringify_function(as_function(obj_val(obj))), false
+		return stringify_function(as_function(obj_val(obj)))
 	case .INSTANCE:
-		return fmt.tprintf("<instance of %s>", as_instance(obj_val(obj)).klass.name.chars), false
+		return fmt.tprintf("<instance of %s>", as_instance(obj_val(obj)).klass.name.chars)
 	case .LIST:
 		{
 			list := as_list(obj_val(obj))
@@ -433,10 +433,7 @@ stringify_object :: proc(obj: ^Obj) -> (res: string, was_allocation: bool) {
 			strings.write_string(&sb, "[")
 
 			for i := 0; i < list.items.count; i += 1 {
-				value, v_was_allocation := stringify_value(list.items.values[i])
-				defer if v_was_allocation {
-					delete(value)
-				}
+				value := stringify_value(list.items.values[i])
 				strings.write_string(&sb, value)
 
 				if i != list.items.count - 1 {
@@ -446,17 +443,17 @@ stringify_object :: proc(obj: ^Obj) -> (res: string, was_allocation: bool) {
 
 			strings.write_string(&sb, "]")
 			str := strings.to_string(sb)
-			return strings.clone(str), true
+			return fmt.tprint(str)
 		}
 	case .MODULE:
-		return fmt.tprintf("<module %s>", as_module(obj_val(obj)).name.chars), false
+		return fmt.tprintf("<module %s>", as_module(obj_val(obj)).name.chars)
 	case .NATIVE:
-		return "<native func>", false
+		return "<native func>"
 	case .STRING:
 		// return fmt.tprintf("\"%s\"", as_ostring(obj_val(obj))), false
-		return as_ostring(obj_val(obj)), false
+		return as_ostring(obj_val(obj))
 	case .UPVALUE:
-		return "upvalue", false
+		return "upvalue"
 	}
 
 	fmt.eprintln("bug: reached unreachable code")
@@ -469,10 +466,7 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 	if config.log_gc {
 		fmt.eprintf("%p free ", obj)
 
-		str, was_allocation := stringify_object(obj)
-		defer if was_allocation {
-			delete(str)
-		}
+		str := stringify_object(obj)
 		fmt.eprintf(str)
 		fmt.eprintf(" of type %v\n", type_of_obj(obj))
 	}

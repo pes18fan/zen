@@ -174,9 +174,7 @@ print_value_array :: proc(a: ^ValueArray) {
 	for i in 0 ..< a.count {
 		fmt.eprint(" ")
 
-		str, was_allocation := stringify_value(a.values[i])
-		defer if was_allocation {delete(str)}
-
+		str := stringify_value(a.values[i])
 		fmt.eprint(str)
 		fmt.eprintf(" at %d,", i)
 	}
@@ -214,43 +212,35 @@ type_of_value :: proc(value: Value) -> string {
 	unreachable()
 }
 
-stringify_value :: proc(value: Value) -> (res: string, was_allocation: bool) {
+stringify_value :: proc(value: Value) -> string {
 	when NAN_BOXING {
 		if is_nil(value) {
-			return "nil", false
+			return "nil"
 		} else if is_bool(value) {
-			return (as_bool(value) ? "true" : "false"), false
+			return as_bool(value) ? "true" : "false"
 		} else if is_number(value) {
 			if is_integer(as_number(value)) {
-				return (fmt.tprintf("%d", int(as_number(value)))), false
+				return (fmt.tprintf("%d", int(as_number(value))))
 			} else {
-				return (fmt.tprintf("%.3f", as_number(value))), false
+				return (fmt.tprintf("%.3f", as_number(value)))
 			}
 		} else if is_obj(value) {
-			str, allocated := stringify_object(as_obj(value))
-			if allocated {
-				return str, true
-			}
-			return str, false
+			return stringify_object(as_obj(value))
 		}
 	} else {
 		switch v in value {
 		case bool:
-			return (v ? "true" : "false"), false
+			return v ? "true" : "false"
 		case f64:
 			if is_integer(v) {
-				return (fmt.tprintf("%d", int(v))), false
+				return (fmt.tprintf("%d", int(v)))
 			} else {
-				return (fmt.tprintf("%.3f", v)), false
+				return (fmt.tprintf("%.3f", v))
 			}
 		case ^Obj:
-			str, was_allocation := stringify_object(v)
-			if was_allocation {
-				return str, true
-			}
-			return str, false
+			return stringify_object(v)
 		case:
-			return "nil", false
+			return "nil"
 		}
 	}
 
@@ -299,10 +289,7 @@ copy_value :: proc(gc: ^GC, value: Value) -> Value {
 
 /* Print out `value` in a human-readable format. */
 print_value :: proc(value: Value) {
-	str, was_allocation := stringify_value(value)
-	defer if was_allocation {
-		delete(str)
-	}
+	str := stringify_value(value)
 	fmt.print(str)
 }
 

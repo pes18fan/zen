@@ -238,7 +238,7 @@ apply_substitution :: proc {
 	apply_substitution_ctx,
 }
 
-apply_substitution_type :: proc(type: Type, subst: Substitution) -> Type {
+apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 	switch t in type {
 	case TypeVariable:
 		if t in subst {
@@ -248,7 +248,7 @@ apply_substitution_type :: proc(type: Type, subst: Substitution) -> Type {
 	case TypeFunctionApplication:
 		new_args := make([]Type, len(t.args))
 		for i in 0 ..< len(t.args) {
-			new_args[i] = apply_substitution_type(t.args[i], subst)
+			new_args[i] = apply_substitution(subst, t.args[i])
 		}
 		return TypeFunctionApplication{constructor = t.constructor, args = new_args}
 	}
@@ -256,10 +256,10 @@ apply_substitution_type :: proc(type: Type, subst: Substitution) -> Type {
 	panic("invalid type kind in apply_substitution_type()")
 }
 
-apply_substitution_quantified :: proc(scheme: TypeScheme, subst: Substitution) -> TypeScheme {
+apply_substitution_quantified :: proc(subst: Substitution, scheme: TypeScheme) -> TypeScheme {
 	switch type in scheme {
 	case Type:
-		return apply_substitution_type(type, subst)
+		return apply_substitution(subst, type)
 	case TypeQuantified:
 		// copy the substitution
 		applied := make(Substitution)
@@ -274,15 +274,15 @@ apply_substitution_quantified :: proc(scheme: TypeScheme, subst: Substitution) -
 		}
 
 		// apply it to the type within
-		return apply_substitution(type.type, applied)
+		return apply_substitution(applied, type.type)
 	}
 
 	panic("invalid typescheme kind in apply_substitution_quantified()")
 }
 
-apply_substitution_ctx :: proc(tc: ^TypeChecker, subst: Substitution) {
+apply_substitution_ctx :: proc(subst: Substitution, tc: ^TypeChecker) {
 	for name, scheme in tc.ctx.bindings {
-		tc.ctx.bindings[name] = apply_substitution(scheme, subst)
+		tc.ctx.bindings[name] = apply_substitution(subst, scheme)
 	}
 }
 
@@ -292,7 +292,7 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 	res := make(Substitution)
 
 	for var, ty in s2 {
-		res[var] = apply_substitution(ty, s1)
+		res[var] = apply_substitution(s1, ty)
 	}
 
 	for var, ty in s1 {
@@ -315,7 +315,7 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 		for bound in type.bound {
 			subst[bound] = fresh(tc)
 		}
-		res := apply_substitution(type.type, subst)
+		res := apply_substitution(subst, type.type)
 
 		if config.log_type {
 			quant := type_string(type)
@@ -398,8 +398,8 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 
 		s := make(Substitution)
 		for i in 0 ..< len(t1.args) {
-			fst := apply_substitution(t1.args[i], s)
-			snd := apply_substitution(t2.args[i], s)
+			fst := apply_substitution(s, t1.args[i])
+			snd := apply_substitution(s, t2.args[i])
 			res := unify(fst, snd) or_return
 			defer delete(res)
 
@@ -438,76 +438,84 @@ infer_type :: proc(
 	ty: Type,
 	success: bool,
 ) {
-	s, type, err := w(tc, expr)
-	if err != nil {
-		typecheck_error(tc, err.?)
-		return nil, Type{}, false
-	}
-	return s, type, true
+	alpha := fresh(tc)
+	s := try2(tc, m(tc, expr, alpha)) or_return
+	return s, apply_substitution(s, alpha), true
 }
 
 @(require_results)
-w :: proc(tc: ^TypeChecker, expr: Expr) -> (subst: Substitution, type: Type, err: ErrorMessage) {
-	switch e in expr {
-	case ^AssignExpr:
-		unimplemented()
-	case ^BinaryExpr:
-		unimplemented()
-	case ^UnaryExpr:
-		unimplemented()
-	case ^GetExpr:
-		unimplemented()
-	case ^SetExpr:
-		unimplemented()
-	case ^GroupingExpr:
-		unimplemented()
-	case ^LogicalExpr:
-		unimplemented()
-	case ^ItExpr:
-		unimplemented()
-	case ^ListExpr:
-		unimplemented()
-	case ^PipeExpr:
-		unimplemented()
-	case ^SubscriptExpr:
-		unimplemented()
-	case ^SubscriptSetExpr:
-		unimplemented()
-	case ^SuperExpr:
-		unimplemented()
-	case ^ThisExpr:
-		unimplemented()
-	case ^LiteralExpr:
-		tc.current_token = e.token
-		switch l in e.value {
-		case f64:
-			return nil, TypeFunctionApplication{constructor = .NUMBER}, nil
-		case string:
-			return nil, TypeFunctionApplication{constructor = .STRING}, nil
-		case bool:
-			return nil, TypeFunctionApplication{constructor = .BOOL}, nil
-		case:
-			// nil
-			return nil, TypeFunctionApplication{constructor = .NIL}, nil
-		}
-	case ^VariableExpr:
-		tc.current_token = e.token
-		alpha := fresh(tc)
-		found := resolve_type(tc, e.name.lexeme) or_return
-		ty := instantiate(tc, found)
-		s := unify(alpha, ty) or_return
-		return subst, apply_substitution(alpha, s), nil
-	case ^LambdaExpr:
-		tc.current_token = e.token
-		// must curry
-		unimplemented()
-	case ^CallExpr:
-		tc.current_token = e.token
-		// must curry
-		unimplemented()
-	}
-
+m :: proc(tc: ^TypeChecker, expr: Expr, type: Type) -> (subst: Substitution, err: ErrorMessage) {
 	unimplemented()
+	// switch e in expr {
+	// case ^AssignExpr:
+	// 	unimplemented()
+	// case ^BinaryExpr:
+	// 	unimplemented()
+	// case ^BlockExpr:
+	// 	unimplemented()
+	// case ^BreakExpr:
+	// 	unimplemented()
+	// case ^CallExpr:
+	// 	tc.current_token = e.token
+	// 	// must curry
+	// 	unimplemented()
+	// case ^ClassExpr:
+	// 	unimplemented()
+	// case ^ContinueExpr:
+	// 	unimplemented()
+	// case ^ExitExpr:
+	// 	unimplemented()
+	// case ^ForExpr:
+	// 	unimplemented()
+	// case ^GetExpr:
+	// 	unimplemented()
+	// case ^SetExpr:
+	// 	unimplemented()
+	// case ^GroupingExpr:
+	// 	unimplemented()
+	// case ^LogicalExpr:
+	// 	unimplemented()
+	// case ^ItExpr:
+	// 	unimplemented()
+	// case ^ListExpr:
+	// 	unimplemented()
+	// case ^PipeExpr:
+	// 	unimplemented()
+	// case ^SubscriptExpr:
+	// 	unimplemented()
+	// case ^SubscriptSetExpr:
+	// 	unimplemented()
+	// case ^SuperExpr:
+	// 	unimplemented()
+	// case ^ThisExpr:
+	// 	unimplemented()
+	// case ^LiteralExpr:
+	// 	tc.current_token = e.token
+	// 	switch l in e.value {
+	// 	case f64:
+	// 		return unify(type, TypeFunctionApplication{constructor = .NUMBER})
+	// 	case string:
+	// 		return unify(type, TypeFunctionApplication{constructor = .STRING})
+	// 	case bool:
+	// 		return unify(type, TypeFunctionApplication{constructor = .BOOL})
+	// 	case:
+	// 		return unify(type, TypeFunctionApplication{constructor = .NIL})
+	// 	}
+	// case ^VariableExpr:
+	// 	tc.current_token = e.token
+	// 	alpha := fresh(tc)
+	// 	found := resolve_type(tc, e.name.lexeme) or_return
+	// 	// ty := instantiate(tc, found)
+	// 	return unify(alpha, found.(Type))
+	// case ^LambdaExpr:
+	// 	tc.current_token = e.token
+	// 	// must curry
+	// 	unimplemented()
+	// case ^UnaryExpr:
+	// 	unimplemented()
+	// }
+	//
+	// unimplemented()
 }
 
 type_string :: proc(scheme: TypeScheme) -> string {

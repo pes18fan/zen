@@ -292,21 +292,10 @@ ParseRule :: struct {
 /* Create a list of parsed declarations forming an abstract syntax tree, from
 a list of tokens stored in a parser. */
 parse :: proc(p: ^Parser) -> (expr: Expr, success: bool) {
-	// declarations := make([dynamic]Decl)
-	// for !parser_is_at_end(p) {
-	// 	decl := parse_declaration(p)
-	// 	append(&declarations, decl)
-	//
-	// 	if p.panic_mode {
-	// 		parser_synchronize(p)
-	// 	}
-	// }
-	//
-	// return declarations[:], !p.had_parser_error
 	if parser_is_at_end(p) {
 		return nil, true
 	}
-	return parse_expression_top(p), !p.had_parser_error
+	return parse_expression_top(p), !p.had_error
 }
 
 parse_method :: proc(p: ^Parser, can_assign: bool) -> ^LambdaExpr {
@@ -1036,18 +1025,18 @@ rules: [TokenType]ParseRule = {
 }
 
 Parser :: struct {
-	tokens:           []Token,
-	current:          int,
-	had_parser_error: bool,
-	panic_mode:       bool,
-	prev_was_eof:     bool,
+	tokens:       []Token,
+	current:      int,
+	had_error:    bool,
+	panic_mode:   bool,
+	prev_was_eof: bool,
 }
 
 init_parser :: proc(tokens: []Token) -> Parser {
 	return Parser {
 		tokens = tokens,
 		current = 0,
-		had_parser_error = false,
+		had_error = false,
 		panic_mode = false,
 		prev_was_eof = false,
 	}
@@ -1057,7 +1046,7 @@ parser_error :: proc(p: ^Parser, token: Token, message: string) {
 	if p.panic_mode {return}
 	p.panic_mode = true
 
-	color_red(os.stderr, "parse parser_error ")
+	color_red(os.stderr, "parse error ")
 
 	if token.type == .EOF {
 		fmt.eprint("at end")
@@ -1069,7 +1058,7 @@ parser_error :: proc(p: ^Parser, token: Token, message: string) {
 
 	fmt.eprintfln(": %s", message)
 	fmt.eprintfln("  on [line %d]", token.line)
-	p.had_parser_error = true
+	p.had_error = true
 }
 
 parser_peek :: proc(p: ^Parser) -> Token {

@@ -157,9 +157,7 @@ grow_capacity :: proc(capacity: int) -> int {
 table_print :: proc(table: ^Table) {
 	for i in 0 ..< table.capacity {
 		entry := &table.entries[i]
-		val_str, was_allocation := stringify_value(entry.value)
-		defer if was_allocation {delete(val_str)}
-
+		val_str := stringify_value(entry.value)
 		if entry.key != nil {
 			fmt.eprintf("key: %s, value: %v\n", entry.key.chars, val_str)
 		}

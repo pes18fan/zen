@@ -40,7 +40,14 @@ try2_codegen :: #force_inline proc(cg: ^Codegen, ret: $T, err: ErrorMessage) -> 
 	return ret, true
 }
 
-try2_type_checker :: #force_inline proc(t: ^TypeChecker, ret: $T, err: ErrorMessage) -> (T, bool) {
+try2_type_checker :: #force_inline proc(
+	tc: ^TypeChecker,
+	ret: $T,
+	err: ErrorMessage,
+) -> (
+	T,
+	bool,
+) {
 	if err != nil {
 		typecheck_error(tc, err.?)
 		return ret, false

@@ -1128,6 +1128,10 @@ interpret :: proc(
 	// Collect global function definitions before codegen
 	// This allows mutual recursion
 	collect_globals(&vm.compiler_globals, gc, expr)
+	sm_ok := analyze(expr)
+	if !sm_ok {
+		return .INTERPRET_COMPILE_ERROR
+	}
 
 	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
 	if !cg_ok {

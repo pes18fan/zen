@@ -51,10 +51,10 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 	}
 	defer delete(string_subst)
 
-	tt.expect(t, types_equal(apply_substitution(var, num_subst), num_lit))
-	tt.expect(t, types_equal(apply_substitution(var, bool_subst), bool_lit))
-	tt.expect(t, types_equal(apply_substitution(var, nil_subst), nil_lit))
-	tt.expect(t, types_equal(apply_substitution(var, string_subst), string_lit))
+	tt.expect(t, types_equal(apply_substitution(num_subst, var), num_lit))
+	tt.expect(t, types_equal(apply_substitution(bool_subst, var), bool_lit))
+	tt.expect(t, types_equal(apply_substitution(nil_subst, var), nil_lit))
+	tt.expect(t, types_equal(apply_substitution(string_subst, var), string_lit))
 }
 
 // do equal types return a nil substitution?
@@ -129,11 +129,11 @@ test_unify_function_type :: proc(t: ^tt.T) {
 
 	tt.expect(
 		t,
-		types_equal(apply_substitution(a, subst), TypeFunctionApplication{constructor = .NUMBER}),
+		types_equal(apply_substitution(subst, a), TypeFunctionApplication{constructor = .NUMBER}),
 	)
 	tt.expect(
 		t,
-		types_equal(apply_substitution(b, subst), TypeFunctionApplication{constructor = .NUMBER}),
+		types_equal(apply_substitution(subst, a), TypeFunctionApplication{constructor = .NUMBER}),
 	)
 }
 
@@ -200,7 +200,7 @@ test_apply_substitution_type_variable :: proc(t: ^tt.T) {
 		constructor = .STRING,
 	}
 
-	result := apply_substitution(TypeVariable{idx = 0}, subst)
+	result := apply_substitution(subst, TypeVariable{idx = 0})
 	tt.expect(t, types_equal(result, TypeFunctionApplication{constructor = .STRING}))
 }
 
@@ -220,7 +220,7 @@ test_apply_substitution_function :: proc(t: ^tt.T) {
 		constructor = .STRING,
 	}
 
-	result := apply_substitution(ty, subst)
+	result := apply_substitution(subst, ty)
 	expected := TypeFunctionApplication {
 		constructor = .FUNCTION,
 		args        = {
