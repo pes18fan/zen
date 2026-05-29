@@ -1133,14 +1133,23 @@ interpret :: proc(
 		return .INTERPRET_COMPILE_ERROR
 	}
 
+	/* Time semantic analysis. */
+	if config.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("Semantic analyzer: %v\n", time.stopwatch_duration(sw))
+		time.stopwatch_reset(&sw)
+		time.stopwatch_start(&sw)
+	}
+
+	// TODO: type checker pass, in progress
+
+	// TODO: optimization pass: constant folding, inlining whenever possible,
+	// remove instructions that cancel each other out (e.g. in push -> pop -> push,
+	// keep just the last push)
+
 	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals, resolution)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
-	}
-
-	// empty program
-	if fn == nil {
-		return .INTERPRET_OK
 	}
 
 	/* Time the compiler. */
@@ -1149,6 +1158,11 @@ interpret :: proc(
 		fmt.eprintf("Compiler: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
 		time.stopwatch_start(&sw)
+	}
+
+	// empty program
+	if fn == nil {
+		return .INTERPRET_OK
 	}
 
 	/* Time the VM. */

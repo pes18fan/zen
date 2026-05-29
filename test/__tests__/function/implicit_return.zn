@@ -1,0 +1,2 @@
+func square(x) { x * x }
+puts(square(2)) // expect: 4
