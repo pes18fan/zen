@@ -46,7 +46,7 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 	case .NIL:
 		return "nil"
 	case .BOOL:
-		return "boolean"
+		return "bool"
 	case .NUMBER:
 		return "number"
 	case .STRING:
@@ -62,9 +62,18 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 	panic("invalid type constructor")
 }
 
-fresh :: proc(tc: ^TypeChecker) -> TypeVariable {
+fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	defer tc.typevar_count += 1
 	return TypeVariable{tc.typevar_count}
+}
+
+nullary :: #force_inline proc(constructor: TypeConstructor) -> TypeFunctionApplication {
+	#partial switch constructor {
+	case .NUMBER, .STRING, .NIL, .BOOL:
+		return TypeFunctionApplication{constructor = constructor, args = nil}
+	}
+
+	fmt.panicf("invalid nullary type constructor %v", constructor)
 }
 
 @(require_results)
@@ -101,17 +110,17 @@ Substitution :: map[TypeVariable]Type
 
 // Resolve a name - walks the scope chain exactly like resolve_local/upvalue
 @(require_results)
-resolve_type :: proc(tc: ^TypeChecker, name: string) -> (TypeScheme, ErrorMessage) {
+resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	ctx := tc.ctx
 	for ctx != nil {
 		if t, ok := ctx.bindings[name]; ok {
-			return t, nil
+			return t
 		}
 		ctx = ctx.enclosing
 	}
 
 	// panic cuz variable resolving is supposed to be done beforehand
-	return TypeScheme{}, fmt.tprintf("Undefined variable '%v'", name)
+	fmt.panicf("Internal compiler error: Undefined variable '%v' in type checker", name)
 }
 
 bind_type :: proc(ctx: ^TypeContext, name: string, t: TypeScheme) {
@@ -119,8 +128,8 @@ bind_type :: proc(ctx: ^TypeContext, name: string, t: TypeScheme) {
 }
 
 push_scope :: proc(tc: ^TypeChecker) {
-	ctx := new(TypeContext)
-	ctx.bindings = make(map[string]TypeScheme)
+	ctx := new(TypeContext, context.temp_allocator)
+	ctx.bindings = make(map[string]TypeScheme, context.temp_allocator)
 	ctx.enclosing = tc.ctx
 	tc.ctx = ctx
 }
@@ -128,8 +137,6 @@ push_scope :: proc(tc: ^TypeChecker) {
 pop_scope :: proc(tc: ^TypeChecker) {
 	ctx := tc.ctx
 	tc.ctx = ctx.enclosing
-	delete(ctx.bindings)
-	free(ctx)
 }
 
 @(require_results)
@@ -176,7 +183,7 @@ free_vars :: proc {
 }
 
 free_vars_typescheme :: proc(scheme: TypeScheme) -> FreeVars {
-	fvs := make(FreeVars)
+	fvs := make(FreeVars, context.temp_allocator)
 
 	switch type in scheme {
 	case Type:
@@ -186,7 +193,7 @@ free_vars_typescheme :: proc(scheme: TypeScheme) -> FreeVars {
 		case TypeFunctionApplication:
 			// PERF: O(n^2), kinda sucky
 			for arg in t.args {
-				arg_fvs := free_vars_typescheme(arg)
+				arg_fvs := free_vars(arg)
 				defer delete(arg_fvs)
 				for key in arg_fvs {
 					fvs[key] = {}
@@ -194,7 +201,7 @@ free_vars_typescheme :: proc(scheme: TypeScheme) -> FreeVars {
 			}
 		}
 	case TypeQuantified:
-		internal_fvs := free_vars_typescheme(type.type)
+		internal_fvs := free_vars(type.type)
 		defer delete(internal_fvs)
 		for key in internal_fvs {
 			fvs[key] = {}
@@ -209,7 +216,7 @@ free_vars_typescheme :: proc(scheme: TypeScheme) -> FreeVars {
 }
 
 free_vars_context :: proc(ctx: ^TypeContext) -> FreeVars {
-	fvs := make(FreeVars)
+	fvs := make(FreeVars, context.temp_allocator)
 	c := ctx
 
 	for c != nil {
@@ -246,7 +253,7 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 		}
 		return t
 	case TypeFunctionApplication:
-		new_args := make([]Type, len(t.args))
+		new_args := make([]Type, len(t.args), context.temp_allocator)
 		for i in 0 ..< len(t.args) {
 			new_args[i] = apply_substitution(subst, t.args[i])
 		}
@@ -262,8 +269,7 @@ apply_substitution_quantified :: proc(subst: Substitution, scheme: TypeScheme) -
 		return apply_substitution(subst, type)
 	case TypeQuantified:
 		// copy the substitution
-		applied := make(Substitution)
-		defer delete(applied)
+		applied := make(Substitution, context.temp_allocator)
 		for k, v in subst {
 			applied[k] = v
 		}
@@ -280,16 +286,16 @@ apply_substitution_quantified :: proc(subst: Substitution, scheme: TypeScheme) -
 	panic("invalid typescheme kind in apply_substitution_quantified()")
 }
 
-apply_substitution_ctx :: proc(subst: Substitution, tc: ^TypeChecker) {
-	for name, scheme in tc.ctx.bindings {
-		tc.ctx.bindings[name] = apply_substitution(subst, scheme)
+apply_substitution_ctx :: proc(subst: Substitution, ctx: ^TypeContext) {
+	for name, scheme in ctx.bindings {
+		ctx.bindings[name] = apply_substitution(subst, scheme)
 	}
 }
 
 // allocates a map (Substitution)
 // NOTE: order matters, s2 is applied first then s1
 combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitution {
-	res := make(Substitution)
+	res := make(Substitution, context.temp_allocator)
 
 	for var, ty in s2 {
 		res[var] = apply_substitution(s1, ty)
@@ -310,8 +316,7 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 	case Type:
 		return type
 	case TypeQuantified:
-		subst := make(Substitution)
-		defer delete(subst)
+		subst := make(Substitution, context.temp_allocator)
 		for bound in type.bound {
 			subst[bound] = fresh(tc)
 		}
@@ -337,7 +342,7 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 	ty_fvs := free_vars(ty)
 	defer delete(ty_fvs)
 
-	bound := make([dynamic]TypeVariable)
+	bound := make([dynamic]TypeVariable, context.temp_allocator)
 	for fv in ty_fvs {
 		if fv not_in ctx_fvs {
 			append(&bound, fv)
@@ -345,7 +350,6 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 	}
 
 	if len(bound) == 0 {
-		delete(bound)
 		return ty
 	}
 
@@ -372,10 +376,14 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 		}
 
 		if contains(b, as_type_variable(a)) {
-			return nil, "occurs check failed, infinite type"
+			return nil, fmt.tprintf(
+				"Infinite type: type %v contains %v.",
+				type_string(b),
+				type_string(a),
+			)
 		}
 
-		s := make(Substitution)
+		s := make(Substitution, context.temp_allocator)
 		s[as_type_variable(a)] = b
 		return s, nil
 	}
@@ -390,21 +398,17 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 
 		if t1.constructor != t2.constructor {
 			return nil, fmt.tprintf(
-				"cannot unify %v with %v",
+				"Cannot unify %v with %v.",
 				type_constructor_string(t1.constructor),
 				type_constructor_string(t2.constructor),
 			)
 		}
 
-		s := make(Substitution)
+		s := make(Substitution, context.temp_allocator)
 		for i in 0 ..< len(t1.args) {
 			fst := apply_substitution(s, t1.args[i])
 			snd := apply_substitution(s, t2.args[i])
 			res := unify(fst, snd) or_return
-			defer delete(res)
-
-			old := s
-			defer delete(old)
 			s = combine_substitutions(s, res)
 		}
 		return s, nil
@@ -445,77 +449,151 @@ infer_type :: proc(
 
 @(require_results)
 m :: proc(tc: ^TypeChecker, expr: Expr, type: Type) -> (subst: Substitution, err: ErrorMessage) {
+	switch e in expr {
+	case ^AssignExpr:
+		unimplemented()
+	case ^BinaryExpr:
+		tc.current_token = e.token
+
+		#partial switch e.operator.type {
+		case .PLUS:
+			// TODO: figure out how to get this working for both str and num and nothing else
+			beta := fresh(tc)
+			s1 := m(tc, e.left, beta) or_return
+			apply_substitution(s1, tc.ctx)
+			s2 := m(tc, e.right, beta) or_return
+			apply_substitution(s2, tc.ctx)
+			sn := unify(type, beta) or_return
+			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+		case .MINUS, .STAR, .SLASH, .PERCENT:
+			num := nullary(.NUMBER)
+			s1 := m(tc, e.left, num) or_return
+			apply_substitution(s1, tc.ctx)
+			s2 := m(tc, e.right, num) or_return
+			apply_substitution(s2, tc.ctx)
+			sn := unify(type, num) or_return
+			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+		case .EQUAL_EQUAL, .BANG_EQUAL, .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL:
+			unimplemented()
+		case:
+			fmt.panicf("Internal compiler error: Invalid binary operator '%s'.", e.operator.lexeme)
+		}
+	case ^BlockExpr:
+		tc.current_token = e.token
+		push_scope(tc)
+		s := m(tc, e.expression, type) or_return // infer body with expected type
+		pop_scope(tc)
+		return s, nil
+	case ^BreakExpr:
+		unimplemented()
+	case ^CallExpr:
+		tc.current_token = e.token
+		// must curry
+		unimplemented()
+	case ^ClassExpr:
+		unimplemented()
+	case ^ContinueExpr:
+		unimplemented()
+	case ^DiscardExpr:
+		unimplemented()
+	case ^ExitExpr:
+		unimplemented()
+	case ^ForExpr:
+		unimplemented()
+	case ^ForInExpr:
+		unimplemented()
+	case ^IfExpr:
+		unimplemented()
+	case ^GetExpr:
+		unimplemented()
+	case ^SetExpr:
+		unimplemented()
+	case ^GroupingExpr:
+		tc.current_token = e.token
+		return m(tc, e.expression, type)
+	case ^LogicalExpr:
+		tc.current_token = e.token
+		s1 := m(tc, e.left, nullary(.BOOL)) or_return
+		apply_substitution(s1, tc.ctx)
+		s2 := m(tc, e.right, nullary(.BOOL)) or_return
+		apply_substitution(s2, tc.ctx)
+		sn := unify(type, nullary(.BOOL)) or_return
+		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+	case ^ItExpr:
+		unimplemented()
+	case ^ListExpr:
+		unimplemented()
+	case ^PipeExpr:
+		unimplemented()
+	case ^PrintExpr:
+		unimplemented()
+	case ^ReturnExpr:
+		unimplemented()
+	case ^SubscriptExpr:
+		unimplemented()
+	case ^SubscriptSetExpr:
+		unimplemented()
+	case ^SuperExpr:
+		unimplemented()
+	case ^ThisExpr:
+		unimplemented()
+	case ^LiteralExpr:
+		tc.current_token = e.token
+
+		// just unify with the matching literal constructor
+		switch l in e.value {
+		case f64:
+			return unify(type, nullary(.NUMBER))
+		case string:
+			return unify(type, nullary(.STRING))
+		case bool:
+			return unify(type, nullary(.BOOL))
+		case:
+			return unify(type, nullary(.NIL))
+		}
+	case ^VariableExpr:
+		tc.current_token = e.token
+		alpha := fresh(tc) // create fresh typevar
+		found := resolve_type(tc, e.name.lexeme) // find typescheme in the context
+		ty := instantiate(tc, found) // instantiate the found scheme
+		return unify(alpha, ty) // unify typevar with the found type
+	case ^LambdaExpr:
+		tc.current_token = e.token
+		// must curry
+		unimplemented()
+	case ^SequenceExpr:
+		beta := fresh(tc)
+		s1 := m(tc, e.left, beta) or_return // infer left with fresh var
+		apply_substitution(s1, tc.ctx)
+		s2 := m(tc, e.right, type) or_return // infer right with expected type
+		return combine_substitutions(s2, s1), nil
+	case ^SwitchExpr:
+		unimplemented()
+	case ^UnaryExpr:
+		tc.current_token = e.token
+
+		must_unify_with: TypeFunctionApplication
+		#partial switch e.operator.type {
+		case .MINUS:
+			must_unify_with = nullary(.NUMBER)
+		case .NOT:
+			must_unify_with = nullary(.BOOL)
+		case:
+			fmt.panicf("Internal compiler error: Unknown unary operator '%s'", e.operator.lexeme)
+		}
+
+		s1 := m(tc, e.right, must_unify_with) or_return
+		sn := unify(type, must_unify_with) or_return
+		return combine_substitutions(sn, s1), nil
+	case ^UseExpr:
+		unimplemented()
+	case ^VarDeclExpr:
+		unimplemented()
+	case ^WhileExpr:
+		unimplemented()
+	}
+
 	unimplemented()
-	// switch e in expr {
-	// case ^AssignExpr:
-	// 	unimplemented()
-	// case ^BinaryExpr:
-	// 	unimplemented()
-	// case ^BlockExpr:
-	// 	unimplemented()
-	// case ^BreakExpr:
-	// 	unimplemented()
-	// case ^CallExpr:
-	// 	tc.current_token = e.token
-	// 	// must curry
-	// 	unimplemented()
-	// case ^ClassExpr:
-	// 	unimplemented()
-	// case ^ContinueExpr:
-	// 	unimplemented()
-	// case ^ExitExpr:
-	// 	unimplemented()
-	// case ^ForExpr:
-	// 	unimplemented()
-	// case ^GetExpr:
-	// 	unimplemented()
-	// case ^SetExpr:
-	// 	unimplemented()
-	// case ^GroupingExpr:
-	// 	unimplemented()
-	// case ^LogicalExpr:
-	// 	unimplemented()
-	// case ^ItExpr:
-	// 	unimplemented()
-	// case ^ListExpr:
-	// 	unimplemented()
-	// case ^PipeExpr:
-	// 	unimplemented()
-	// case ^SubscriptExpr:
-	// 	unimplemented()
-	// case ^SubscriptSetExpr:
-	// 	unimplemented()
-	// case ^SuperExpr:
-	// 	unimplemented()
-	// case ^ThisExpr:
-	// 	unimplemented()
-	// case ^LiteralExpr:
-	// 	tc.current_token = e.token
-	// 	switch l in e.value {
-	// 	case f64:
-	// 		return unify(type, TypeFunctionApplication{constructor = .NUMBER})
-	// 	case string:
-	// 		return unify(type, TypeFunctionApplication{constructor = .STRING})
-	// 	case bool:
-	// 		return unify(type, TypeFunctionApplication{constructor = .BOOL})
-	// 	case:
-	// 		return unify(type, TypeFunctionApplication{constructor = .NIL})
-	// 	}
-	// case ^VariableExpr:
-	// 	tc.current_token = e.token
-	// 	alpha := fresh(tc)
-	// 	found := resolve_type(tc, e.name.lexeme) or_return
-	// 	// ty := instantiate(tc, found)
-	// 	return unify(alpha, found.(Type))
-	// case ^LambdaExpr:
-	// 	tc.current_token = e.token
-	// 	// must curry
-	// 	unimplemented()
-	// case ^UnaryExpr:
-	// 	unimplemented()
-	// }
-	//
-	// unimplemented()
 }
 
 type_string :: proc(scheme: TypeScheme) -> string {
@@ -534,8 +612,7 @@ type_string :: proc(scheme: TypeScheme) -> string {
 					type_string(t.args[1]),
 				)
 			} else {
-				sb := strings.builder_make()
-				defer strings.builder_destroy(&sb)
+				sb := strings.builder_make(context.temp_allocator)
 
 				fmt.sbprintf(
 					&sb,
@@ -555,8 +632,7 @@ type_string :: proc(scheme: TypeScheme) -> string {
 			}
 		}
 	case TypeQuantified:
-		sb := strings.builder_make()
-		defer strings.builder_destroy(&sb)
+		sb := strings.builder_make(context.temp_allocator)
 
 		for bound in type.bound {
 			bound_str := type_string(bound)
@@ -573,8 +649,7 @@ type_string :: proc(scheme: TypeScheme) -> string {
 }
 
 subst_string :: proc(subst: Substitution) -> string {
-	sb := strings.builder_make()
-	defer strings.builder_destroy(&sb)
+	sb := strings.builder_make(context.temp_allocator)
 
 	fmt.sbprint(&sb, "{")
 	for var, ty in subst {
@@ -599,11 +674,5 @@ init_type_checker :: proc() -> TypeChecker {
 }
 
 destroy_type_checker :: proc(tc: ^TypeChecker) {
-	ctx := tc.ctx
-	for ctx != nil {
-		next := ctx.enclosing
-		delete(ctx.bindings)
-		free(ctx)
-		ctx = next
-	}
+	free_all(context.temp_allocator)
 }

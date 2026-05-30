@@ -1,5 +1,6 @@
 package zen
 
+import "base:intrinsics"
 import "core:fmt"
 import "core:strings"
 
@@ -249,7 +250,11 @@ type_of_obj :: proc(obj: ^Obj) -> string {
 	unreachable()
 }
 
-allocate_obj :: proc(gc: ^GC, $T: typeid, type: ObjType) -> ^Obj {
+allocate_obj :: proc(
+	gc: ^GC,
+	$T: typeid,
+	type: ObjType,
+) -> ^Obj where intrinsics.type_is_subtype_of(T, Obj) {
 	gc.bytes_allocated += size_of(T)
 	if config.stress_gc {
 		collect_garbage(gc)

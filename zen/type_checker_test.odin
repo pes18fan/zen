@@ -272,14 +272,12 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 	push_scope(&tc)
 	bind_type(tc.ctx, "y", TypeFunctionApplication{constructor = .BOOL})
 
-	_, err_x := resolve_type(&tc, "x")
-	tt.expect(t, err_x == nil)
-	_, err_y := resolve_type(&tc, "y")
-	tt.expect(t, err_y == nil)
+	// if any of the resolve_types panic we failed
+	_ = resolve_type(&tc, "x")
+	_ = resolve_type(&tc, "y")
 
 	pop_scope(&tc)
-	_, err_x2 := resolve_type(&tc, "x")
-	tt.expect(t, err_x2 == nil)
+	_ = resolve_type(&tc, "x")
 
 	pop_scope(&tc)
 }

@@ -190,7 +190,7 @@ type_of_value :: proc(value: Value) -> string {
 		if is_nil(value) {
 			return "nil"
 		} else if is_bool(value) {
-			return "boolean"
+			return "bool"
 		} else if is_number(value) {
 			return "number"
 		} else if is_obj(value) {
@@ -199,7 +199,7 @@ type_of_value :: proc(value: Value) -> string {
 	} else {
 		switch v in value {
 		case bool:
-			return "boolean"
+			return "bool"
 		case f64:
 			return "number"
 		case ^Obj:

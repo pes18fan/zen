@@ -11,7 +11,7 @@ VERSION :: string(#load("../.zen_version"))
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)
 
-TYPE_CHECK :: false
+TYPE_CHECK :: true
 
 /* Config values set on start, most are for debugging, but some have use in
     the actual program. */

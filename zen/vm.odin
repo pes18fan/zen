@@ -1142,6 +1142,24 @@ interpret :: proc(
 	}
 
 	// TODO: type checker pass, in progress
+	when TYPE_CHECK {
+		tc := init_type_checker()
+		defer destroy_type_checker(&tc)
+
+		_, ty, ok := infer_type(&tc, expr)
+		if !ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
+		fmt.println("type:", type_string(ty))
+
+		/* Time the typechecker. */
+		if config.record_time {
+			time.stopwatch_stop(&sw)
+			fmt.eprintf("Typechecker: %v\n", time.stopwatch_duration(sw))
+			time.stopwatch_reset(&sw)
+			time.stopwatch_start(&sw)
+		}
+	}
 
 	// TODO: optimization pass: constant folding, inlining whenever possible,
 	// remove instructions that cancel each other out (e.g. in push -> pop -> push,

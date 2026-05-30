@@ -521,7 +521,7 @@ global_exists :: proc(cg: ^Codegen, global_o_str: ^ObjString) -> bool {
 emit_named_variable :: proc(cg: ^Codegen, name: Token, expr_ptr: uintptr) -> ErrorMessage {
 	info, ok := cg.resolution[expr_ptr]
 	if !ok {
-		return "Internal compiler error: variable not resolved by semantic analyzer."
+		fmt.panicf("Internal compiler error: variable not resolved by semantic analyzer.")
 	}
 
 	switch info.kind {
@@ -533,7 +533,7 @@ emit_named_variable :: proc(cg: ^Codegen, name: Token, expr_ptr: uintptr) -> Err
 		upv_idx, upv_err := resolve_upvalue_synthetic(cg, cg.current_compiler, name)
 		if upv_err != nil {return upv_err}
 		if upv_idx == -1 {
-			return fmt.tprintf("Internal compiler error: upvalue '%s' not found.", name.lexeme)
+			fmt.panicf("Internal compiler error: upvalue '%s' not found.", name.lexeme)
 		}
 		emit_instruction(cg, .OP_GET_UPVALUE, byte(upv_idx))
 	case .GLOBAL:
@@ -573,7 +573,7 @@ emit_named_variable_by_name :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 emit_named_variable_set :: proc(cg: ^Codegen, name: Token, expr_ptr: uintptr) -> ErrorMessage {
 	info, ok := cg.resolution[expr_ptr]
 	if !ok {
-		return "Internal compiler error: variable not resolved by semantic analyzer."
+		fmt.panicf("Internal compiler error: variable not resolved by semantic analyzer.")
 	}
 
 	switch info.kind {
@@ -585,7 +585,7 @@ emit_named_variable_set :: proc(cg: ^Codegen, name: Token, expr_ptr: uintptr) ->
 		upv_idx, upv_err := resolve_upvalue_synthetic(cg, cg.current_compiler, name)
 		if upv_err != nil {return upv_err}
 		if upv_idx == -1 {
-			return fmt.tprintf("Internal compiler error: upvalue '%s' not found.", name.lexeme)
+			fmt.panicf("Internal compiler error: upvalue '%s' not found.", name.lexeme)
 		}
 		emit_instruction(cg, .OP_SET_UPVALUE, byte(upv_idx))
 	case .GLOBAL:
@@ -619,7 +619,7 @@ emit_synthetic_variable :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 		return nil
 	}
 
-	return fmt.tprintf("Internal compiler error: synthetic variable '%s' not found.", name.lexeme)
+	fmt.panicf("Internal compiler error: synthetic variable '%s' not found.", name.lexeme)
 }
 
 /* Walk the compiler chain to find a variable by name, creating upvalues as needed.
@@ -1327,14 +1327,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		case .LESS_EQUAL:
 			emit_opcode(cg, .OP_GREATER, .OP_NOT)
 		case:
-			codegen_error(
-				cg,
-				fmt.tprintf(
-					"Internal compiler error: Invalid binary operator '%s'.",
-					e.operator.lexeme,
-				),
-			)
-			return false
+			fmt.panicf("Internal compiler error: Invalid binary operator '%s'.", e.operator.lexeme)
 		}
 	case ^BreakExpr:
 		cg.current_token = e.token
