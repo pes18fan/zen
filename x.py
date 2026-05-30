@@ -121,20 +121,6 @@ def create_release_build():
         exit(1)
 
 
-def create_test_build():
-    try:
-        setup_isocline()
-        print("Compiling test build (debug + leak detection)..")
-
-        os.makedirs("bin/test", exist_ok=True)
-        subprocess.run(
-            f"{OC} build {TARGET} -out:bin/test/{OUT} {DEBUG_FLAGS}".split(), check=True
-        )
-    except ProcError as e:
-        print(f"Error while creating test build: {e}", file=sys.stderr)
-        exit(1)
-
-
 def create_chaotic_build():
     try:
         setup_isocline()
@@ -151,16 +137,11 @@ def create_chaotic_build():
         exit(1)
 
 
-def test(recompile: bool, strict: bool = False):
+def test(recompile: bool, unit: bool = False, strict: bool = False):
     if recompile:
-        if strict:
-            create_debug_build()
-            os.makedirs("bin/test", exist_ok=True)
-            shutil.copy(f"bin/dbg/{DBG_OUT}", f"bin/test/{OUT}")
-        else:
-            create_release_build()
-            os.makedirs("bin/test", exist_ok=True)
-            shutil.copy(f"bin/rel/{OUT}", f"bin/test/{OUT}")
+        create_debug_build()
+        os.makedirs("bin/test", exist_ok=True)
+        shutil.copy(f"bin/dbg/{DBG_OUT}", f"bin/test/{OUT}")
 
     print("Running unit tests:")
     try:
@@ -168,6 +149,9 @@ def test(recompile: bool, strict: bool = False):
     except ProcError as e:
         print(f"Error when running unit tests: {e}", file=sys.stderr)
         exit(1)
+
+    if unit:
+        return
 
     print("")
 
@@ -267,9 +251,14 @@ def main():
     )
     test_parser.add_argument(
         "--strict", "-s", action="store_true",
-        help="enable memory leak detection (uses debug build)"
+        help="fail on memory leaks"
     )
-    test_parser.set_defaults(func=lambda args: test(args.recompile, args.strict))
+    test_parser.add_argument(
+        "--unit", "-u", action="store_true",
+        help="only run unit tests"
+    )
+    test_parser.set_defaults(
+        func=lambda args: test(args.recompile, args.unit, args.strict))
 
     # benchmark
     bench_parser = subparsers.add_parser("bench", help="run benchmarks")
