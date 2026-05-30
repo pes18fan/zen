@@ -9,7 +9,9 @@ import platform
 OC = "odin"
 ProcError = subprocess.CalledProcessError
 DEBUG_FLAGS = "-vet -debug"
-RELEASE_FLAGS = "-vet -o:speed"
+
+# NOTE: If -o:aggressive shows weird behavior switch to -o:speed
+RELEASE_FLAGS = "-vet -o:aggressive"
 CHAOTIC_FLAGS = f"{RELEASE_FLAGS} -define:CHAOTIC=true"
 TARGET = "zen"
 
@@ -137,20 +139,21 @@ def create_chaotic_build():
         exit(1)
 
 
-def test(recompile: bool, unit: bool = False, strict: bool = False):
+def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, strict: bool = False):
     if recompile:
         create_debug_build()
         os.makedirs("bin/test", exist_ok=True)
         shutil.copy(f"bin/dbg/{DBG_OUT}", f"bin/test/{OUT}")
 
-    print("Running unit tests:")
-    try:
-        subprocess.run(f"{OC} test {TARGET}".split(), check=True)
-    except ProcError as e:
-        print(f"Error when running unit tests: {e}", file=sys.stderr)
-        exit(1)
+    if not e2e_only:
+        print("Running unit tests:")
+        try:
+            subprocess.run(f"{OC} test {TARGET}".split(), check=True)
+        except ProcError as e:
+            print(f"Error when running unit tests: {e}", file=sys.stderr)
+            exit(1)
 
-    if unit:
+    if unit_only:
         return
 
     print("")
@@ -257,8 +260,12 @@ def main():
         "--unit", "-u", action="store_true",
         help="only run unit tests"
     )
+    test_parser.add_argument(
+        "--e2e", "-e", action="store_true",
+        help="only run end-to-end tests"
+    )
     test_parser.set_defaults(
-        func=lambda args: test(args.recompile, args.unit, args.strict))
+        func=lambda args: test(args.recompile, args.unit, args.e2e, args.strict))
 
     # benchmark
     bench_parser = subparsers.add_parser("bench", help="run benchmarks")
