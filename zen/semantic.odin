@@ -393,7 +393,19 @@ collect_forward_refs :: proc(sm: ^Semantic, expr: Expr) {
 		}
 	case ^SequenceExpr:
 		collect_forward_refs(sm, e.left)
-		collect_forward_refs(sm, e.right)
+		// process iteratively instead of recursively to avoid stack overflows
+		{
+			right := e.right
+			for {
+				next_seq, ok := right.(^SequenceExpr)
+				if !ok {
+					collect_forward_refs(sm, right)
+					break
+				}
+				collect_forward_refs(sm, next_seq.left)
+				right = next_seq.right
+			}
+		}
 	case:
 	// other cases don't matter
 	}
@@ -615,14 +627,23 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		}
 
 		_analyze(sm, e.value) or_return
-
-	// if sm.current_compiler.scope_depth == 0 {
-	// 	sm.current_compiler.func_type = sm.current_compiler.func_type // no-op, just tracking
-	// }
 	case ^SequenceExpr:
 		sm.current_token = e.token
 		_analyze(sm, e.left) or_return
-		_analyze(sm, e.right) or_return
+		// process iteratively instead of recursively to avoid stack overflows
+		{
+			right := e.right
+			for {
+				next_seq, ok := right.(^SequenceExpr)
+				if !ok {
+					_analyze(sm, right) or_return
+					break
+				}
+				sm.current_token = next_seq.token
+				_analyze(sm, next_seq.left) or_return
+				right = next_seq.right
+			}
+		}
 	case ^SetExpr:
 		sm.current_token = e.token
 

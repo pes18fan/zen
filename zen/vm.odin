@@ -1,5 +1,6 @@
 package zen
 
+import "base:intrinsics"
 import "core:fmt"
 import "core:math"
 import "core:mem"
@@ -321,10 +322,12 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 	frame := &vm.frames[vm.frame_count - 1]
 
 	for {
-		if config.trace_exec {
-			print_stack(vm)
-			offset := mem.ptr_sub(frame.ip, &frame.closure.function.chunk.code[0])
-			disassemble_instruction(&frame.closure.function.chunk, offset)
+		when ODIN_DEBUG {
+			if config.trace_exec {
+				print_stack(vm)
+				offset := mem.ptr_sub(frame.ip, &frame.closure.function.chunk.code[0])
+				disassemble_instruction(&frame.closure.function.chunk, offset)
+			}
 		}
 
 		instruction := OpCode(read_byte(frame))
@@ -1094,13 +1097,15 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	if config.dump_tokens {
-		fmt.println("TOKENS:")
-		for token in tokens {
-			fmt.printfln("  %v", token)
-		}
+	when ODIN_DEBUG {
+		if config.dump_tokens {
+			fmt.println("TOKENS:")
+			for token in tokens {
+				fmt.printfln("  %v", token)
+			}
 
-		return .INTERPRET_OK
+			return .INTERPRET_OK
+		}
 	}
 
 	p := init_parser(tokens)
@@ -1118,11 +1123,13 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	if config.dump_ast {
-		str := ast_string(expr)
-		fmt.println(str)
+	when ODIN_DEBUG {
+		if config.dump_ast {
+			str := ast_string(expr)
+			fmt.println(str)
 
-		return .INTERPRET_OK
+			return .INTERPRET_OK
+		}
 	}
 
 	// Semantic analysis: collect forward refs for mutual recursion,
@@ -1146,11 +1153,10 @@ interpret :: proc(
 		tc := init_type_checker()
 		defer destroy_type_checker(&tc)
 
-		_, ty, ok := infer_type(&tc, expr)
+		_, _, ok := infer_type(&tc, expr)
 		if !ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
-		fmt.println("type:", type_string(ty))
 
 		/* Time the typechecker. */
 		if config.record_time {
@@ -1190,8 +1196,10 @@ interpret :: proc(
 	}
 
 	/* If the user only wants to compile the script, then we can stop here. */
-	if config.compile_only {
-		return .INTERPRET_OK
+	when ODIN_DEBUG {
+		if config.compile_only {
+			return .INTERPRET_OK
+		}
 	}
 
 	vm_push(vm, obj_val(fn))

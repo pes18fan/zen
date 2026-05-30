@@ -256,8 +256,10 @@ allocate_obj :: proc(
 	type: ObjType,
 ) -> ^Obj where intrinsics.type_is_subtype_of(T, Obj) {
 	gc.bytes_allocated += size_of(T)
-	if config.stress_gc {
-		collect_garbage(gc)
+	when ODIN_DEBUG {
+		if config.stress_gc {
+			collect_garbage(gc)
+		}
 	}
 
 	/* When the total number of bytes allocated exceeds the next GC threshold,
@@ -273,8 +275,10 @@ allocate_obj :: proc(
 	obj.next = gc.objects
 	gc.objects = obj
 
-	if config.log_gc {
-		fmt.eprintf("%p allocate %d for type %v\n", obj, size_of(obj), type_of_obj(obj))
+	when ODIN_DEBUG {
+		if config.log_gc {
+			fmt.eprintf("%p allocate %d for type %v\n", obj, size_of(obj), type_of_obj(obj))
+		}
 	}
 
 	return obj
@@ -468,12 +472,14 @@ stringify_object :: proc(obj: ^Obj) -> string {
 free_object :: proc(gc: ^GC, obj: ^Obj) {
 	gc.bytes_allocated -= size_of(obj)
 
-	if config.log_gc {
-		fmt.eprintf("%p free ", obj)
+	when ODIN_DEBUG {
+		if config.log_gc {
+			fmt.eprintf("%p free ", obj)
 
-		str := stringify_object(obj)
-		fmt.eprintf(str)
-		fmt.eprintf(" of type %v\n", type_of_obj(obj))
+			str := stringify_object(obj)
+			fmt.eprintf(str)
+			fmt.eprintf(" of type %v\n", type_of_obj(obj))
+		}
 	}
 
 	switch obj.type {

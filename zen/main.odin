@@ -11,46 +11,72 @@ VERSION :: string(#load("../.zen_version"))
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)
 
-TYPE_CHECK :: true
+TYPE_CHECK :: false
 
-/* Config values set on start, most are for debugging, but some have use in
+when ODIN_DEBUG {
+	/* Config values set on start, most are for debugging, but some have use in
     the actual program. */
-Config :: struct {
-	compile_only:     bool,
-	dump_disassembly: bool,
-	dump_tokens:      bool,
-	dump_ast:         bool,
-	trace_exec:       bool,
-	stress_gc:        bool,
-	log_type:         bool,
-	log_gc:           bool,
-	record_time:      bool,
-	repl:             bool,
+	Config :: struct {
+		compile_only:     bool,
+		dump_disassembly: bool,
+		dump_tokens:      bool,
+		dump_ast:         bool,
+		trace_exec:       bool,
+		stress_gc:        bool,
+		log_type:         bool,
+		log_gc:           bool,
+		record_time:      bool,
+		repl:             bool,
 
-	/* Value that a program exits with on a top-level return. */
-	__exit_code:      int,
+		/* Value that a program exits with on a top-level return. */
+		__exit_code:      int,
 
-	/* Path to the running file. */
-	__path:           string,
+		/* Path to the running file. */
+		__path:           string,
 
-	/* Directory the running file is in. */
-	__dirname:        string,
+		/* Directory the running file is in. */
+		__dirname:        string,
+	}
+} else {
+	Config :: struct {
+		record_time: bool,
+		repl:        bool,
+
+		/* Value that a program exits with on a top-level return. */
+		__exit_code: int,
+
+		/* Path to the running file. */
+		__path:      string,
+
+		/* Directory the running file is in. */
+		__dirname:   string,
+	}
 }
 
-config := Config {
-	compile_only     = false,
-	dump_tokens      = false,
-	dump_ast         = false,
-	dump_disassembly = false,
-	trace_exec       = false,
-	stress_gc        = false,
-	log_type         = false,
-	log_gc           = false,
-	record_time      = false,
-	repl             = false,
-	__exit_code      = 0,
-	__path           = "",
-	__dirname        = "",
+when ODIN_DEBUG {
+	config := Config {
+		compile_only     = false,
+		dump_tokens      = false,
+		dump_ast         = false,
+		dump_disassembly = false,
+		trace_exec       = false,
+		stress_gc        = false,
+		log_type         = false,
+		log_gc           = false,
+		record_time      = false,
+		repl             = false,
+		__exit_code      = 0,
+		__path           = "",
+		__dirname        = "",
+	}
+} else {
+	config := Config {
+		record_time = false,
+		repl        = false,
+		__exit_code = 0,
+		__path      = "",
+		__dirname   = "",
+	}
 }
 
 /* Fire up a REPL. */
@@ -139,7 +165,8 @@ run_file :: proc(
 @(private = "file")
 print_help :: proc(stream: ^os.File) {
 	usage :: `zen <options> <path>`
-	options :: `
+	when ODIN_DEBUG {
+		options :: `
     -h, -?, --help      Print this help message and exit
     -v, --version       Print version information and exit
 
@@ -149,9 +176,16 @@ print_help :: proc(stream: ^os.File) {
     --dump-ast          Dump the abstract syntax tree from the parser and exit
     -D, --dump          Dump disassembled bytecode
     -T, --trace         Trace script execution
-    -l, --log-type      Log type inference
     -L, --log-gc        Log garbage collection
-    -S, --stress-gc     Collect garbage on every allocation`
+    -S, --stress-gc     Collect garbage on every allocation
+    --log-type          Log type inference`
+	} else {
+		options :: `
+    -h, -?, --help      Print this help message and exit
+    -v, --version       Print version information and exit
+
+    -t, --time          Record time taken to compile and run`
+	}
 
 	color_green(stream, "zen ")
 	fmt.fprintfln(stream, "%s", VERSION)
@@ -173,6 +207,70 @@ print_version_message :: proc(stream: ^os.File) {
 	color_green(stream, "zen ")
 	fmt.fprintln(stream, VERSION)
 	fmt.fprintln(stream, "written with <3 by pes18fan")
+}
+
+@(private = "file")
+set_debug_flag :: proc(flag: string) -> bool {
+	when ODIN_DEBUG {
+		switch flag {
+		case "--compile":
+			config.compile_only = true
+		case "--dump":
+			config.dump_disassembly = true
+		case "--dump-tokens":
+			config.dump_tokens = true
+		case "--dump-ast":
+			config.dump_ast = true
+		case "--trace":
+			config.trace_exec = true
+		case "--time":
+			config.record_time = true
+		case "--log-type":
+			config.log_type = true
+		case "--log-gc":
+			config.log_gc = true
+		case "--stress-gc":
+			config.stress_gc = true
+		case:
+			fmt.eprintf("Unknown option: %s\n", flag)
+			print_help(os.stderr)
+			return false
+		}
+
+		return true
+	} else {
+		fmt.eprintf("Unknown option: %s\n", flag)
+		print_help(os.stderr)
+		return false
+	}
+}
+
+@(private = "file")
+set_debug_flag_short :: proc(flag: rune) -> bool {
+	when ODIN_DEBUG {
+		switch flag {
+		case 'C':
+			config.compile_only = true
+		case 'D':
+			config.dump_disassembly = true
+		case 'T':
+			config.trace_exec = true
+		case 'L':
+			config.log_gc = true
+		case 'S':
+			config.stress_gc = true
+		case:
+			fmt.eprintf("Unknown option: %r\n", flag)
+			print_help(os.stderr)
+			return false
+		}
+
+		return true
+	} else {
+		fmt.eprintf("Unknown option: %s\n", flag)
+		print_help(os.stderr)
+		return false
+	}
 }
 
 /* Parse the arguments passed to the program. */
@@ -202,24 +300,18 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 				print_help(os.stdout)
 				return 0
 			}
-		case "--compile":
-			config.compile_only = true
-		case "--dump":
-			config.dump_disassembly = true
-		case "--dump-tokens":
-			config.dump_tokens = true
-		case "--dump-ast":
-			config.dump_ast = true
-		case "--trace":
-			config.trace_exec = true
+		case "--compile",
+		     "--dump",
+		     "--dump-tokens",
+		     "--dump-ast",
+		     "--trace",
+		     "--stress-gc",
+		     "--log-gc",
+		     "--log-type":
+			ok := set_debug_flag(argv[1])
+			if !ok {return 1}
 		case "--time":
 			config.record_time = true
-		case "--log-type":
-			config.log_type = true
-		case "--log-gc":
-			config.log_gc = true
-		case "--stress-gc":
-			config.stress_gc = true
 		case:
 			{
 				if argv[1][0] == '-' {
@@ -236,22 +328,13 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 						case '?', 'h':
 							print_help(os.stdout)
 							return 0
-						case 'C':
-							config.compile_only = true
-						case 'D':
-							config.dump_disassembly = true
+						case 'C', 'D', 'T', 'L', 'S':
+							ok := set_debug_flag_short(c)
+							if !ok {return 1}
 						case 't':
 							config.record_time = true
-						case 'T':
-							config.trace_exec = true
-						case 'l':
-							config.log_type = true
-						case 'L':
-							config.log_gc = true
-						case 'S':
-							config.stress_gc = true
 						case:
-							fmt.eprintf("Unknown option: %c", c)
+							fmt.eprintf("Unknown option: %c\n", c)
 							print_help(os.stderr)
 							return 1
 						}
@@ -321,6 +404,7 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		}
 	}
 }
+
 
 /* The entry point for the compiler. */
 main :: proc() {

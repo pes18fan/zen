@@ -1641,9 +1641,11 @@ end_compiler :: proc(cg: ^Codegen) -> ^ObjFunction {
 		emit_return(cg)
 	}
 
-	if config.dump_disassembly {
-		if !cg.had_error {
-			disassemble(current_chunk(cg), fn.name != nil ? fn.name.chars : "<script>")
+	when ODIN_DEBUG {
+		if config.dump_disassembly {
+			if !cg.had_error {
+				disassemble(current_chunk(cg), fn.name != nil ? fn.name.chars : "<script>")
+			}
 		}
 	}
 

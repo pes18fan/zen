@@ -428,7 +428,7 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			parser_error(p, parser_peek(p), "Switch expression must have an 'else' case.")
 		}
 
-		parser_consume_newline(p, "switch case")
+		parser_consume(p, .NEWLINE, "Expect newline after switch case.")
 		append(&cases, case_node)
 	}
 
@@ -1120,10 +1120,6 @@ parser_consume :: proc(p: ^Parser, type: TokenType, message: string) -> Token {
 	if parser_check(p, type) {return parser_advance(p)}
 	parser_error(p, parser_peek(p), message)
 	return parser_peek(p)
-}
-
-parser_consume_newline :: proc(p: ^Parser, message: string) {
-	parser_consume(p, .NEWLINE, fmt.tprintf("Expect newline after %s.", message))
 }
 
 parser_synchronize :: proc(p: ^Parser) {

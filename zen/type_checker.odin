@@ -65,8 +65,14 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 fresh :: #force_inline proc(tc: ^TypeChecker, $debug_message: string) -> TypeVariable {
 	defer tc.typevar_count += 1
 	var := TypeVariable{tc.typevar_count}
-	if config.log_type {
-		fmt.eprintfln("-- create fresh type variable %v for %s", type_string(var), debug_message)
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintfln(
+				"-- create fresh type variable %v for %s",
+				type_string(var),
+				debug_message,
+			)
+		}
 	}
 
 	return var
@@ -253,10 +259,18 @@ apply_substitution :: proc {
 apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 	switch t in type {
 	case TypeVariable:
-		if t in subst {
-			return subst[t]
+		result: Type = t
+		for {
+			tv, tv_ok := result.(TypeVariable)
+			if !tv_ok {
+				return result
+			}
+			val, ok := subst[tv]
+			if !ok {
+				return result
+			}
+			result = val
 		}
-		return t
 	case TypeFunctionApplication:
 		new_args := make([]Type, len(t.args), context.temp_allocator)
 		for i in 0 ..< len(t.args) {
@@ -303,31 +317,35 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 	res := make(Substitution, context.temp_allocator)
 
 	for var, ty in s2 {
-		// if var in s1 && !types_equal(s1[var], ty) {
-		// 	fmt.panicf(
-		// 		"substitutions %v and %v map same variable %v to different values",
-		// 		subst_string(s1),
-		// 		subst_string(s2),
-		// 		type_string(var),
-		// 	)
-		// }
+		when ODIN_DEBUG {
+			if var in s1 && !types_equal(s1[var], ty) {
+				fmt.eprintfln(
+					"WARNING: substitutions %v and %v map same variable %v to different values",
+					subst_string(s1),
+					subst_string(s2),
+					type_string(var),
+				)
+			}
+		}
 
 		res[var] = apply_substitution(s1, ty)
 	}
 
 	for var, ty in s1 {
 		if var not_in res {
-			res[var] = ty
+			res[var] = apply_substitution(res, ty)
 		}
 	}
 
-	if config.log_type {
-		fmt.eprintfln(
-			"-- combine substs %v then %v to get %v",
-			subst_string(s2),
-			subst_string(s1),
-			subst_string(res),
-		)
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintfln(
+				"-- combine substs %v then %v to get %v",
+				subst_string(s2),
+				subst_string(s1),
+				subst_string(res),
+			)
+		}
 	}
 
 	return res
@@ -345,10 +363,12 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 		}
 		res := apply_substitution(subst, type.type)
 
-		if config.log_type {
-			quant := type_string(type)
-			reduced := type_string(res)
-			fmt.eprintfln("-- %v instantiated to %v", quant, reduced)
+		when ODIN_DEBUG {
+			if config.log_type {
+				quant := type_string(type)
+				reduced := type_string(res)
+				fmt.eprintfln("-- %v instantiated to %v", quant, reduced)
+			}
 		}
 
 		return res
@@ -381,10 +401,12 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 		type  = ty,
 	}
 
-	if config.log_type {
-		mono := type_string(ty)
-		quant := type_string(res)
-		fmt.eprintfln("-- %v generalized to %v", mono, quant)
+	when ODIN_DEBUG {
+		if config.log_type {
+			mono := type_string(ty)
+			quant := type_string(res)
+			fmt.eprintfln("-- %v generalized to %v", mono, quant)
+		}
 	}
 
 	return res
@@ -395,8 +417,10 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 	if is_type_variable(a) {
 		if types_equal(a, b) {
-			if config.log_type {
-				fmt.eprintfln("-- unify %v with %v trivially", type_string(a), type_string(b))
+			when ODIN_DEBUG {
+				if config.log_type {
+					fmt.eprintfln("-- unify %v with %v trivially", type_string(a), type_string(b))
+				}
 			}
 
 			return nil, nil // nothing to substitute
@@ -413,13 +437,15 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 		s := make(Substitution, context.temp_allocator)
 		s[as_type_variable(a)] = b
 
-		if config.log_type {
-			fmt.eprintfln(
-				"-- unify %v with %v through %v",
-				type_string(a),
-				type_string(b),
-				subst_string(s),
-			)
+		when ODIN_DEBUG {
+			if config.log_type {
+				fmt.eprintfln(
+					"-- unify %v with %v through %v",
+					type_string(a),
+					type_string(b),
+					subst_string(s),
+				)
+			}
 		}
 
 		return s, nil
@@ -449,13 +475,15 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 			s = combine_substitutions(s, res)
 		}
 
-		if config.log_type {
-			fmt.eprintfln(
-				"-- unify %v with %v through %v",
-				type_string(a),
-				type_string(b),
-				subst_string(s),
-			)
+		when ODIN_DEBUG {
+			if config.log_type {
+				fmt.eprintfln(
+					"-- unify %v with %v %s",
+					type_string(a),
+					type_string(b),
+					"trivially" if len(t1.args) == 0 else fmt.tprintf("through %v", subst_string(s)),
+				)
+			}
 		}
 
 		return s, nil
@@ -493,13 +521,15 @@ infer_type :: proc(
 	s := try2(tc, m(tc, expr, alpha)) or_return
 	res := apply_substitution(s, alpha)
 
-	if config.log_type {
-		fmt.eprintfln(
-			"-- apply subst %v on %v to get %v",
-			subst_string(s),
-			type_string(alpha),
-			type_string(res),
-		)
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintfln(
+				"-- infer %v as %v via %v",
+				type_string(alpha),
+				type_string(res),
+				subst_string(s),
+			)
+		}
 	}
 
 	return s, res, true

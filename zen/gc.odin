@@ -136,10 +136,12 @@ mark_object :: proc(gc: ^GC, object: ^Obj) {
 	/* Make sure that we're not marking an object twice. */
 	if object.is_marked {return}
 
-	if config.log_gc {
-		fmt.eprintf("%p mark ", object)
-		print_value(obj_val(object))
-		fmt.eprintf(" of type %s\n", type_of_obj(object))
+	when ODIN_DEBUG {
+		if config.log_gc {
+			fmt.eprintf("%p mark ", object)
+			print_value(obj_val(object))
+			fmt.eprintf(" of type %s\n", type_of_obj(object))
+		}
 	}
 
 	/* Set the Obj as marked. At this point, the object is gray. */
@@ -249,10 +251,12 @@ fix_weak :: proc(gc: ^GC) {
 
 /* Blacken a `Obj`, indicating that it is reachable. */
 blacken_object :: proc(gc: ^GC, object: ^Obj) {
-	if config.log_gc {
-		fmt.eprintf("%p blacken ", object)
-		print_value(obj_val(object))
-		fmt.eprintf(" of type %s\n", type_of_obj(object))
+	when ODIN_DEBUG {
+		if config.log_gc {
+			fmt.eprintf("%p blacken ", object)
+			print_value(obj_val(object))
+			fmt.eprintf(" of type %s\n", type_of_obj(object))
+		}
 	}
 
 	switch object.type {
@@ -370,11 +374,17 @@ sweep :: proc(gc: ^GC) {
 
 /* Run a GC cycle. */
 collect_garbage :: proc(gc: ^GC) {
-	if config.log_gc {
-		fmt.eprintln("-- gc begin")
+	when ODIN_DEBUG {
+		if config.log_gc {
+			fmt.eprintln("-- gc begin")
+		}
+
+		before := gc.bytes_allocated
 	}
 
-	before := gc.bytes_allocated
+	// prevent -vet from complaining
+	_ = fmt.println
+
 	mark_roots(gc, gc.mark_roots_arg)
 	trace_references(gc)
 	fix_weak(gc)
@@ -382,14 +392,16 @@ collect_garbage :: proc(gc: ^GC) {
 
 	gc.next_gc = gc.bytes_allocated * GC_HEAP_GROW_FACTOR
 
-	if config.log_gc {
-		fmt.eprintln("-- gc end")
-		fmt.eprintf(
-			"-- collected %d bytes (from %d to %d), next collection at %d\n",
-			before - gc.bytes_allocated,
-			before,
-			gc.bytes_allocated,
-			gc.next_gc,
-		)
+	when ODIN_DEBUG {
+		if config.log_gc {
+			fmt.eprintln("-- gc end")
+			fmt.eprintf(
+				"-- collected %d bytes (from %d to %d), next collection at %d\n",
+				before - gc.bytes_allocated,
+				before,
+				gc.bytes_allocated,
+				gc.next_gc,
+			)
+		}
 	}
 }
