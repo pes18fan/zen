@@ -56,12 +56,14 @@ Requires **Odin compiler** and **Python**. The `isocline` REPL library is auto-d
 | `./x.py test` | Unit tests + end-to-end tests (release build, no leak checks). Recompile via `--recompile` |
 | `./x.py test --strict` | Same as test but with memory leak detection (debug build). Passes `--strict` to test runner |
 | `./x.py test --recompile --strict` | Recompile with debug flags + run with leak detection |
+| `./x.py test --e2e` | Run only end-to-end tests |
+| `./x.py test --unit` | Run only unit tests |
 | `./x.py bench` | Run benchmarks |
 | `./x.py clean` | Remove build artifacts |
 | `./x.py doc` | Generate docs at `doc/docs.txt` |
 | `./x.py run --args "..."` | Run debug build with args |
 
-**Odin flags**: Debug uses `-vet -debug`, Release uses `-vet -o:speed`.
+**Odin flags**: Debug uses `-vet -debug`, Release uses `-vet -o:aggressive`.
 
 ## Testing
 
@@ -168,6 +170,7 @@ try2(cg, some_proc_returning_value()) or_return
 - `ErrorMessage` is `Maybe(string)` (defined in `error.odin`)
 - Error handling with `try`/`try2` polymorphic procedures that accept either 
     `^Codegen` or `^TypeChecker` or `^Semantic`
+- The parser and lexer currently use different error handling patterns
 
 ### Memory Management
 
@@ -255,23 +258,27 @@ try2(cg, some_proc_returning_value()) or_return
 
 | Flag | Description |
 |---|---|
-| `-c` | Compile only (don't execute) |
-| `-d` | Dump bytecode disassembly |
-| `-t` | Dump tokens |
-| `-a` | Dump AST |
-| `-T` | Trace execution |
-| `-G` | Stress garbage collector (GC on every allocation) |
-| `-L` | Log type checker |
-| `-l` | Log GC |
-| `-r` | Record execution time |
-| `-v` | Print version |
+| `-C, --compile` | Compile only (don't execute) |
+| `-D, --dump` | Dump bytecode disassembly |
+| `--dump-tokens` | Dump tokens |
+| `--dump-ast` | Dump AST |
+| `-T, --trace` | Trace execution |
+| `-G, --stress-gc` | Stress garbage collector (GC on every allocation) |
+| `-L, --log-gc` | Enable GC logs |
+| `--log-type` | Enable type checker logs |
+| `-t, --time` | Time execution |
+| `-v, --version` | Print version |
+| `-h, -?, --help` | Print help message |
+
+All the flags other than `-t, --time, -v, --version, -h, -?, --help` are ONLY
+available on debug builds of zen. Otherwise, they are hidden behind a compile-time
+`when` switch.
 
 ## Git Workflow
 
 - Remote: `origin` → `https://github.com/pes18fan/zen`
 - Branches: `main`
 - Branch protection: not enforced; any branch can be pushed to
-
 
 ## When Debugging
 
@@ -289,11 +296,14 @@ try2(cg, some_proc_returning_value()) or_return
 
 ## When Adding Features
 
-1. The pipeline is: Lexer → Parser → Compiler → VM (+ GC)
+1. The pipeline is: Lexer -> Parser -> Semantic analyzer -> Compiler -> VM (+ GC)
 2. Add new tokens to the lexer if needed, new AST nodes to the parser, new opcodes to `chunk.odin`'s `OpCode` enum, codegen in compiler, execution in VM
 3. Update `debug.odin` for disassembly of new opcodes
 4. Update `semantic.odin` for any new scope/semantic validation rules
 5. Add standard library functions in `std.odin` if applicable
 6. Add e2e tests in `test/__tests__/`
-7. Update `DOCUMENTATION.md` if the feature changes the language surface
-8. Add syntax highlighting to `syntaxes/` for VSCode, Sublime, and Vim
+7. Verify that all unit and e2e tests pass
+8. If changes may affect performance, run the benchmarks on the old and new
+    versions to ensure performance is reasonable 
+9. Update `DOCUMENTATION.md` if the feature changes the language surface
+10. Add syntax highlighting to `syntaxes/` for VSCode, Sublime, and Vim
