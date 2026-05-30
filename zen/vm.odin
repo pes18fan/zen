@@ -919,6 +919,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
 				if !ok {
 					vm_panic(vm, "Unknown builtin module %s.", module_str)
+					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				module_str_lower := strings.to_lower(module_str)
@@ -933,6 +934,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
 				if !ok {
 					vm_panic(vm, "Unknown builtin module %s.", module_str)
+					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				module_str_lower := strings.to_lower(module_str)
@@ -1005,13 +1007,13 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			}
 		case .OP_ITERATE:
 			{
-				iter := vm_pop(vm)
+				iterable := vm_pop(vm)
 
 				assert(is_number(vm_peek(vm, 0)), "iteration index should be a number\n")
 				idx := as_number(vm_pop(vm))
 
-				if is_list(iter) {
-					list := as_list(iter)
+				if is_list(iterable) {
+					list := as_list(iterable)
 
 					if int(idx) < len(list.items.values) {
 						vm_push(vm, list.items.values[int(idx)])
@@ -1020,8 +1022,8 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					} else {
 						vm_push(vm, bool_val(false))
 					}
-				} else if is_string(iter) {
-					str := as_string(iter)
+				} else if is_string(iterable) {
+					str := as_string(iterable)
 
 					if int(idx) < len(str.chars) {
 						runes := utf8.string_to_runes(str.chars)
@@ -1036,7 +1038,12 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						vm_push(vm, bool_val(false))
 					}
 				} else {
-					vm_panic(vm, "Can only iterate over lists and strings.")
+					vm_panic(
+						vm,
+						"Can only iterate over lists and strings, not %v.",
+						type_of_value(iterable),
+					)
+					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
 		case .OP_EXIT:
@@ -1045,6 +1052,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				if !is_number(top) {
 					vm_panic(vm, "Exit code must be a number, not %v.", type_of_value(top))
+					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				// clear the stack
