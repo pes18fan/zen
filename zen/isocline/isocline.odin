@@ -1,7 +1,10 @@
 package isocline
 
-when ODIN_OS == .Windows do foreign import isocline "../../isocline/isocline.lib"
-when ODIN_OS == .Linux do foreign import isocline "../../isocline/libisocline.a"
+when ODIN_OS == .Windows {
+	foreign import isocline "../../isocline/isocline.lib"
+} else {
+	foreign import isocline "../../isocline/libisocline.a"
+}
 import "core:c"
 
 @(default_calling_convention = "c")

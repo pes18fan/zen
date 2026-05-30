@@ -185,13 +185,21 @@ set_separators :: proc(tokens: []Token) -> []Token {
 	defer delete(tokens)
 	result := make([dynamic]Token)
 
+	Enclosure :: enum {
+		LIST,
+		PAREN,
+		BLOCK,
+	}
+
 	list_stack := make([dynamic]byte)
 	paren_stack := make([dynamic]byte)
 	block_stack := make([dynamic]byte)
+	enclosure_stack := make([dynamic]Enclosure)
 	defer {
 		delete(list_stack)
 		delete(paren_stack)
 		delete(block_stack)
+		delete(enclosure_stack)
 	}
 
 	for token, idx in tokens {
@@ -253,9 +261,9 @@ set_separators :: proc(tokens: []Token) -> []Token {
 						continue
 					case:
 						/* 
-                        Don't add a semicolon when inside a list or parenthesis
+                        Don't add a separator when inside a list or parenthesis
                         grouping.
-                        This prevents a semicolon from being added after the last
+                        This prevents a separator from being added after the last
                         element in a situation like this:
                         
                         var lst = [
@@ -263,8 +271,13 @@ set_separators :: proc(tokens: []Token) -> []Token {
                             "b"
                         ]
                         */
-						if len(list_stack) > 0 || (len(paren_stack) > 0 && len(block_stack) == 0) {
-							continue
+						if len(list_stack) > 0 || len(paren_stack) > 0 {
+							// BUT both lists and parens can enclose blocks,
+							// which do need separators! So, only avoid if the
+							// topmost enclosure is not a block.
+							if enclosure_stack[len(enclosure_stack) - 1] != .BLOCK {
+								continue
+							}
 						}
 
 						/* Do NOT insert a semi after the end of the expression 
@@ -280,21 +293,27 @@ set_separators :: proc(tokens: []Token) -> []Token {
 			}
 		case .LSQUARE:
 			append(&list_stack, 1)
+			append(&enclosure_stack, Enclosure.LIST)
 			append(&result, token)
 		case .LSQUIRLY:
 			append(&block_stack, 1)
+			append(&enclosure_stack, Enclosure.BLOCK)
 			append(&result, token)
 		case .LPAREN:
 			append(&paren_stack, 1)
+			append(&enclosure_stack, Enclosure.PAREN)
 			append(&result, token)
 		case .RSQUARE:
 			if len(list_stack) > 0 {pop(&list_stack)}
+			if len(enclosure_stack) > 0 {pop(&enclosure_stack)}
 			append(&result, token)
 		case .RSQUIRLY:
 			if len(block_stack) > 0 {pop(&block_stack)}
+			if len(enclosure_stack) > 0 {pop(&enclosure_stack)}
 			append(&result, token)
 		case .RPAREN:
 			if len(paren_stack) > 0 {pop(&paren_stack)}
+			if len(enclosure_stack) > 0 {pop(&enclosure_stack)}
 			append(&result, token)
 		case:
 			append(&result, token)
