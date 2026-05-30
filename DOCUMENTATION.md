@@ -546,6 +546,7 @@ for you to use.
 - `parse(s)`: Attempt to parse a string `s` into a floating point number. Panics
     if the string is not a valid number.
 - `copy(x)`: Return a copy of `x`.
+- `panic(s)`: Crash the program with a message `s`.
 - `dirname()`: Return the directory containing the running program, or an empty 
     string if running a REPL.
 - `filename()`: Return the name of the running program, or an empty string if 
@@ -572,7 +573,6 @@ for you to use.
 
 ### module `os`
 
-- `panic(s)`: Crash the program with a message `s`.
 - `read(p)`: Read a file at the path `p` and return the contents as a string.
     Panics if the file doesn't exist.
 - `write(p, m, s)`: Write the string `s` to a file `p` in the mode `m`. This 
