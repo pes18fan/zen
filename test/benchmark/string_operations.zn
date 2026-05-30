@@ -13,5 +13,4 @@ for var i = 0; i < 100000; i = i + 1 {
     res = string.reverse(res)
 }
 
-puts(res == "!esrevinu olleh")
 puts(time.clock_ms() - start)

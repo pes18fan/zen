@@ -1,3 +1,4 @@
+// A demo of zen!
 // Some builtin modules, with many useful functions.
 use "list"
 use "math"
@@ -5,7 +6,7 @@ use "string"
 
 // Hello world! (This is a comment btw)
 print "Hello, world!"
-print "\n" // The print statement does not append a newline by default.
+print "\n" // The print expression does not append a newline by default.
 
 // Use the puts() native function appends a newline after printing.
 // You can pass single strings to functions without parentheses!
@@ -29,7 +30,7 @@ puts(string.upcase("hello")) //=> "HELLO"
 puts(math.ln(2)) //=> 0.693
 
 // Conditionals!
-// Note that there are no else-if statements. Use a switch statement instead.
+// Note that there are no else-if expressions. Use a switch expression instead.
 if false {
     puts "How did this happen!"
 } else {
@@ -48,7 +49,19 @@ switch a {
     else => puts "a is not between 0 and 5"
 }
 
-// Loops.
+// if and switch can be used as expressions. In fact, everything is an expression 
+// in zen!
+
+// An if expression evaluates to whatever branch matches. Bare ifs always evaluate to nil.
+val random = if math.rand() > 0.5 {
+    "over half"
+} else {
+    "less than half"
+}
+puts(random)
+
+// Loops. 
+// All loops evaluate to nil.
 while true {
     puts "This will never end!"
     break // sike
@@ -97,7 +110,21 @@ func a_function() {
 }
 puts(a_function()) //=> "This is a function!"
 
-// If the function just returns an expression, simply use the `=>` operator.
+// Or you can perform an implicit return:
+func implicit() {
+    42
+}
+puts(implicit()) //=> 42
+
+// All functions return what their blocks evaluate to, but sometimes you
+// don't want that. In that case, use the `discard` operator to force an
+// expression to evaluate to nil.
+func discarder() {
+    discard implicit()
+}
+puts(discarder()) //=> nil
+
+// You can use the `=>` operator for a shorthand.
 func sum(a, b) => a + b
 puts(sum(1, 2)) //=> 3
 

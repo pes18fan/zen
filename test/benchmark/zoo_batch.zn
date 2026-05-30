@@ -33,6 +33,9 @@ while time.clock_ms() - start < 10 {
   batch = batch + 1
 }
 
+puts("sum:")
 puts(sum)
+puts("number of batches:")
 puts(batch)
+puts("elapsed:")
 puts(time.clock_ms() - start)

@@ -15,5 +15,7 @@ while i < 10000000 {
     counter()
     i = i + 1
 }
+puts("count:")
 puts(counter())
+puts("elapsed:")
 puts(time.clock_ms() - start)

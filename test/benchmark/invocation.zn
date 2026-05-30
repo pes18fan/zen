@@ -71,4 +71,5 @@ while i < 500000 {
   i = i + 1
 }
 
+puts("invocation:")
 puts(time.clock_ms() - start)
