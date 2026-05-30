@@ -62,9 +62,14 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 	panic("invalid type constructor")
 }
 
-fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
+fresh :: #force_inline proc(tc: ^TypeChecker, $debug_message: string) -> TypeVariable {
 	defer tc.typevar_count += 1
-	return TypeVariable{tc.typevar_count}
+	var := TypeVariable{tc.typevar_count}
+	if config.log_type {
+		fmt.eprintfln("-- create fresh type variable %v for %s", type_string(var), debug_message)
+	}
+
+	return var
 }
 
 nullary :: #force_inline proc(constructor: TypeConstructor) -> TypeFunctionApplication {
@@ -123,8 +128,8 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	fmt.panicf("Internal compiler error: Undefined variable '%v' in type checker", name)
 }
 
-bind_type :: proc(ctx: ^TypeContext, name: string, t: TypeScheme) {
-	ctx.bindings[name] = t
+bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
+	ctx.bindings[name] = scheme
 }
 
 push_scope :: proc(tc: ^TypeChecker) {
@@ -298,6 +303,15 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 	res := make(Substitution, context.temp_allocator)
 
 	for var, ty in s2 {
+		// if var in s1 && !types_equal(s1[var], ty) {
+		// 	fmt.panicf(
+		// 		"substitutions %v and %v map same variable %v to different values",
+		// 		subst_string(s1),
+		// 		subst_string(s2),
+		// 		type_string(var),
+		// 	)
+		// }
+
 		res[var] = apply_substitution(s1, ty)
 	}
 
@@ -305,6 +319,15 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 		if var not_in res {
 			res[var] = ty
 		}
+	}
+
+	if config.log_type {
+		fmt.eprintfln(
+			"-- combine substs %v then %v to get %v",
+			subst_string(s2),
+			subst_string(s1),
+			subst_string(res),
+		)
 	}
 
 	return res
@@ -318,14 +341,14 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 	case TypeQuantified:
 		subst := make(Substitution, context.temp_allocator)
 		for bound in type.bound {
-			subst[bound] = fresh(tc)
+			subst[bound] = fresh(tc, "instantiation")
 		}
 		res := apply_substitution(subst, type.type)
 
 		if config.log_type {
 			quant := type_string(type)
 			reduced := type_string(res)
-			fmt.eprintfln("%v instantiated to %v", quant, reduced)
+			fmt.eprintfln("-- %v instantiated to %v", quant, reduced)
 		}
 
 		return res
@@ -361,7 +384,7 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 	if config.log_type {
 		mono := type_string(ty)
 		quant := type_string(res)
-		fmt.eprintfln("%v generalized to %v", mono, quant)
+		fmt.eprintfln("-- %v generalized to %v", mono, quant)
 	}
 
 	return res
@@ -372,6 +395,10 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 	if is_type_variable(a) {
 		if types_equal(a, b) {
+			if config.log_type {
+				fmt.eprintfln("-- unify %v with %v trivially", type_string(a), type_string(b))
+			}
+
 			return nil, nil // nothing to substitute
 		}
 
@@ -385,6 +412,16 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 
 		s := make(Substitution, context.temp_allocator)
 		s[as_type_variable(a)] = b
+
+		if config.log_type {
+			fmt.eprintfln(
+				"-- unify %v with %v through %v",
+				type_string(a),
+				type_string(b),
+				subst_string(s),
+			)
+		}
+
 		return s, nil
 	}
 
@@ -411,6 +448,16 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 			res := unify(fst, snd) or_return
 			s = combine_substitutions(s, res)
 		}
+
+		if config.log_type {
+			fmt.eprintfln(
+				"-- unify %v with %v through %v",
+				type_string(a),
+				type_string(b),
+				subst_string(s),
+			)
+		}
+
 		return s, nil
 	}
 
@@ -442,28 +489,60 @@ infer_type :: proc(
 	ty: Type,
 	success: bool,
 ) {
-	alpha := fresh(tc)
+	alpha := fresh(tc, "infer_type")
 	s := try2(tc, m(tc, expr, alpha)) or_return
-	return s, apply_substitution(s, alpha), true
+	res := apply_substitution(s, alpha)
+
+	if config.log_type {
+		fmt.eprintfln(
+			"-- apply subst %v on %v to get %v",
+			subst_string(s),
+			type_string(alpha),
+			type_string(res),
+		)
+	}
+
+	return s, res, true
 }
 
 @(require_results)
 m :: proc(tc: ^TypeChecker, expr: Expr, type: Type) -> (subst: Substitution, err: ErrorMessage) {
 	switch e in expr {
 	case ^AssignExpr:
-		unimplemented()
+		tc.current_token = e.token
+		beta := fresh(tc, "assignment")
+		s1 := m(tc, e.value, beta) or_return
+		apply_substitution(s1, tc.ctx)
+		found := resolve_type(tc, e.name.lexeme)
+		ty := instantiate(tc, found)
+		sn := unify(ty, apply_substitution(s1, beta)) or_return
+		apply_substitution(sn, tc.ctx)
+		sn2 := unify(type, apply_substitution(sn, ty)) or_return
+		return combine_substitutions(sn2, combine_substitutions(sn, s1)), nil
 	case ^BinaryExpr:
 		tc.current_token = e.token
 
 		#partial switch e.operator.type {
 		case .PLUS:
 			// TODO: figure out how to get this working for both str and num and nothing else
-			beta := fresh(tc)
-			s1 := m(tc, e.left, beta) or_return
+			s1, s2, sn: Substitution; str_err: ErrorMessage
+
+			// try for strings
+			s1, str_err = m(tc, e.left, nullary(.STRING))
+			if str_err == nil {
+				apply_substitution(s1, tc.ctx)
+				s2 = m(tc, e.right, nullary(.STRING)) or_return
+				apply_substitution(s2, tc.ctx)
+				sn = unify(type, nullary(.STRING)) or_return
+				return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+			}
+
+			// try for numbers
+			s1 = m(tc, e.left, nullary(.NUMBER)) or_return
 			apply_substitution(s1, tc.ctx)
-			s2 := m(tc, e.right, beta) or_return
+			s2 = m(tc, e.right, nullary(.NUMBER)) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := unify(type, beta) or_return
+			sn = unify(type, nullary(.NUMBER)) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .MINUS, .STAR, .SLASH, .PERCENT:
 			num := nullary(.NUMBER)
@@ -553,19 +632,19 @@ m :: proc(tc: ^TypeChecker, expr: Expr, type: Type) -> (subst: Substitution, err
 		}
 	case ^VariableExpr:
 		tc.current_token = e.token
-		alpha := fresh(tc) // create fresh typevar
 		found := resolve_type(tc, e.name.lexeme) // find typescheme in the context
 		ty := instantiate(tc, found) // instantiate the found scheme
-		return unify(alpha, ty) // unify typevar with the found type
+		return unify(type, ty) // unify typevar with the found type
 	case ^LambdaExpr:
 		tc.current_token = e.token
 		// must curry
 		unimplemented()
 	case ^SequenceExpr:
-		beta := fresh(tc)
+		beta := fresh(tc, "seq left")
 		s1 := m(tc, e.left, beta) or_return // infer left with fresh var
 		apply_substitution(s1, tc.ctx)
 		s2 := m(tc, e.right, type) or_return // infer right with expected type
+		apply_substitution(s2, tc.ctx)
 		return combine_substitutions(s2, s1), nil
 	case ^SwitchExpr:
 		unimplemented()
@@ -588,7 +667,23 @@ m :: proc(tc: ^TypeChecker, expr: Expr, type: Type) -> (subst: Substitution, err
 	case ^UseExpr:
 		unimplemented()
 	case ^VarDeclExpr:
-		unimplemented()
+		tc.current_token = e.token
+		s := make(Substitution, context.temp_allocator)
+		for binding in e.bindings {
+			beta := fresh(tc, "var binding")
+			if binding.initializer != nil {
+				s1 := m(tc, binding.initializer, beta) or_return
+				s = combine_substitutions(s1, s)
+				apply_substitution(s, tc.ctx)
+				inferred := apply_substitution(s, beta)
+				gen := generalize(tc, inferred)
+				bind_type(tc.ctx, binding.name.lexeme, gen)
+			} else {
+				bind_type(tc.ctx, binding.name.lexeme, beta)
+			}
+		}
+		sn := unify(type, nullary(.NIL)) or_return // VarDeclExpr itself evaluates to nil
+		return combine_substitutions(sn, s), nil
 	case ^WhileExpr:
 		unimplemented()
 	}
@@ -651,12 +746,15 @@ type_string :: proc(scheme: TypeScheme) -> string {
 subst_string :: proc(subst: Substitution) -> string {
 	sb := strings.builder_make(context.temp_allocator)
 
+	sz := len(subst)
+	count := 0
 	fmt.sbprint(&sb, "{")
 	for var, ty in subst {
 		var_string := type_string(var)
 		ty_string := type_string(ty)
 
-		fmt.sbprintf(&sb, "%v |-> %v", var_string, ty_string)
+		fmt.sbprintf(&sb, "%v |-> %v%s", var_string, ty_string, ", " if count < sz - 1 else "")
+		count += 1
 	}
 	fmt.sbprint(&sb, "}")
 

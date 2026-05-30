@@ -8,7 +8,7 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 	tc := init_type_checker()
 	defer destroy_type_checker(&tc)
 
-	var := fresh(&tc)
+	var := fresh(&tc, "test")
 
 	num_lit := TypeFunctionApplication {
 		constructor = .NUMBER,
@@ -80,7 +80,7 @@ test_unify_mismatched_types :: proc(t: ^tt.T) {
 		t,
 		err ==
 		fmt.tprintf(
-			"cannot unify %v with %v",
+			"Cannot unify %v with %v.",
 			type_constructor_string(.NUMBER),
 			type_constructor_string(.BOOL),
 		),
@@ -95,10 +95,13 @@ test_unify_occurs_check :: proc(t: ^tt.T) {
 	}
 	b := TypeFunctionApplication {
 		constructor = .FUNCTION,
-		args        = {a},
+		args        = {a, nullary(.BOOL)},
 	}
 	_, err := unify(a, b)
-	tt.expect(t, err == "occurs check failed, infinite type")
+	tt.expect(
+		t,
+		err == fmt.tprintf("Infinite type: type %v contains %v.", type_string(b), type_string(a)),
+	)
 }
 
 // do function applications unify correctly?
@@ -166,6 +169,25 @@ test_substitution_combine :: proc(t: ^tt.T) {
 		t,
 		types_equal(combined[TypeVariable{idx = 1}], TypeFunctionApplication{constructor = .BOOL}),
 	)
+}
+
+// do substitutions recursively combine correctly?
+@(test)
+test_substitution_combine_recursively :: proc(t: ^tt.T) {
+	s1 := make(Substitution)
+	defer delete(s1)
+	s2 := make(Substitution)
+	defer delete(s2)
+
+	s1[TypeVariable{idx = 0}] = TypeVariable {
+		idx = 1,
+	}
+	s2[TypeVariable{idx = 1}] = nullary(.BOOL)
+
+	combined := combine_substitutions(s1, s2)
+	defer delete(combined)
+
+	tt.expect(t, types_equal(combined[TypeVariable{idx = 0}], nullary(.BOOL)))
 }
 
 // is the result of free_vars() on a type variable the variable itself?
@@ -288,7 +310,7 @@ test_generalize_instantiate :: proc(t: ^tt.T) {
 	tc := init_type_checker()
 	defer destroy_type_checker(&tc)
 
-	ty := fresh(&tc)
+	ty := fresh(&tc, "test")
 	scheme := generalize(&tc, ty)
 
 	inst := instantiate(&tc, scheme)
