@@ -879,7 +879,7 @@ parse_continue :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ReturnExpr)
 	expr.token = parser_previous(p)
-	if !parser_check(p, .NEWLINE) && !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
+	if !parser_check_any(p, .NEWLINE, .SEMI, .RSQUIRLY) && !parser_is_at_end(p) {
 		expr.value = parse_expression(p)
 	}
 	return expr
@@ -888,7 +888,7 @@ parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_exit :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ExitExpr)
 	expr.token = parser_previous(p)
-	if !parser_check(p, .NEWLINE) && !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
+	if !parser_check_any(p, .NEWLINE, .SEMI, .RSQUIRLY) && !parser_is_at_end(p) {
 		expr.code = parse_expression(p)
 	}
 	return expr

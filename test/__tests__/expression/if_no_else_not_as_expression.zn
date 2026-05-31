@@ -1,1 +1,2 @@
-var result = if true { "yes" } // ERR: Cannot use one-armed 'if' as a value.
+var result = if true { "yes" }
+puts(result) // expect: nil

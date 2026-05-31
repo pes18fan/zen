@@ -580,7 +580,14 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		}
 
 		c: SemanticCompiler
-		init_semantic_compiler(sm, &c, .LAMBDA)
+		if sm.current_class != nil &&
+		   sm.current_compiler.scope_depth == 0 &&
+		   e.bound_to != nil &&
+		   e.bound_to.?.lexeme == "init" {
+			init_semantic_compiler(sm, &c, .INITIALIZER)
+		} else {
+			init_semantic_compiler(sm, &c, .LAMBDA)
+		}
 		begin_semantic_scope(sm)
 
 		for param in e.params {
@@ -622,6 +629,11 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		sm.current_token = e.token
 		if sm.current_compiler.func_type == .SCRIPT {
 			semantic_error(sm, "Cannot return from the top level.")
+			return false
+		}
+
+		if e.value != nil && sm.current_compiler.func_type == .INITIALIZER {
+			semantic_error(sm, "Cannot return a value from an initializer.")
 			return false
 		}
 

@@ -14,7 +14,7 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 	}
 	push_scope(&tc)
 
-	var := fresh(&tc, "test")
+	var := fresh(&tc)
 
 	num_lit := TypeFunctionApplication {
 		constructor = .NUMBER,
@@ -334,7 +334,7 @@ test_generalize_instantiate :: proc(t: ^tt.T) {
 	}
 	push_scope(&tc)
 
-	ty := fresh(&tc, "test")
+	ty := fresh(&tc)
 	scheme := generalize(&tc, ty)
 
 	inst := instantiate(&tc, scheme)
