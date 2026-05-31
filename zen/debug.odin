@@ -32,8 +32,8 @@ constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
 	fmt.eprintf("%-16s %4d '", name, constant)
 	str := stringify_value(c.constants.values[constant])
-	fmt.eprintf(str)
-	fmt.eprintf("'\n")
+	fmt.eprint(str)
+	fmt.eprint("'\n")
 	return offset + 2
 }
 
@@ -42,7 +42,7 @@ long_constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 	constant := int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
 	fmt.eprintf("%-16s %4d '", name, constant)
 	str := stringify_value(c.constants.values[constant])
-	fmt.eprintf(str)
+	fmt.eprint(str)
 	fmt.eprintf("'\n")
 	return offset + 3
 }
@@ -60,8 +60,8 @@ class_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> i
 	fmt.eprintf("%-16s %4d '", name, constant)
 
 	str := stringify_value(c.constants.values[constant])
-	fmt.eprintf(str)
-	fmt.eprintf("'")
+	fmt.eprint(str)
+	fmt.eprint("'")
 	fmt.eprintf(", %s", public ? "public" : "private")
 	fmt.eprintf("\n")
 
@@ -110,8 +110,8 @@ invoke_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> 
 	fmt.eprintf("%-16s (%d args) %4d '", name, arg_count, constant)
 
 	str := stringify_value(c.constants.values[constant])
-	fmt.eprintf(str)
-	fmt.eprintf("'\n")
+	fmt.eprint(str)
+	fmt.eprint("'\n")
 
 	if long {
 		return offset + 4
@@ -243,11 +243,10 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 			constant := int(c.code[offset]) << 8 | int(c.code[offset + 1])
 			fmt.eprintf("%-16s %4d ", "OP_CLOSURE", constant)
 			str := stringify_value(c.constants.values[constant])
-			fmt.eprintf(str)
+			fmt.eprint(str)
 			offset += 2
 			public := bool(c.code[offset])
-			fmt.eprintf(", %s", public ? "public" : "private")
-			fmt.eprintln()
+			fmt.eprintfln(", %s", public ? "public" : "private")
 			offset += 1
 
 			function := as_function(c.constants.values[constant])

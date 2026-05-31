@@ -73,8 +73,8 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 }
 
 fresh :: #force_inline proc(tc: ^TypeChecker, $debug_message: string) -> TypeVariable {
-	defer tc.typevar_count += 1
-	var := TypeVariable{tc.typevar_count}
+	idx := tc.typevar_count
+	var := TypeVariable{idx}
 	when ODIN_DEBUG {
 		if config.log_type {
 			fmt.eprintfln(
@@ -85,6 +85,7 @@ fresh :: #force_inline proc(tc: ^TypeChecker, $debug_message: string) -> TypeVar
 		}
 	}
 
+	tc.typevar_count += 1
 	return var
 }
 
@@ -295,7 +296,7 @@ contains :: proc(container: Type, containee: TypeVariable) -> bool {
 apply_substitution :: proc {
 	apply_substitution_type,
 	apply_substitution_quantified,
-	apply_substitution_ctx,
+	apply_substitution_context,
 }
 
 apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
@@ -351,9 +352,14 @@ apply_substitution_quantified :: proc(subst: Substitution, scheme: TypeScheme) -
 	panic("invalid typescheme kind in apply_substitution_quantified()")
 }
 
-apply_substitution_ctx :: proc(subst: Substitution, ctx: ^TypeContext) {
-	for name, scheme in ctx.bindings {
-		ctx.bindings[name] = apply_substitution(subst, scheme)
+// applies the substitution over all the scopes of the context
+apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
+	c := ctx
+	for c != nil {
+		for name, scheme in ctx.bindings {
+			ctx.bindings[name] = apply_substitution(subst, scheme)
+		}
+		c = c.enclosing
 	}
 }
 

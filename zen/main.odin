@@ -11,7 +11,7 @@ VERSION :: string(#load("../.zen_version"))
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)
 
-TYPE_CHECK :: true
+TYPE_CHECK :: false
 
 when ODIN_DEBUG {
 	/* Config values set on start, most are for debugging, but some have use in
@@ -260,14 +260,14 @@ set_debug_flag_short :: proc(flag: rune) -> bool {
 		case 'S':
 			config.stress_gc = true
 		case:
-			fmt.eprintf("Unknown option: %r\n", flag)
+			fmt.eprintf("Unknown option: %c\n", flag)
 			print_help(os.stderr)
 			return false
 		}
 
 		return true
 	} else {
-		fmt.eprintf("Unknown option: %s\n", flag)
+		fmt.eprintf("Unknown option: %c\n", flag)
 		print_help(os.stderr)
 		return false
 	}
@@ -404,7 +404,6 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 		}
 	}
 }
-
 
 /* The entry point for the compiler. */
 main :: proc() {

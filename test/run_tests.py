@@ -181,6 +181,8 @@ def capture_output(command: str) -> (str, str, int, bool):
 
 
 if __name__ == "__main__":
+    global STRICT
+
     parser = argparse.ArgumentParser(description="zen e2e test runner")
     parser.add_argument(
         "--strict", "-s", action="store_true",
@@ -209,7 +211,7 @@ if __name__ == "__main__":
         print(f"{COL_RED}FAILED{RESET}: {len(failures)} tests failed.")
         print("Failed tests:")
         for failure in failures:
-            print(f"\t{failure["path"]} ({failure["reason"]})")
+            print(f"\t{failure['path']} ({failure['reason']})")
     elif passed == tests:
         print(f"All tests {COL_GREEN}PASSED!{RESET} :)")
     else:

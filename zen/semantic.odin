@@ -387,7 +387,7 @@ collect_forward_refs :: proc(sm: ^Semantic, expr: Expr) {
 
 			name := copy_string(sm.gc, binding.name.lexeme)
 			if _, ok := table_get(sm.globals, name); ok {
-				return
+				continue
 			}
 			table_set(sm.globals, name, nil_val())
 		}
@@ -743,7 +743,6 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		table_set(sm.globals, copy_string(sm.gc, mod_name), bool_val(true))
 	case ^VariableExpr:
 		sm.current_token = e.token
-
 		resolved := try2(sm, resolve_variable(sm, e.name)) or_return
 		sm.resolution[uintptr(e)] = resolved
 	case ^VarDeclExpr:
