@@ -69,7 +69,7 @@ test_unify_equal_types_returns_nil :: proc(t: ^tt.T) {
 	tt.expect(t, subst == nil)
 }
 
-// do incampatible type function applications fail to unify?
+// do incompatible type function applications fail to unify?
 @(test)
 test_unify_mismatched_types :: proc(t: ^tt.T) {
 	_, err := unify(
