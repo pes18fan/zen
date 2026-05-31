@@ -52,8 +52,7 @@ func test() {
     println(add(1, 2))
 }`
 
-	lx := init_lexer(source)
-	got, ok := lex(&lx)
+	got, ok := lex(source)
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -120,8 +119,7 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
     .capitalize()
     `
 
-	lx := init_lexer(source)
-	got, ok := lex(&lx)
+	got, ok := lex(source)
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -149,8 +147,7 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
 test_lexer_oneline_block :: proc(t: ^tt.T) {
 	source := `func a(x) { return x * 2 }`
 
-	lx := init_lexer(source)
-	got, ok := lex(&lx)
+	got, ok := lex(source)
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -177,8 +174,7 @@ test_lexer_oneline_block :: proc(t: ^tt.T) {
 /* Test empty source. */
 @(test)
 test_lexer_empty :: proc(t: ^tt.T) {
-	lx := init_lexer("")
-	got, ok := lex(&lx)
+	got, ok := lex("")
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error on empty source") {return}
@@ -190,21 +186,20 @@ test_lexer_empty :: proc(t: ^tt.T) {
 /* Test comments-only source. */
 @(test)
 test_lexer_comment_only :: proc(t: ^tt.T) {
-	lx := init_lexer("// just a comment\n")
-	got, ok := lex(&lx)
+	got, ok := lex("// just a comment\n")
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
+	tt.expectf(t, len(got) == 1, "expected 1 token (EOF), got %v", len(got))
 	tt.expect_value(t, got[0].type, TokenType.EOF)
 }
 
 /* Test various literal types. */
 @(test)
 test_lexer_literals :: proc(t: ^tt.T) {
-	source := `42 3.14 "hello" true false nil`
+	source := `42 3.14 1e2 "hello" true false nil`
 
-	lx := init_lexer(source)
-	got, ok := lex(&lx)
+	got, ok := lex(source)
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -212,6 +207,7 @@ test_lexer_literals :: proc(t: ^tt.T) {
 	want := []Token {
 		Token{type = .NUMBER, lexeme = "42", line = 1},
 		Token{type = .NUMBER, lexeme = "3.14", line = 1},
+		Token{type = .NUMBER, lexeme = "1e2", line = 1},
 		Token{type = .STRING, lexeme = "\"hello\"", line = 1},
 		Token{type = .TRUE, lexeme = "true", line = 1},
 		Token{type = .FALSE, lexeme = "false", line = 1},
@@ -228,8 +224,7 @@ test_lexer_literals :: proc(t: ^tt.T) {
 test_lexer_operators :: proc(t: ^tt.T) {
 	source := `+ - * / % == != < > <= >= and or not ( ) [ ] { } . , |> =>`
 
-	lx := init_lexer(source)
-	got, ok := lex(&lx)
+	got, ok := lex(source)
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -266,11 +261,10 @@ test_lexer_operators :: proc(t: ^tt.T) {
 	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
 }
 
-/* Test ASI: newline after identifier inserts semicolon. */
+/* Test ASI: newline after identifier isn't stripped. */
 @(test)
 test_lexer_asi_identifier :: proc(t: ^tt.T) {
-	lx := init_lexer("a\nb")
-	got, ok := lex(&lx)
+	got, ok := lex("a\nb")
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -289,8 +283,7 @@ test_lexer_asi_identifier :: proc(t: ^tt.T) {
 /* Test that ASI is suppressed inside brackets for lists. */
 @(test)
 test_lexer_asi_suppressed_in_list :: proc(t: ^tt.T) {
-	lx := init_lexer("[\na\n]")
-	got, ok := lex(&lx)
+	got, ok := lex("[\na\n]")
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -306,11 +299,33 @@ test_lexer_asi_suppressed_in_list :: proc(t: ^tt.T) {
 	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
 }
 
+/* Test that ASI is NOT suppressed inside blocks within lists/parentheses. */
+@(test)
+test_lexer_asi_suppressed_in_block_in_list_and_parens :: proc(t: ^tt.T) {
+	got, ok := lex("[\n{\na\nb\n}\n]")
+	defer delete(got)
+
+	if !tt.expect(t, ok, "lexer error") {return}
+
+	want := []Token {
+		Token{type = .LSQUARE, lexeme = "[", line = 1},
+		Token{type = .LSQUIRLY, lexeme = "{", line = 2},
+		Token{type = .IDENT, lexeme = "a", line = 3},
+		Token{type = .NEWLINE, lexeme = "\n", line = 3},
+		Token{type = .IDENT, lexeme = "b", line = 4},
+		Token{type = .RSQUIRLY, lexeme = "}", line = 5},
+		Token{type = .RSQUARE, lexeme = "]", line = 6},
+		Token{type = .EOF, lexeme = "", line = 6},
+	}
+
+	are_equal, wanted, recieved := expect_tokens_equal(want, got)
+	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
+}
+
 /* Test that the 'in' keyword suppresses ASI (for for-in loops). */
 @(test)
 test_lexer_asi_suppressed_in :: proc(t: ^tt.T) {
-	lx := init_lexer("a\nin b")
-	got, ok := lex(&lx)
+	got, ok := lex("a\nin b")
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -329,8 +344,7 @@ test_lexer_asi_suppressed_in :: proc(t: ^tt.T) {
 /* Test ASI: newline after closing brace inserts semicolon. */
 @(test)
 test_lexer_asi_r_squirly :: proc(t: ^tt.T) {
-	lx := init_lexer("}\nprint")
-	got, ok := lex(&lx)
+	got, ok := lex("}\nprint")
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}
@@ -351,8 +365,7 @@ test_lexer_asi_r_squirly :: proc(t: ^tt.T) {
 test_lexer_keywords :: proc(t: ^tt.T) {
 	source := `class func if while for break continue return switch var val pub use exit this super`
 
-	lx := init_lexer(source)
-	got, ok := lex(&lx)
+	got, ok := lex(source)
 	defer delete(got)
 
 	if !tt.expect(t, ok, "lexer error") {return}

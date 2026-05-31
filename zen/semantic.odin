@@ -629,7 +629,8 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 	case ^SequenceExpr:
 		sm.current_token = e.token
 		_analyze(sm, e.left) or_return
-		// process iteratively instead of recursively to avoid stack overflows
+		// process iteratively instead of recursively to avoid stack overflows,
+		// because SequenceExprs can get extremely deep in large programs
 		{
 			right := e.right
 			for {
@@ -649,11 +650,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		// If the receiver is a VariableExpr, check that it's not a final binding
 		if r, ok := e.receiver.(^VariableExpr); ok {
 			sm.current_token = r.token
-			resolved, err := resolve_variable(sm, r.name)
-			if err != nil {
-				semantic_error(sm, err.?)
-				return false
-			}
+			resolved := try2(sm, resolve_variable(sm, r.name)) or_return
 			if resolved.is_final {
 				semantic_error(sm, "Can only set a final variable once.")
 				return false
@@ -669,6 +666,15 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 	case ^SubscriptSetExpr:
 		sm.current_token = e.token
 		_analyze(sm, e.receiver) or_return
+		if r, ok := e.receiver.(^VariableExpr); ok {
+			sm.current_token = r.token
+			resolved := try2(sm, resolve_variable(sm, r.name)) or_return
+			if resolved.is_final {
+				semantic_error(sm, "Can only set a final variable once.")
+				return false
+			}
+		}
+
 		_analyze(sm, e.index) or_return
 		_analyze(sm, e.value) or_return
 	case ^SuperExpr:
@@ -749,6 +755,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		sm.current_token = e.token
 
 		for binding in e.bindings {
+			sm.current_token = binding.name
 			if binding.initializer == nil {
 				if e.is_final {
 					semantic_error(sm, "Final variables must be initialized.")
@@ -888,6 +895,10 @@ analyze :: proc(
 	collect_forward_refs(&sm, expr)
 
 	// Pass 2: Full semantic analysis
-	_analyze(&sm, expr) or_return
+	ok := _analyze(&sm, expr)
+	if !ok {
+		if sm.resolution != nil {delete(sm.resolution)}
+		return nil, false
+	}
 	return sm.resolution, true
 }

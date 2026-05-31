@@ -263,7 +263,7 @@ try2(cg, some_proc_returning_value()) or_return
 | `--dump-tokens` | Dump tokens |
 | `--dump-ast` | Dump AST |
 | `-T, --trace` | Trace execution |
-| `-G, --stress-gc` | Stress garbage collector (GC on every allocation) |
+| `-S, --stress-gc` | Stress garbage collector (GC on every allocation) |
 | `-L, --log-gc` | Enable GC logs |
 | `--log-type` | Enable type checker logs |
 | `-t, --time` | Time execution |
