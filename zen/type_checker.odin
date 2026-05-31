@@ -555,7 +555,13 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 
 	if is_type_never(a) {
 		// never also unifies with anything, but it does NOT turn the other
-		// type into never itself
+		// type into never itself.
+
+		// One important thing to note about never is that it has no valid
+		// values (set of values of type never is empty) so assigning anything to
+		// a never typed value (like a variable annotated with `!`), is a type
+		// error. This could be fixed by making unify non-commutative but that
+		// is annoying to work with so it is not what I use for said purpose.
 		when ODIN_DEBUG {
 			if config.log_type {
 				fmt.eprintfln("-- unify ! with %v trivially", type_string(b))
