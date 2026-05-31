@@ -6,6 +6,7 @@ import tt "core:testing"
 @(test)
 test_unify_var_with_primitives :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	tc := TypeChecker {
 		ctx           = nil,
 		typevar_count = 0,
@@ -95,6 +96,8 @@ test_unify_mismatched_types :: proc(t: ^tt.T) {
 // are infinite types detected correctly?
 @(test)
 test_unify_occurs_check :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	a := TypeVariable {
 		idx = 0,
 	}
@@ -112,6 +115,8 @@ test_unify_occurs_check :: proc(t: ^tt.T) {
 // do function applications unify correctly?
 @(test)
 test_unify_function_type :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	a := TypeVariable {
 		idx = 0,
 	}
@@ -234,6 +239,8 @@ test_apply_substitution_type_variable :: proc(t: ^tt.T) {
 // do substitutions apply correctly to type function applications?
 @(test)
 test_apply_substitution_function :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	ty := TypeFunctionApplication {
 		constructor = .FUNCTION,
 		args        = {TypeVariable{idx = 0}, TypeVariable{idx = 1}},
@@ -292,6 +299,7 @@ test_types_equal_different :: proc(t: ^tt.T) {
 @(test)
 test_scope_push_pop :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	tc := TypeChecker {
 		ctx           = nil,
 		typevar_count = 0,
@@ -318,6 +326,7 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 @(test)
 test_generalize_instantiate :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	tc := TypeChecker {
 		ctx           = nil,
 		typevar_count = 0,

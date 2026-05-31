@@ -1090,8 +1090,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	lexer := init_lexer(source)
-	tokens, lx_ok := lex(&lexer)
+	tokens, lx_ok := lex(source)
 	defer delete(tokens)
 	if !lx_ok {
 		return .INTERPRET_LEX_ERROR
@@ -1116,8 +1115,7 @@ interpret :: proc(
 		}
 	}
 
-	p := init_parser(tokens)
-	expr, ps_ok := parse(&p)
+	expr, ps_ok := parse(tokens)
 	defer free_expr(expr)
 	if !ps_ok {
 		return .INTERPRET_PARSE_ERROR

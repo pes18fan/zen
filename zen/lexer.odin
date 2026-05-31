@@ -89,11 +89,6 @@ Lexer :: struct {
 	line:    int,
 }
 
-/* Create a new lexer. */
-init_lexer :: proc(source: string) -> Lexer {
-	return Lexer{source = source, start = 0, current = 0, line = 1}
-}
-
 /* 
 Reports a syntax error. Assumes that `token` is an illegal token since only
 illegal tokens are returned on syntax errors. 
@@ -678,11 +673,18 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 /*
 Lex the tokens. If an error occurs, `success` is false.
 */
-lex :: proc(l: ^Lexer) -> (tokens: []Token, success: bool) {
+lex :: proc(source: string) -> (tokens: []Token, success: bool) {
+	l := Lexer {
+		source  = source,
+		start   = 0,
+		current = 0,
+		line    = 1,
+	}
+
 	toks := make([dynamic]Token)
 
 	for {
-		token, ok := lex_token(l).?
+		token, ok := lex_token(&l).?
 		if !ok {
 			delete(toks)
 			return nil, false

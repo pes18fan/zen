@@ -934,7 +934,7 @@ make_typeid_map :: proc() -> map[string]Type {
 }
 
 typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
-	// create arena to allocate everything for typechecker
+	// create separate arena to allocate everything for typechecker
 	arena: vmem.Arena
 	arena_err := vmem.arena_init_growing(&arena)
 	ensure(arena_err == nil)

@@ -302,11 +302,19 @@ ParseRule :: struct {
 
 /* Create a list of parsed declarations forming an abstract syntax tree, from
 a list of tokens stored in a parser. */
-parse :: proc(p: ^Parser) -> (expr: Expr, success: bool) {
-	if parser_is_at_end(p) {
+parse :: proc(tokens: []Token) -> (expr: Expr, success: bool) {
+	p := Parser {
+		tokens       = tokens,
+		current      = 0,
+		had_error    = false,
+		panic_mode   = false,
+		prev_was_eof = false,
+	}
+
+	if parser_is_at_end(&p) {
 		return nil, true
 	}
-	return parse_expression_top(p), !p.had_error
+	return parse_expression_top(&p), !p.had_error
 }
 
 parse_method :: proc(p: ^Parser, can_assign: bool) -> ^LambdaExpr {
@@ -732,7 +740,6 @@ parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		value := parse_expression(p)
 		assign := new(AssignExpr)
 		assign.token = operator
-		dbg_println("weeoo operator is:", assign.token)
 		assign.name = name
 		assign.value = value
 		return assign
