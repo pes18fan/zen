@@ -422,8 +422,6 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 	switch e in expr {
 	case ^AssignExpr:
 		sm.current_token = e.token
-		_analyze(sm, e.value) or_return
-
 		// Resolve the assigned variable
 		resolved := try2(sm, resolve_variable(sm, e.name)) or_return
 		if resolved.is_final {
@@ -431,6 +429,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			return false
 		}
 
+		_analyze(sm, e.value) or_return
 		sm.resolution[uintptr(e)] = resolved
 	case ^BinaryExpr:
 		sm.current_token = e.token

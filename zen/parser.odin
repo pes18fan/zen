@@ -47,6 +47,7 @@ Expr :: union {
 VarBinding :: struct {
 	name:        Token,
 	initializer: Expr,
+	type:        Maybe(Token),
 }
 
 // Expressions
@@ -549,6 +550,17 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	for {
 		binding: VarBinding
 		binding.name = parser_consume(p, .IDENT, "Expect variable name.")
+		if parser_match(p, .COLON) {
+			// currently the type is just a single token, will be changed later on
+			if parser_match(p, .BANG, .IDENT) {
+				binding.type = parser_previous(p)
+			} else {
+				parser_error(p, parser_peek(p), "Expect variable type.")
+			}
+		} else {
+			binding.type = nil
+		}
+
 		if parser_match(p, .EQUAL) {
 			binding.initializer = parse_expression(p)
 		}
@@ -716,9 +728,11 @@ parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	}
 
 	if can_assign && parser_match(p, .EQUAL) {
+		operator := parser_previous(p)
 		value := parse_expression(p)
 		assign := new(AssignExpr)
-		assign.token = name
+		assign.token = operator
+		dbg_println("weeoo operator is:", assign.token)
 		assign.name = name
 		assign.value = value
 		return assign
@@ -803,7 +817,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 	lambda.bound_to = bound_to
 	params := make([dynamic]Token)
 
-	// TODO: improve this parser_error message
+	// TODO: improve this error message
 	parser_consume(
 		p,
 		.LPAREN,
@@ -985,7 +999,9 @@ rules: [TokenType]ParseRule = {
 	.RSQUIRLY      = {nil, nil, .NONE},
 	.LSQUARE       = {parse_list, parse_subscript, .CALL},
 	.RSQUARE       = {nil, nil, .NONE},
+	.BANG          = {nil, nil, .NONE},
 	.COMMA         = {nil, nil, .NONE},
+	.COLON         = {nil, nil, .NONE},
 	.DOT           = {nil, parse_dot, .CALL},
 	.MINUS         = {parse_unary, parse_binary, .TERM},
 	.PLUS          = {nil, parse_binary, .TERM},

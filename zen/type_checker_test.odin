@@ -5,8 +5,13 @@ import tt "core:testing"
 // do variables successfully unify to primitives?
 @(test)
 test_unify_var_with_primitives :: proc(t: ^tt.T) {
-	tc := init_type_checker()
-	defer destroy_type_checker(&tc)
+	context.allocator = context.temp_allocator
+	tc := TypeChecker {
+		ctx           = nil,
+		typevar_count = 0,
+		had_error     = false,
+	}
+	push_scope(&tc)
 
 	var := fresh(&tc, "test")
 
@@ -286,8 +291,13 @@ test_types_equal_different :: proc(t: ^tt.T) {
 // does popping and pushing contexts work correctly?
 @(test)
 test_scope_push_pop :: proc(t: ^tt.T) {
-	tc := init_type_checker()
-	defer destroy_type_checker(&tc)
+	context.allocator = context.temp_allocator
+	tc := TypeChecker {
+		ctx           = nil,
+		typevar_count = 0,
+		had_error     = false,
+	}
+	push_scope(&tc)
 
 	push_scope(&tc)
 	bind_type(tc.ctx, "x", TypeFunctionApplication{constructor = .NUMBER})
@@ -307,8 +317,13 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 // do generalization and instantiation work correctly?
 @(test)
 test_generalize_instantiate :: proc(t: ^tt.T) {
-	tc := init_type_checker()
-	defer destroy_type_checker(&tc)
+	context.allocator = context.temp_allocator
+	tc := TypeChecker {
+		ctx           = nil,
+		typevar_count = 0,
+		had_error     = false,
+	}
+	push_scope(&tc)
 
 	ty := fresh(&tc, "test")
 	scheme := generalize(&tc, ty)
@@ -318,12 +333,4 @@ test_generalize_instantiate :: proc(t: ^tt.T) {
 
 	inst_tv := as_type_variable(inst)
 	tt.expect(t, inst_tv.idx != ty.idx)
-}
-
-// does initializing the typechecker create a scope automatically?
-@(test)
-test_init_type_checker_creates_scope :: proc(t: ^tt.T) {
-	tc := init_type_checker()
-	defer destroy_type_checker(&tc)
-	tt.expect(t, tc.ctx != nil)
 }

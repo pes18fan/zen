@@ -1158,10 +1158,7 @@ interpret :: proc(
 
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
-		tc := init_type_checker()
-		defer destroy_type_checker(&tc)
-
-		_, _, ok := infer_type(&tc, expr)
+		_, ok := typecheck(expr)
 		if !ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
