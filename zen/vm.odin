@@ -1154,6 +1154,8 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
+	TYPE_CHECK :: false
+
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		_, ok := typecheck(expr)

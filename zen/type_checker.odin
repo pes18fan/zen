@@ -3,6 +3,7 @@ package zen
 import "core:fmt"
 import vmem "core:mem/virtual"
 import "core:os"
+import "core:slice"
 import "core:strings"
 
 TypeChecker :: struct {
@@ -62,7 +63,7 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 	case .STRING:
 		return "string"
 	case .FUNCTION:
-		return "->"
+		return "func"
 	case .LIST:
 		return "list"
 	case .RECORD:
@@ -72,16 +73,12 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 	fmt.panicf("Internal compiler error: invalid type constructor %v", c)
 }
 
-fresh :: #force_inline proc(tc: ^TypeChecker, $debug_message: string) -> TypeVariable {
+fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	idx := tc.typevar_count
 	var := TypeVariable{idx}
 	when ODIN_DEBUG {
 		if config.log_type {
-			fmt.eprintfln(
-				"-- create fresh type variable %v for %s",
-				type_string(var),
-				debug_message,
-			)
+			fmt.eprintfln("-- create fresh type variable %v", type_string(var))
 		}
 	}
 
@@ -96,6 +93,31 @@ nullary :: #force_inline proc(constructor: TypeConstructor) -> TypeFunctionAppli
 	}
 
 	fmt.panicf("Internal compiler error: invalid nullary type constructor %v", constructor)
+}
+
+tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionApplication {
+	switch constructor {
+	case .NUMBER, .STRING, .NIL, .BOOL:
+		return nullary(constructor)
+	case .FUNCTION:
+		assert(args != nil, "cannot have nil type args for a function type")
+
+		// a function type here always takes at least one value and returns exactly
+		// one; hence at least two type args. The last one is the return value.
+		// even a function like func() {} does that; it takes unit and returns unit
+		assert(len(args) > 1, "must have at least two args for a function type")
+
+		// cloning the slice is a bit bad for performance but it keeps `tapp` reliable
+		return TypeFunctionApplication{constructor = constructor, args = slice.clone(args)}
+	case .LIST:
+		assert(args != nil, "cannot have nil type args for a list type")
+		assert(len(args) == 1, "must have one arg exactly for a list type")
+		return TypeFunctionApplication{constructor = constructor, args = slice.clone(args)}
+	case .RECORD:
+		unimplemented()
+	}
+
+	fmt.panicf("Internal compiler error: invalid type constructor %v", constructor)
 }
 
 type_any :: TypeAny{}
@@ -137,8 +159,8 @@ as_type_any :: #force_inline proc(ty: Type) -> TypeAny {
 	return ty.(TypeAny)
 }
 
-as_type_never :: #force_inline proc(ty: Type) -> TypeAny {
-	return ty.(TypeAny)
+as_type_never :: #force_inline proc(ty: Type) -> TypeNever {
+	return ty.(TypeNever)
 }
 
 TypeScheme :: union #no_nil {
@@ -216,7 +238,7 @@ types_equal :: proc(a: Type, b: Type) -> bool {
 	case TypeAny:
 		if !is_type_any(b) {return false}
 	case TypeNever:
-		if !is_type_any(b) {return false}
+		if !is_type_never(b) {return false}
 	}
 
 	return true
@@ -319,7 +341,7 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 		for i in 0 ..< len(t.args) {
 			new_args[i] = apply_substitution(subst, t.args[i])
 		}
-		return TypeFunctionApplication{constructor = t.constructor, args = new_args}
+		return tapp(t.constructor, new_args)
 	case TypeAny:
 		return t
 	case TypeNever:
@@ -356,7 +378,7 @@ apply_substitution_quantified :: proc(subst: Substitution, scheme: TypeScheme) -
 apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	c := ctx
 	for c != nil {
-		for name, scheme in ctx.bindings {
+		for name, scheme in c.bindings {
 			ctx.bindings[name] = apply_substitution(subst, scheme)
 		}
 		c = c.enclosing
@@ -411,7 +433,7 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 	case TypeQuantified:
 		subst := make(Substitution)
 		for bound in type.bound {
-			subst[bound] = fresh(tc, "instantiation")
+			subst[bound] = fresh(tc)
 		}
 		res := apply_substitution(subst, type.type)
 
@@ -536,11 +558,15 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: ErrorMessage) {
 		// type into never itself
 		when ODIN_DEBUG {
 			if config.log_type {
-				fmt.eprintfln("-- unify never with %v trivially", type_string(b))
+				fmt.eprintfln("-- unify ! with %v trivially", type_string(b))
 			}
 		}
 
 		return nil, nil
+	}
+
+	if is_type_never(b) {
+		return unify(b, a)
 	}
 
 	if is_type_function_application(a) && is_type_function_application(b) {
@@ -603,10 +629,10 @@ infer_type :: proc(
 ) -> (
 	subst: Substitution,
 	ty: Type,
-	success: bool,
+	err: ErrorMessage,
 ) {
-	alpha := fresh(tc, "infer_type")
-	s := try2(tc, check_type(tc, expr, alpha)) or_return
+	alpha := fresh(tc)
+	s := check_type(tc, expr, alpha) or_return
 	res := apply_substitution(s, alpha)
 
 	when ODIN_DEBUG {
@@ -620,7 +646,7 @@ infer_type :: proc(
 		}
 	}
 
-	return s, res, true
+	return s, res, nil
 }
 
 // check if the type of expr is compatible with type
@@ -637,12 +663,11 @@ check_type :: proc(
 	switch e in expr {
 	case ^AssignExpr:
 		tc.current_token = e.token
-		beta := fresh(tc, "assignment")
-		s1 := check_type(tc, e.value, beta) or_return
+		s1, t1 := infer_type(tc, e.value) or_return
 		apply_substitution(s1, tc.ctx)
 		found := resolve_type(tc, e.name.lexeme)
 		ty := instantiate(tc, found)
-		sn := unify(ty, apply_substitution(s1, beta)) or_return
+		sn := unify(ty, t1) or_return
 		apply_substitution(sn, tc.ctx)
 		sn2 := unify(type, apply_substitution(sn, ty)) or_return
 		return combine_substitutions(sn2, combine_substitutions(sn, s1)), nil
@@ -651,28 +676,27 @@ check_type :: proc(
 
 		#partial switch e.operator.type {
 		case .PLUS:
-			// TODO: figure out how to get this working for both str and num and nothing else
 			s1, s2, sn: Substitution; str_err: ErrorMessage
 
 			// try for strings
-			s1, str_err = check_type(tc, e.left, nullary(.STRING))
+			s1, str_err = check_type(tc, e.left, tapp(.STRING))
 			if str_err == nil {
 				apply_substitution(s1, tc.ctx)
-				s2 = check_type(tc, e.right, nullary(.STRING)) or_return
+				s2 = check_type(tc, e.right, tapp(.STRING)) or_return
 				apply_substitution(s2, tc.ctx)
 				sn = unify(type, nullary(.STRING)) or_return
 				return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 			}
 
 			// try for numbers
-			s1 = check_type(tc, e.left, nullary(.NUMBER)) or_return
+			s1 = check_type(tc, e.left, tapp(.NUMBER)) or_return
 			apply_substitution(s1, tc.ctx)
-			s2 = check_type(tc, e.right, nullary(.NUMBER)) or_return
+			s2 = check_type(tc, e.right, tapp(.NUMBER)) or_return
 			apply_substitution(s2, tc.ctx)
-			sn = unify(type, nullary(.NUMBER)) or_return
+			sn = unify(type, tapp(.NUMBER)) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .MINUS, .STAR, .SLASH, .PERCENT:
-			num := nullary(.NUMBER)
+			num := tapp(.NUMBER)
 			s1 := check_type(tc, e.left, num) or_return
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, num) or_return
@@ -680,8 +704,8 @@ check_type :: proc(
 			sn := unify(type, num) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL:
-			bool_ := nullary(.BOOL)
-			num := nullary(.NUMBER)
+			bool_ := tapp(.BOOL)
+			num := tapp(.NUMBER)
 			s1 := check_type(tc, e.left, num) or_return
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, num) or_return
@@ -689,11 +713,11 @@ check_type :: proc(
 			sn := unify(type, bool_) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .EQUAL_EQUAL, .BANG_EQUAL:
-			s1 := check_type(tc, e.left, type_any) or_return
+			s1, _ := infer_type(tc, e.left) or_return
 			apply_substitution(s1, tc.ctx)
-			s2 := check_type(tc, e.right, type_any) or_return
+			s2, _ := infer_type(tc, e.right) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := unify(type, nullary(.BOOL)) or_return
+			sn := unify(type, tapp(.BOOL)) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case:
 			fmt.panicf("Internal compiler error: Invalid binary operator '%s'.", e.operator.lexeme)
@@ -705,25 +729,50 @@ check_type :: proc(
 		pop_scope(tc)
 		return s, nil
 	case ^BreakExpr:
-		unimplemented()
+		tc.current_token = e.token
+		return unify(type, type_never)
 	case ^CallExpr:
 		tc.current_token = e.token
-		// must curry
 		unimplemented()
 	case ^ClassExpr:
 		unimplemented()
 	case ^ContinueExpr:
-		unimplemented()
+		tc.current_token = e.token
+		return unify(type, type_never)
 	case ^DiscardExpr:
-		unimplemented()
+		tc.current_token = e.token
+		s1, _ := infer_type(tc, e.expression) or_return // infer inner and discard
+		sn := unify(type, tapp(.NIL)) or_return
+		return combine_substitutions(sn, s1), nil
 	case ^ExitExpr:
-		unimplemented()
+		tc.current_token = e.token
+		return unify(type, type_never)
 	case ^ForExpr:
 		unimplemented()
 	case ^ForInExpr:
 		unimplemented()
 	case ^IfExpr:
-		unimplemented()
+		tc.current_token = e.token
+		s1 := check_type(tc, e.condition, tapp(.BOOL)) or_return
+		apply_substitution(s1, tc.ctx)
+		s2, then_type := infer_type(tc, e.then_branch.expression) or_return
+		apply_substitution(s2, tc.ctx)
+		s := combine_substitutions(s2, s1)
+
+		if e.else_branch != nil {
+			// both branches must return same type
+			s3 := check_type(tc, e.else_branch.expression, then_type) or_return
+			apply_substitution(s3, tc.ctx)
+			s = combine_substitutions(s3, s)
+			s4 := unify(type, apply_substitution(s, then_type)) or_return
+			s = combine_substitutions(s4, s)
+		} else {
+			// evaluate to nil if no else branch
+			sn := unify(apply_substitution(s, type), tapp(.NIL)) or_return
+			s = combine_substitutions(sn, s)
+		}
+
+		return s, nil
 	case ^GetExpr:
 		unimplemented()
 	case ^SetExpr:
@@ -733,11 +782,12 @@ check_type :: proc(
 		return check_type(tc, e.expression, type)
 	case ^LogicalExpr:
 		tc.current_token = e.token
-		s1 := check_type(tc, e.left, nullary(.BOOL)) or_return
+		bool_ := tapp(.BOOL)
+		s1 := check_type(tc, e.left, bool_) or_return
 		apply_substitution(s1, tc.ctx)
-		s2 := check_type(tc, e.right, nullary(.BOOL)) or_return
+		s2 := check_type(tc, e.right, bool_) or_return
 		apply_substitution(s2, tc.ctx)
-		sn := unify(type, nullary(.BOOL)) or_return
+		sn := unify(type, bool_) or_return
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	case ^ItExpr:
 		unimplemented()
@@ -746,7 +796,10 @@ check_type :: proc(
 	case ^PipeExpr:
 		unimplemented()
 	case ^PrintExpr:
-		unimplemented()
+		tc.current_token = e.token
+		s1, t1 := infer_type(tc, e.expr) or_return
+		sn := unify(type, t1) or_return // print returns what it printed
+		return combine_substitutions(sn, s1), nil
 	case ^ReturnExpr:
 		unimplemented()
 	case ^SubscriptExpr:
@@ -763,13 +816,13 @@ check_type :: proc(
 		// just unify with the matching literal constructor
 		switch l in e.value {
 		case f64:
-			return unify(type, nullary(.NUMBER))
+			return unify(type, tapp(.NUMBER))
 		case string:
-			return unify(type, nullary(.STRING))
+			return unify(type, tapp(.STRING))
 		case bool:
-			return unify(type, nullary(.BOOL))
+			return unify(type, tapp(.BOOL))
 		case:
-			return unify(type, nullary(.NIL))
+			return unify(type, tapp(.NIL))
 		}
 	case ^VariableExpr:
 		tc.current_token = e.token
@@ -778,13 +831,17 @@ check_type :: proc(
 		return unify(type, ty) // unify typevar with the found type
 	case ^LambdaExpr:
 		tc.current_token = e.token
-		// must curry
 		unimplemented()
 	case ^SequenceExpr:
 		tc.current_token = e.token
-		beta := fresh(tc, "seq left")
+		beta := fresh(tc)
 		s1 := check_type(tc, e.left, beta) or_return // infer left with fresh var
 		apply_substitution(s1, tc.ctx)
+		if e.right == nil {
+			// seq evaluates to nil if there is no right side
+			sn := unify(type, tapp(.NIL)) or_return
+			return combine_substitutions(sn, s1), nil
+		}
 		s2 := check_type(tc, e.right, type) or_return // infer right with expected type
 		apply_substitution(s2, tc.ctx)
 		return combine_substitutions(s2, s1), nil
@@ -796,9 +853,9 @@ check_type :: proc(
 		must_unify_with: TypeFunctionApplication
 		#partial switch e.operator.type {
 		case .MINUS:
-			must_unify_with = nullary(.NUMBER)
+			must_unify_with = tapp(.NUMBER)
 		case .NOT:
-			must_unify_with = nullary(.BOOL)
+			must_unify_with = tapp(.BOOL)
 		case:
 			fmt.panicf("Internal compiler error: Unknown unary operator '%s'", e.operator.lexeme)
 		}
@@ -816,7 +873,7 @@ check_type :: proc(
 			if binding.type != nil {
 				beta = annotation_to_type(tc, binding.type.?.lexeme) or_return
 			} else {
-				beta = fresh(tc, "var binding")
+				beta = fresh(tc)
 			}
 
 			if binding.initializer != nil {
@@ -824,13 +881,18 @@ check_type :: proc(
 				s = combine_substitutions(s1, s)
 				apply_substitution(s, tc.ctx)
 				inferred := apply_substitution(s, beta)
-				gen := generalize(tc, inferred)
+				gen: TypeScheme
+				if is_value(binding.initializer) {
+					gen = generalize(tc, inferred)
+				} else {
+					gen = inferred
+				}
 				bind_type(tc.ctx, binding.name.lexeme, gen)
 			} else {
 				bind_type(tc.ctx, binding.name.lexeme, beta)
 			}
 		}
-		sn := unify(type, nullary(.NIL)) or_return // VarDeclExpr itself evaluates to nil
+		sn := unify(type, tapp(.NIL)) or_return // VarDeclExpr itself evaluates to nil
 		return combine_substitutions(sn, s), nil
 	case ^WhileExpr:
 		unimplemented()
@@ -847,13 +909,28 @@ type_string :: proc(scheme: TypeScheme) -> string {
 			return fmt.tprintf("t%d", t.idx)
 		case TypeFunctionApplication:
 			if t.constructor == .FUNCTION {
-				assert(len(t.args) == 2)
-				return fmt.tprintf(
-					"%v %v %v",
-					type_string(t.args[0]),
-					type_constructor_string(t.constructor),
-					type_string(t.args[1]),
-				)
+				sb := strings.builder_make()
+				assert(len(t.args) > 1, "cannot have less than two type args in a function type")
+
+				fmt.sbprintf(&sb, "%v (", type_constructor_string(t.constructor))
+
+				param_count := len(t.args) - 1
+				for i in 0 ..< param_count {
+					arg := t.args[i]
+
+					arg_str := type_string(arg)
+					if i == param_count - 1 {
+						fmt.sbprintf(&sb, "%v", arg_str)
+					} else {
+						fmt.sbprintf(&sb, "%v, ", arg_str)
+					}
+				}
+				fmt.sbprint(&sb, ")")
+
+				// now the return type
+				fmt.sbprintf(&sb, " -> %v", type_string(t.args[len(t.args) - 1]))
+
+				return fmt.tprint(strings.to_string(sb))
 			} else {
 				sb := strings.builder_make()
 
@@ -876,7 +953,7 @@ type_string :: proc(scheme: TypeScheme) -> string {
 		case TypeAny:
 			return "any"
 		case TypeNever:
-			return "never"
+			return "!"
 		}
 	case TypeQuantified:
 		sb := strings.builder_make()
@@ -924,10 +1001,10 @@ annotation_to_type :: proc(tc: ^TypeChecker, annotation: string) -> (Type, Error
 make_typeid_map :: proc() -> map[string]Type {
 	// only including nullary types for now
 	typeid_map := make(map[string]Type)
-	typeid_map["nil"] = nullary(.NIL)
-	typeid_map["bool"] = nullary(.BOOL)
-	typeid_map["number"] = nullary(.NUMBER)
-	typeid_map["string"] = nullary(.STRING)
+	typeid_map["nil"] = tapp(.NIL)
+	typeid_map["bool"] = tapp(.BOOL)
+	typeid_map["number"] = tapp(.NUMBER)
+	typeid_map["string"] = tapp(.STRING)
 	typeid_map["!"] = type_never
 	typeid_map["any"] = type_any
 	return typeid_map
@@ -952,6 +1029,11 @@ typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 	}
 	push_scope(&tc)
 
-	_, ty := infer_type(&tc, expr) or_return
+	_, ty, err := infer_type(&tc, expr)
+	if err != nil {
+		typecheck_error(&tc, err.?)
+		return {}, false
+	}
+
 	return ty, true
 }

@@ -86,7 +86,13 @@ def test(folder):
                 print(leak_info)
                 failures.append({"path": file_path, "reason": "memory leak"})
             elif status == 0:
-                if multiline_output_match(output, expect):
+                if wants_err:
+                    print(f"{COL_RED}FAILED{RESET} with unexpected success")
+                    print(f"Expected error:\n{expected_err}")
+                    print(f"Got:\n{output}")
+                    failures.append(
+                        {"path": file_path, "reason": "unexpected success"})
+                elif multiline_output_match(output, expect):
                     print(f"{COL_GREEN}PASSED{RESET} with expected output")
                     passed += 1
                 else:
