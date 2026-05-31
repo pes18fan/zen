@@ -379,7 +379,7 @@ apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	c := ctx
 	for c != nil {
 		for name, scheme in c.bindings {
-			ctx.bindings[name] = apply_substitution(subst, scheme)
+			c.bindings[name] = apply_substitution(subst, scheme)
 		}
 		c = c.enclosing
 	}
@@ -414,7 +414,7 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 	when ODIN_DEBUG {
 		if config.log_type {
 			fmt.eprintfln(
-				"-- combine substs %v then %v to get %v",
+				"-- combine subst %v with %v to get %v",
 				subst_string(s2),
 				subst_string(s1),
 				subst_string(res),
@@ -660,6 +660,18 @@ check_type :: proc(
 	subst: Substitution,
 	err: ErrorMessage,
 ) {
+	// ! is only allowed for expressions that actually do not return.
+	if is_type_never(type) {
+		s, inferred := infer_type(tc, expr) or_return
+		if !is_type_never(inferred) {
+			return nil, fmt.tprintf(
+				"Expected a diverging expression of type !, got %v.",
+				type_string(inferred),
+			)
+		}
+		return s, nil
+	}
+
 	switch e in expr {
 	case ^AssignExpr:
 		tc.current_token = e.token
@@ -881,12 +893,13 @@ check_type :: proc(
 				s = combine_substitutions(s1, s)
 				apply_substitution(s, tc.ctx)
 				inferred := apply_substitution(s, beta)
-				gen: TypeScheme
-				if is_value(binding.initializer) {
-					gen = generalize(tc, inferred)
-				} else {
-					gen = inferred
-				}
+				// gen: TypeScheme
+				// if is_value(binding.initializer) {
+				// 	gen = generalize(tc, inferred)
+				// } else {
+				// 	gen = inferred
+				// }
+				gen := generalize(tc, inferred)
 				bind_type(tc.ctx, binding.name.lexeme, gen)
 			} else {
 				bind_type(tc.ctx, binding.name.lexeme, beta)
