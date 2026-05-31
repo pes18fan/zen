@@ -13,7 +13,9 @@ TokenType :: enum {
 	RSQUIRLY,
 	LSQUARE,
 	RSQUARE,
+	BANG,
 	COMMA,
+	COLON,
 	DOT,
 	MINUS,
 	PLUS,
@@ -625,6 +627,8 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 		return make_token(l, .LSQUARE)
 	case ']':
 		return make_token(l, .RSQUARE)
+	case ':':
+		return make_token(l, .COLON)
 	case ';':
 		return make_token(l, .SEMI)
 	case ',':
@@ -646,9 +650,7 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 			return make_token(l, .BAR_GREATER)
 		}
 	case '!':
-		if match(l, '=') {
-			return make_token(l, .BANG_EQUAL)
-		}
+		return make_token(l, match(l, '=') ? .BANG_EQUAL : .BANG)
 	case '=':
 		if match(l, '>') {
 			return make_token(l, .FAT_ARROW)
