@@ -425,12 +425,12 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		case_node.condition = parse_expression(p)
 		parser_consume(p, .FAT_ARROW, "Expect '=>' after case.")
 		case_node.body = parse_expression(p)
-		if parser_check(p, .RSQUIRLY) {
-			parser_error(p, parser_peek(p), "Switch expression must have an 'else' case.")
-		}
-
-		parser_consume(p, .NEWLINE, "Expect newline after switch case.")
+		if parser_match(p, .NEWLINE) {}
 		append(&cases, case_node)
+	}
+
+	if !has_else_clause {
+		parser_error(p, parser_peek(p), "Switch expression must have an 'else' case.")
 	}
 
 	expr.cases = cases[:]
