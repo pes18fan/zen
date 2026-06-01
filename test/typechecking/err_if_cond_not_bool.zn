@@ -1,0 +1,2 @@
+if 1 { puts "nope" }
+// ERR: Expected an expression of type Bool, got Number

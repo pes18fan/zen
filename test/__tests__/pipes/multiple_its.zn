@@ -2,5 +2,5 @@ use "string"
 
 print "hello"
     |> string.upcase()
-    |> it + ", " + it + "!"
-    |> it + "!!" // expect: HELLO, HELLO!!!
+    |> it .. ", " .. it .. "!"
+    |> it .. "!!" // expect: HELLO, HELLO!!!

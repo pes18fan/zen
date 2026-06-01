@@ -1,6 +1,6 @@
 class Base {
   init(a, b) {
-    puts("Base.init(" + a + ", " + b + ")")
+    puts("Base.init(" .. a .. ", " .. b .. ")")
   }
 }
 

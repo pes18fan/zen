@@ -192,8 +192,13 @@ if __name__ == "__main__":
         "--strict", "-s", action="store_true",
         help="enable memory leak detection (requires debug build)",
     )
+    parser.add_argument(
+        "--dir", "-d", type=str, default=test_folder,
+        help="test directory relative to test/ (default: __tests__)",
+    )
     args = parser.parse_args()
     STRICT = args.strict
+    test_folder = args.dir
 
     print_header()
 
@@ -219,5 +224,5 @@ if __name__ == "__main__":
     elif passed == tests:
         print(f"All tests {COL_GREEN}PASSED!{RESET} :)")
     else:
-        print(f"{COL_RED}Something went wrong.{RESET}")
+        print(f"{COL_RED}Something gone wrong.{RESET}")
         print(f"{passed} tests passed, {len(failures)} failed.")

@@ -1,0 +1,2 @@
+1 + "hello"
+// ERR: Expected an expression of type Number, got String

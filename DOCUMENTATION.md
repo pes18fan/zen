@@ -34,6 +34,14 @@ zen has the following primitive datatypes:
     value for uninitialized variables and the implicit return value for functions
     that do not return anything.
 
+## Operators
+
+zen has all of the common operators, including `+`, `-`, `*`, `/` and `%` for 
+numeric operations,  `==`, `!=`, `>`, `<`, `>=`, `<=` for comparisons, `and`, 
+`or` and `not` for boolean operations, as well as the `..` for string 
+concatenation, and the  pipe operator `|>` described in more detail later in 
+this file.
+
 ## Variables
 
 Bind a value to a name with `var`.
@@ -179,7 +187,7 @@ while awesome {
 }
 
 for var i = 0; i < 10; i = i + 1 {
-    print "you're awesome " + i + "!"
+    print "you're awesome " .. i .. "!"
 }
 ```
 
@@ -402,7 +410,7 @@ class CoffeeMaker {
     }
 
     brew() {
-        print "Enjoy your cup of " + this.coffee
+        print "Enjoy your cup of " .. this.coffee
 
         // No reusing the grounds!
         this.coffee = nil
@@ -431,7 +439,7 @@ class Dog < Animal {
     }
 
     bark() {
-        puts(this.name + " says woof!")
+        puts(this.name .. " says woof!")
     }
 }
 

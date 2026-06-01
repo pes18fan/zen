@@ -3,9 +3,9 @@ pub func a() {
 }
 
 pub func b(a) {
-    return a + "b"
+    return a .. "b"
 }
 
 pub func c(b) {
-    return b + "c"
+    return b .. "c"
 }

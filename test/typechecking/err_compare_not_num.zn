@@ -1,0 +1,2 @@
+true < false
+// ERR: Expected an expression of type Number, got Bool

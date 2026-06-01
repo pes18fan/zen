@@ -79,7 +79,7 @@ fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	var := TypeVariable{idx}
 	when ODIN_DEBUG {
 		if config.log_type {
-			fmt.eprintfln("-- create fresh type variable %v", type_string(var))
+			fmt.eprintfln("-- create fresh type variable %v", type_string(var, true))
 		}
 	}
 
@@ -189,10 +189,9 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 			when ODIN_DEBUG {
 				if config.log_type {
 					fmt.eprintfln(
-						"-- grab type %s: %v from current context %v",
+						"-- grab type %v of %s from current context",
+						type_string(t, true),
 						name,
-						type_string(t),
-						ctx_string(ctx),
 					)
 				}
 			}
@@ -211,12 +210,7 @@ bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
 
 	when ODIN_DEBUG {
 		if config.log_type {
-			fmt.eprintfln(
-				"-- update current context with %s: %v to get %v",
-				name,
-				type_string(scheme),
-				ctx_string(ctx),
-			)
+			fmt.eprintfln("-- update current context with %s: %v", name, type_string(scheme, true))
 		}
 	}
 }
@@ -435,11 +429,7 @@ apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	// TODO: add a debug log showing how the context got updated
 	when ODIN_DEBUG {
 		if config.log_type {
-			fmt.eprintfln(
-				"-- apply subst %v to context, current context is %v",
-				subst_string(subst),
-				ctx_string(ctx),
-			)
+			fmt.eprintfln("-- apply subst %v to current context", subst_string(subst, true))
 		}
 	}
 }
@@ -455,9 +445,9 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 				color_yellow(os.stderr, "WARNING")
 				fmt.eprintfln(
 					": substitutions %v and %v map same variable %v to different values",
-					subst_string(s1),
-					subst_string(s2),
-					type_string(var),
+					subst_string(s1, true),
+					subst_string(s2, true),
+					type_string(var, true),
 				)
 			}
 		}
@@ -475,9 +465,9 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 		if config.log_type {
 			fmt.eprintfln(
 				"-- combine subst %v with %v to get %v",
-				subst_string(s2),
-				subst_string(s1),
-				subst_string(res),
+				subst_string(s2, true),
+				subst_string(s1, true),
+				subst_string(res, true),
 			)
 		}
 	}
@@ -499,8 +489,8 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 
 		when ODIN_DEBUG {
 			if config.log_type {
-				quant := type_string(type)
-				reduced := type_string(res)
+				quant := type_string(type, true)
+				reduced := type_string(res, true)
 				fmt.eprintfln("-- instantiate %v to %v", quant, reduced)
 			}
 		}
@@ -534,8 +524,8 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 
 	when ODIN_DEBUG {
 		if config.log_type {
-			mono := type_string(ty)
-			quant := type_string(res)
+			mono := type_string(ty, true)
+			quant := type_string(res, true)
 			fmt.eprintfln("-- generalize %v to %v", mono, quant)
 		}
 	}
@@ -558,14 +548,14 @@ try_unify :: proc(expected: Type, checking: Type) -> (Substitution, ErrorMessage
 		case .INFINITE_TYPE:
 			return nil, fmt.tprintf(
 				"Infinite type: type %v contains %v.",
-				type_string(checking),
-				type_string(expected),
+				type_string(checking, false),
+				type_string(expected, false),
 			)
 		case .MISMATCH:
 			return nil, fmt.tprintf(
 				"Expected an expression of type %v, got %v.",
-				type_string(expected),
-				type_string(checking),
+				type_string(expected, false),
+				type_string(checking, false),
 			)
 		}
 	}
@@ -580,7 +570,11 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		if types_equal(a, b) {
 			when ODIN_DEBUG {
 				if config.log_type {
-					fmt.eprintfln("-- unify %v with %v trivially", type_string(a), type_string(b))
+					fmt.eprintfln(
+						"-- unify %v with %v trivially",
+						type_string(a, true),
+						type_string(b, true),
+					)
 				}
 			}
 
@@ -598,9 +592,9 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 			if config.log_type {
 				fmt.eprintfln(
 					"-- unify %v with %v through %v",
-					type_string(a),
-					type_string(b),
-					subst_string(s),
+					type_string(a, true),
+					type_string(b, true),
+					subst_string(s, true),
 				)
 			}
 		}
@@ -617,7 +611,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		// other type into any. What TypeScript does. Unsound, but it works.
 		when ODIN_DEBUG {
 			if config.log_type {
-				fmt.eprintfln("-- unify any with %v trivially", type_string(b))
+				fmt.eprintfln("-- unify any with %v trivially", type_string(b, true))
 			}
 		}
 
@@ -647,7 +641,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		// is annoying to work with so it is not what I use for said purpose.
 		when ODIN_DEBUG {
 			if config.log_type {
-				fmt.eprintfln("-- unify ! with %v trivially", type_string(b))
+				fmt.eprintfln("-- unify ! with %v trivially", type_string(b, true))
 			}
 		}
 
@@ -678,9 +672,9 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 			if config.log_type {
 				fmt.eprintfln(
 					"-- unify %v with %v %s",
-					type_string(a),
-					type_string(b),
-					"trivially" if len(t1.args) == 0 else fmt.tprintf("through %v", subst_string(s)),
+					type_string(a, true),
+					type_string(b, true),
+					"trivially" if len(t1.args) == 0 else fmt.tprintf("through %v", subst_string(s, true)),
 				)
 			}
 		}
@@ -694,8 +688,8 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 type_mismatch_string :: proc(want: Type, got: Type) -> string {
 	return fmt.tprintf(
 		"Expected expression of type %v, got %v",
-		type_string(want),
-		type_string(got),
+		type_string(want, false),
+		type_string(got, false),
 	)
 }
 
@@ -732,9 +726,9 @@ infer_type :: proc(
 		if config.log_type {
 			fmt.eprintfln(
 				"-- infer %v as %v via %v",
-				type_string(alpha),
-				type_string(res),
-				subst_string(s),
+				type_string(alpha, true),
+				type_string(res, true),
+				subst_string(s, true),
 			)
 		}
 	}
@@ -759,7 +753,7 @@ check_type :: proc(
 		if !is_type_never(inferred) {
 			return nil, fmt.tprintf(
 				"Expected a diverging expression of type !, got %v.",
-				type_string(inferred),
+				type_string(inferred, false),
 			)
 		}
 		return s, nil
@@ -782,11 +776,7 @@ check_type :: proc(
 		#partial switch e.operator.type {
 		case .PLUS, .MINUS, .STAR, .SLASH, .PERCENT:
 			num := tapp(.NUMBER)
-			s1, l_err := check_type(tc, e.left, num)
-			if l_err != nil {
-				return nil, fmt.tprintf("Operand to '%s' must be a number.", e.operator.lexeme)
-			}
-
+			s1 := check_type(tc, e.left, num) or_return
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, num) or_return
 			apply_substitution(s2, tc.ctx)
@@ -794,11 +784,7 @@ check_type :: proc(
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .DOT_DOT:
 			str := tapp(.STRING)
-			s1, l_err := check_type(tc, e.left, str)
-			if l_err != nil {
-				return nil, fmt.tprint("Operand to '..' must be a string.")
-			}
-
+			s1 := check_type(tc, e.left, str) or_return
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, str) or_return
 			apply_substitution(s2, tc.ctx)
@@ -807,11 +793,7 @@ check_type :: proc(
 		case .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL:
 			bool_ := tapp(.BOOL)
 			num := tapp(.NUMBER)
-			s1, l_err := check_type(tc, e.left, num)
-			if l_err != nil {
-				return nil, fmt.tprintf("Operand to '%s' must be a number.", e.operator.lexeme)
-			}
-
+			s1 := check_type(tc, e.left, num) or_return
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, num) or_return
 			apply_substitution(s2, tc.ctx)
@@ -886,16 +868,46 @@ check_type :: proc(
 		return try_unify(type, type_never)
 	case ^DiscardExpr:
 		tc.current_token = e.token
-		s1, _ := infer_type(tc, e.expression) or_return // infer inner and discard
+		s1, _ := infer_type(tc, e.expression) or_return // infer inner and discard it
 		sn := try_unify(type, tapp(.NIL)) or_return
 		return combine_substitutions(sn, s1), nil
 	case ^ExitExpr:
 		tc.current_token = e.token
 		return try_unify(type, type_never)
 	case ^ForExpr:
-		unimplemented()
+		tc.current_token = e.token
+
+		push_scope(tc)
+		s_init, _ := infer_type(tc, e.initializer) or_return
+		apply_substitution(s_init, tc.ctx)
+		s_cond := check_type(tc, e.condition, tapp(.BOOL)) or_return
+		apply_substitution(s_cond, tc.ctx)
+		s_inc, _ := infer_type(tc, e.increment) or_return
+		apply_substitution(s_inc, tc.ctx)
+		s_body := check_type(tc, e.body.expression, fresh(tc)) or_return
+		apply_substitution(s_body, tc.ctx)
+		pop_scope(tc)
+		sn := try_unify(type, tapp(.NIL)) or_return
+		return combine_substitutions(
+				sn,
+				combine_substitutions(
+					s_body,
+					combine_substitutions(s_inc, combine_substitutions(s_cond, s_init)),
+				),
+			),
+			nil
 	case ^ForInExpr:
-		unimplemented()
+		tc.current_token = e.token
+		push_scope(tc)
+		bind_type(tc.ctx, strings.clone(e.var_name.lexeme), type_any)
+		s_iter := check_type(tc, e.iterable, type_any) or_return // any for now, should probably be replaced by a `string | list` union in future
+		apply_substitution(s_iter, tc.ctx)
+		beta := fresh(tc)
+		s_body := check_type(tc, e.body.expression, beta) or_return
+		apply_substitution(s_body, tc.ctx)
+		pop_scope(tc)
+		sn := try_unify(type, tapp(.NIL)) or_return
+		return combine_substitutions(sn, combine_substitutions(s_body, s_iter)), nil
 	case ^IfExpr:
 		tc.current_token = e.token
 		s1 := check_type(tc, e.condition, tapp(.BOOL)) or_return
@@ -937,7 +949,20 @@ check_type :: proc(
 	case ^ItExpr:
 		unimplemented()
 	case ^ListExpr:
-		unimplemented()
+		tc.current_token = e.token
+		if len(e.elements) == 0 {
+			elem := fresh(tc)
+			return try_unify(type, tapp(.LIST, {elem}))
+		}
+		elem := fresh(tc)
+		s := make(Substitution)
+		for element in e.elements {
+			s1 := check_type(tc, element, apply_substitution(s, elem)) or_return
+			s = combine_substitutions(s1, s)
+			apply_substitution(s, tc.ctx)
+		}
+		sn := try_unify(type, tapp(.LIST, {apply_substitution(s, elem)})) or_return
+		return combine_substitutions(sn, s), nil
 	case ^PipeExpr:
 		unimplemented()
 	case ^PrintExpr:
@@ -946,7 +971,17 @@ check_type :: proc(
 		sn := try_unify(type, t1) or_return // print returns what it printed
 		return combine_substitutions(sn, s1), nil
 	case ^ReturnExpr:
-		unimplemented()
+		tc.current_token = e.token
+		if _, ok := tc.return_type.?; !ok {
+			panic(
+				"Internal compiler error: Function return type not found when typechecking ReturnExpr",
+			)
+		}
+
+		s1 := check_type(tc, e.value, tc.return_type.(Type)) or_return
+		apply_substitution(s1, tc.ctx)
+		sn := try_unify(type, type_never) or_return // return expression itself has type `!`
+		return combine_substitutions(sn, s1), nil
 	case ^SubscriptExpr:
 		unimplemented()
 	case ^SubscriptSetExpr:
@@ -1047,7 +1082,7 @@ check_type :: proc(
 			sn := try_unify(type, tapp(.NIL)) or_return
 			return combine_substitutions(sn, s1), nil
 		}
-		s2 := check_type(tc, e.right, type) or_return // infer right with expected type
+		s2 := check_type(tc, e.right, apply_substitution(s1, type)) or_return // infer right with expected type
 		apply_substitution(s2, tc.ctx)
 		return combine_substitutions(s2, s1), nil
 	case ^SwitchExpr:
@@ -1096,14 +1131,7 @@ check_type :: proc(
 			}
 
 			if binding.initializer != nil {
-				s1, iz_err := check_type(tc, binding.initializer, beta)
-				if iz_err != nil {
-					return nil, fmt.tprintf(
-						"Variable %v is declared as %v so it must be that type.",
-						binding.name.lexeme,
-						type_string(beta),
-					)
-				}
+				s1 := check_type(tc, binding.initializer, beta) or_return
 				s = combine_substitutions(s1, s)
 				apply_substitution(s, tc.ctx)
 				inferred := apply_substitution(s, beta)
@@ -1122,92 +1150,154 @@ check_type :: proc(
 		sn := try_unify(type, tapp(.NIL)) or_return // VarDeclExpr itself evaluates to nil
 		return combine_substitutions(sn, s), nil
 	case ^WhileExpr:
-		unimplemented()
+		tc.current_token = e.token
+		push_scope(tc)
+		s1 := check_type(tc, e.condition, tapp(.BOOL)) or_return
+		apply_substitution(s1, tc.ctx)
+		beta := fresh(tc)
+		s2 := check_type(tc, e.body.expression, beta) or_return
+		apply_substitution(s2, tc.ctx)
+		pop_scope(tc)
+		sn := try_unify(type, tapp(.NIL)) or_return
+		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	}
 
 	unimplemented()
 }
 
-type_string :: proc(scheme: TypeScheme) -> string {
-	switch type in scheme {
-	case Type:
-		switch t in type {
-		case TypeVariable:
-			return fmt.tprintf("t%d", t.idx)
-		case TypeFunctionApplication:
-			if t.constructor == .FUNCTION {
-				sb := strings.builder_make()
-				assert(len(t.args) > 1, "cannot have less than two type args in a function type")
+TypePrintCtx :: struct {
+	names:     map[int]string,
+	next:      int,
+	debugging: bool,
+}
 
-				fmt.sbprintf(&sb, "%v (", type_constructor_string(t.constructor))
+@(rodata)
+alphabet := "abcdefghijklmnopqrstuvwxyz"
 
-				param_count := len(t.args) - 1
-				for i in 0 ..< param_count {
-					arg := t.args[i]
+fresh_type_name :: proc(ctx: ^TypePrintCtx) -> string {
+	n := ctx.next
+	ctx.next += 1
 
-					arg_str := type_string(arg)
-					if i == param_count - 1 {
-						fmt.sbprintf(&sb, "%v", arg_str)
-					} else {
-						fmt.sbprintf(&sb, "%v, ", arg_str)
+	base := n % len(alphabet)
+	suffix := n / len(alphabet)
+
+	if suffix == 0 {
+		return fmt.tprintf("%r", alphabet[base])
+	}
+	return fmt.tprintf("%r%d", alphabet[base], suffix)
+}
+
+type_string :: proc(scheme: TypeScheme, $debugging: bool) -> string {
+	ctx := TypePrintCtx {
+		names     = make(map[int]string),
+		next      = 0,
+		debugging = debugging,
+	}
+
+	return type_string_with_ctx(&ctx, scheme)
+}
+
+type_var_string :: proc(ctx: ^TypePrintCtx, t: TypeVariable) -> string {
+	when ODIN_DEBUG {
+		return fmt.tprintf("t%d", t.idx)
+	}
+
+	if name, ok := ctx.names[t.idx]; ok {
+		return name
+	}
+
+	name := fresh_type_name(ctx)
+	ctx.names[t.idx] = name
+	return name
+}
+
+type_string_inner :: proc(ctx: ^TypePrintCtx, type: Type) -> string {
+	switch t in type {
+	case TypeVariable:
+		return type_var_string(ctx, t)
+	case TypeFunctionApplication:
+		if t.constructor == .FUNCTION {
+			sb := strings.builder_make()
+			assert(len(t.args) > 1, "cannot have less than two type args in a function type")
+
+			fmt.sbprintf(&sb, "%s ", type_constructor_string(t.constructor))
+			param_count := len(t.args) - 1
+			fmt.sbprint(&sb, "(")
+			for i in 0 ..< param_count {
+				if i == 0 && param_count == 1 {
+					if app, ok := t.args[0].(TypeFunctionApplication);
+					   ok && app.constructor == .NIL {
+						break
 					}
 				}
-				fmt.sbprint(&sb, ")")
 
-				// now the return type
-				fmt.sbprintf(&sb, " -> %v", type_string(t.args[len(t.args) - 1]))
-
-				return fmt.tprint(strings.to_string(sb))
-			} else {
-				sb := strings.builder_make()
-
-				fmt.sbprintf(
-					&sb,
-					len(t.args) == 0 ? "%v" : "%v ",
-					type_constructor_string(t.constructor),
-				)
-				for arg, idx in t.args {
-					arg_str := type_string(arg)
-					if idx == len(t.args) - 1 {
-						fmt.sbprintf(&sb, "%v", arg_str)
-					} else {
-						fmt.sbprintf(&sb, "%v ", arg_str)
-					}
+				if i > 0 {
+					fmt.sbprint(&sb, ", ")
 				}
-
-				return fmt.tprint(strings.to_string(sb))
+				fmt.sbprint(&sb, type_string_inner(ctx, t.args[i]))
 			}
-		case TypeAny:
-			return "any"
-		case TypeNever:
-			return "!"
+			fmt.sbprint(&sb, ") -> ")
+			fmt.sbprint(&sb, type_string_inner(ctx, t.args[len(t.args) - 1]))
+			return strings.to_string(sb)
+		} else {
+			sb := strings.builder_make()
+			fmt.sbprint(&sb, type_constructor_string(t.constructor))
+
+			for arg in t.args {
+				fmt.sbprint(&sb, " ")
+				fmt.sbprint(&sb, type_string_inner(ctx, arg))
+			}
+
+			return strings.to_string(sb)
 		}
+	case TypeAny:
+		return "any"
+	case TypeNever:
+		return "!"
+	}
+
+	panic("Internal compiler error: Invalid type")
+}
+
+type_string_with_ctx :: proc(ctx: ^TypePrintCtx, scheme: TypeScheme) -> string {
+	switch s in scheme {
+	case Type:
+		return type_string_inner(ctx, s)
 	case TypeQuantified:
-		sb := strings.builder_make()
-
-		for bound in type.bound {
-			bound_str := type_string(bound)
-			fmt.sbprintf(&sb, "forall %v. ", bound_str)
+		old_names := ctx.names
+		old_next := ctx.next
+		defer {
+			ctx.names = old_names
+			ctx.next = old_next
 		}
 
-		type_str := type_string(type.type)
-		fmt.sbprint(&sb, type_str)
+		bound_names := strings.builder_make()
 
-		return fmt.tprint(strings.to_string(sb))
+		for bound in s.bound {
+			name := type_var_string(ctx, bound)
+
+			if len(strings.to_string(bound_names)) > 0 {
+				fmt.sbprint(&bound_names, " ")
+			}
+			fmt.sbprint(&bound_names, name)
+		}
+
+		body := type_string_inner(ctx, s.type)
+		return fmt.tprintf("forall %s. %s", strings.to_string(bound_names), body)
 	}
 
 	panic("Internal compiler error: invalid typescheme")
 }
 
-subst_string :: proc(subst: Substitution) -> string {
+subst_string :: proc(subst: Substitution, $debugging: bool) -> string {
 	sb := strings.builder_make()
 
 	sz := len(subst)
 	count := 0
 	fmt.sbprint(&sb, "{")
 	for var, ty in subst {
-		var_string := type_string(var)
-		ty_string := type_string(ty)
+		var_string := type_string(var, debugging)
+		ty_string := type_string(ty, debugging)
 
 		fmt.sbprintf(&sb, "%v |-> %v%s", var_string, ty_string, ", " if count < sz - 1 else "")
 		count += 1
@@ -1218,14 +1308,14 @@ subst_string :: proc(subst: Substitution) -> string {
 }
 
 // only prints the current scope of ctx
-ctx_string :: proc(ctx: ^TypeContext) -> string {
+ctx_string :: proc(ctx: ^TypeContext, $debugging: bool) -> string {
 	sb := strings.builder_make()
 
 	sz := len(ctx.bindings)
 	count := 0
 	fmt.sbprint(&sb, "{")
 	for var_name, ty in ctx.bindings {
-		ty_string := type_string(ty)
+		ty_string := type_string(ty, debugging)
 
 		fmt.sbprintf(&sb, "%s: %v%s", var_name, ty_string, ", " if count < sz - 1 else "")
 		count += 1
@@ -1265,6 +1355,47 @@ typecheck_expr :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bo
 	return ty, true
 }
 
+register_builtins :: proc(tc: ^TypeChecker) {
+	nil_t := tapp(.NIL)
+	string_t := tapp(.STRING)
+	number_t := tapp(.NUMBER)
+	never_t := type_never
+
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintln("-- registering native function signatures")
+		}
+	}
+
+	a := fresh(tc)
+	bind_type(tc.ctx, "puts", tquant({a}, tapp(.FUNCTION, {a, nil_t})))
+	bind_type(tc.ctx, "gets", tapp(.FUNCTION, {nil_t, string_t}))
+
+	b := fresh(tc)
+	bind_type(tc.ctx, "len", tquant({b}, tapp(.FUNCTION, {b, number_t})))
+
+	c := fresh(tc)
+	bind_type(tc.ctx, "typeof", tquant({c}, tapp(.FUNCTION, {c, string_t})))
+
+	d := fresh(tc)
+	bind_type(tc.ctx, "str", tquant({d}, tapp(.FUNCTION, {d, string_t})))
+
+	bind_type(tc.ctx, "parse", tapp(.FUNCTION, {string_t, number_t}))
+
+	e := fresh(tc)
+	bind_type(tc.ctx, "copy", tquant({e}, tapp(.FUNCTION, {e, e})))
+
+	bind_type(tc.ctx, "panic", tapp(.FUNCTION, {string_t, never_t}))
+	bind_type(tc.ctx, "dirname", tapp(.FUNCTION, {nil_t, string_t}))
+	bind_type(tc.ctx, "filename", tapp(.FUNCTION, {nil_t, string_t}))
+
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintln("-- finished registering native function signatures\n")
+		}
+	}
+}
+
 typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 	// create separate arena to allocate everything for typechecker
 	arena: vmem.Arena
@@ -1284,6 +1415,7 @@ typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 	}
 	push_scope(&tc)
 	defer pop_scope(&tc)
+	register_builtins(&tc)
 
 	return typecheck_expr(&tc, expr)
 }

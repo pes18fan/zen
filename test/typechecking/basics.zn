@@ -1,0 +1,26 @@
+// literals
+puts(42)      // expect: 42
+puts(3.14)    // expect: 3.140
+puts "hello"  // expect: hello
+puts(true)    // expect: true
+puts(false)   // expect: false
+puts(nil)     // expect: nil
+
+// unary
+puts(-5)          // expect: -5
+puts(not true)    // expect: false
+
+// equality
+puts(3 == 3)  // expect: true
+puts(3 == 4)  // expect: false
+puts(3 != 4)  // expect: true
+
+// logical
+puts(true and false)  // expect: false
+puts(true or false)   // expect: true
+
+// blocks
+var x = {
+    42
+}
+puts(x)               // expect: 42

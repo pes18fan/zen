@@ -25,7 +25,7 @@ zen/
 │   ├── error.odin        # try/try2 error helpers
 │   ├── format.odin       # Terminal color helpers (red, green, yellow)
 │   ├── debug.odin        # Disassembly/debug
-│   ├── type_checker.odin # Hindley-Milner type checker (WIP, Algorithm W)
+│   ├── type_checker.odin # Hindley-Milner type checker (WIP, Algorithm M, bidirectional)
 │   ├── type_checker_test.odin
 │   ├── chunk_test.odin
 │   ├── lexer_test.odin
@@ -81,6 +81,8 @@ Requires **Odin compiler** and **Python**. The `isocline` REPL library is auto-d
 - Runner: `test/run_tests.py`, interpreter: `../bin/test/zen`, timeout: 2s
 - Optional `--strict` / `-s` flag: runs test with debug build + tracking allocator;
   any memory leak in stderr marks the test as failed
+- Optional `--dir` / `-d` flag: run tests from a specific subdirectory of `test/`
+  (e.g. `--dir typechecking` runs `test/typechecking/`)
 - Categories: `assignment/`, `class/`, `closure/`, `comments/`, `conditionals/`,
     `constructor/`, `equality/`, `expression/`, `field/`, `for/`, `for_in/`,
     `function/`, `inheritance/`, `list/`, `loop_control/`, `math/`, `method/`,
@@ -98,6 +100,7 @@ Source string ->
     Lexer -> Token stream (with ASI) ->
     Parser -> AST (Expr-based, no Stmt/Decl nodes) ->
     Semantic analysis -> Resolution map ->
+    [Type checker (Hindley-Milner, Algorithm M, always-on via TYPE_CHECK)] ->
     Compiler -> Bytecode (Chunk) 
     -> VM (interpreter) + GC
 ```
@@ -229,7 +232,7 @@ try2(cg, some_proc_returning_value()) or_return
 - **Error/exit**: `exit` expression with optional status code
 - **Arithmetic**: `+`, `-`, `*`, `/`, `%`, `and`, `or`
 - **Comparison**: `==`, `!=`, `<`, `>`, `<=`, `>=`
-- **String operations**: `+` for concatenation, `[]` for indexing
+- **String operations**: `..` for concatenation, `[]` for indexing
 - **List operations**: `[]` for indexing/setting, `list.*` module functions for 
     mutation
 - **Function calls**: parentheses optional for single string argument
@@ -288,22 +291,25 @@ available on debug builds of zen. Otherwise, they are hidden behind a compile-ti
 
 ## When Adding Tests
 
-1. Place `.zn` files in `test/__tests__/<category>/`
+1. Place `.zn` files in `test/__tests__/<category>/` for runtime tests, or `test/typechecking/` for type checker tests
 2. Add `// expect: <expected output>` for success cases
 3. Add `// ERR: <expected error>` for error cases
 4. Add `// DRAFT` to skip a test
 5. Run with `./x.py test` (release) or `./x.py test --strict` (debug + leak checks)
+6. Run typechecking tests separately: `python test/run_tests.py -d typechecking` (requires `TYPE_CHECK=true` in vm.odin)
 
 ## When Adding Features
 
-1. The pipeline is: Lexer -> Parser -> Semantic analyzer -> Compiler -> VM (+ GC)
+1. The pipeline is: Lexer -> Parser -> Semantic analyzer -> [Type checker] -> Compiler -> VM (+ GC)
 2. Add new tokens to the lexer if needed, new AST nodes to the parser, new opcodes to `chunk.odin`'s `OpCode` enum, codegen in compiler, execution in VM
-3. Update `debug.odin` for disassembly of new opcodes
-4. Update `semantic.odin` for any new scope/semantic validation rules
-5. Add standard library functions in `std.odin` if applicable
-6. Add e2e tests in `test/__tests__/`
-7. Verify that all unit and e2e tests pass
-8. If changes may affect performance, run the benchmarks on the old and new
+3. Update `type_checker.odin` for any new AST nodes (add `when TYPE_CHECK` guarded cases in `check_type`)
+4. Update `debug.odin` for disassembly of new opcodes
+5. Update `semantic.odin` for any new scope/semantic validation rules
+6. Add standard library functions in `std.odin` if applicable
+7. Register new builtin functions in `register_builtins` in `type_checker.odin` (use `tquant` for polymorphic ones)
+8. Add e2e tests in `test/__tests__/`
+9. Verify that all unit and e2e tests pass
+10. If changes may affect performance, run the benchmarks on the old and new
     versions to ensure performance is reasonable 
-9. Update `DOCUMENTATION.md` if the feature changes the language surface
-10. Add syntax highlighting to `syntaxes/` for VSCode, Sublime, and Vim
+10. Update `DOCUMENTATION.md` if the feature changes the language surface
+11. Add syntax highlighting to `syntaxes/` for VSCode, Sublime, and Vim

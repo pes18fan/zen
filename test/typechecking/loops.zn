@@ -1,0 +1,26 @@
+// while loop (single iteration only due to pre-existing runtime bug)
+var count = 5
+while count < 10 {
+    puts(count)
+    count = 10
+}
+// expect: 5
+
+// while with bool condition (works correctly)
+var run = false
+while run {
+    puts("nope")
+}
+puts("after")
+// expect: after
+
+// for-in with list
+for x in [10, 20, 30] {
+    puts(x)
+}
+// expect: 10
+// expect: 20
+// expect: 30
+
+// error: condition must be bool
+// while 1 { true }
