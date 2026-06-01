@@ -751,8 +751,8 @@ compile_function :: proc(
 }
 
 @(require_results)
-compile_method :: proc(cg: ^Codegen, m: ^LambdaExpr) -> bool {
-	assert(m.bound_to != nil, "method lambda must be bound to a name")
+compile_method :: proc(cg: ^Codegen, m: ^FunctionExpr) -> bool {
+	assert(m.bound_to != nil, "method must be bound to a name")
 	name := m.bound_to.?
 	params := m.params
 	body := m.body
@@ -1236,7 +1236,7 @@ compile_var_declaration :: proc(
 		} else {
 			/* Allow anonymous functions to recurse by referring to the name they've
 				  * been bound to. */
-			if _, ok := binding.initializer.(^LambdaExpr); ok {
+			if _, ok := binding.initializer.(^FunctionExpr); ok {
 				mark_initialized(cg)
 			}
 			compile_expression(cg, binding.initializer) or_return
@@ -1438,7 +1438,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ClassExpr:
 		cg.current_token = e.token
 		compile_class_declaration(cg, e) or_return
-	case ^LambdaExpr:
+	case ^FunctionExpr:
 		cg.current_token = e.token
 		params := e.params
 		body := e.body
