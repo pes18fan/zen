@@ -1,0 +1,6 @@
+func f() {
+    return 42
+    "hello"
+}
+f()
+// ERR: Expected an expression of type Number, got String

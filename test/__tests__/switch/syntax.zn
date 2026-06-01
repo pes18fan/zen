@@ -21,7 +21,7 @@ var c = 0
 switch c {
     0 => {
         var zero = "zero!"
-        print zero + "\n" // expect: zero!
+        print zero .. "\n" // expect: zero!
     }
     1 => {
         puts "one!"

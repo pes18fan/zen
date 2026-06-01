@@ -3,11 +3,11 @@ var result = ""
 switch x {
     1 => {
         result = "one"
-        result = result + "!"
+        result = result .. "!"
     }
     2 => {
         result = "two"
-        result = result + "!"
+        result = result .. "!"
     }
     else => result = "other"
 }

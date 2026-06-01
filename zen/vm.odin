@@ -260,8 +260,9 @@ binary_op :: proc(vm: ^VM, $returns: typeid, op: string) -> InterpretResult {
 
 	switch typeid_of(returns) {
 	case f64:
-		// Note: Addition is handled seperately from this procedure.
 		switch op {
+		case "+":
+			vm_push(vm, number_val(a + b))
 		case "-":
 			vm_push(vm, number_val(a - b))
 		case "*":
@@ -288,6 +289,9 @@ binary_op :: proc(vm: ^VM, $returns: typeid, op: string) -> InterpretResult {
 
 				vm_push(vm, number_val(cast(f64)(cast(int)a % cast(int)b)))
 			}
+		case:
+			color_red(os.stderr, "bug: ")
+			fmt.panicf("Invalid numeric binary operation '%s'.\n", op)
 		}
 	case bool:
 		{
@@ -300,8 +304,7 @@ binary_op :: proc(vm: ^VM, $returns: typeid, op: string) -> InterpretResult {
 		}
 	case:
 		color_red(os.stderr, "bug: ")
-		fmt.eprintf("Invalid return type for binary operation '%s'.\n", op)
-		unreachable()
+		fmt.panicf("Invalid return type for binary operation '%s'.\n", op)
 	}
 
 	return nil
@@ -1163,6 +1166,11 @@ interpret :: proc(
 	when TYPE_CHECK {
 		tc_ok: bool
 
+		when ODIN_DEBUG {
+			if config.log_type {
+				fmt.eprintln("-- typechecker begin")
+			}
+		}
 		// Use persistent type checker for REPL
 		if config.repl {
 			if !vm.type_arena_init {
@@ -1180,6 +1188,7 @@ interpret :: proc(
 					typeid_map = make_typeid_map(),
 				}
 				push_scope(tc)
+				register_builtins(tc)
 				vm.type_checker = tc
 			}
 
@@ -1187,6 +1196,11 @@ interpret :: proc(
 			context.allocator = prev_alloc
 		} else {
 			_, tc_ok = typecheck(expr)
+		}
+		when ODIN_DEBUG {
+			if config.log_type {
+				fmt.eprintln("\n-- typechecker end")
+			}
 		}
 
 		if !tc_ok {

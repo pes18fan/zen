@@ -1,0 +1,33 @@
+// if with else
+var r = if true {
+    "yes"
+} else {
+    "no"
+}
+puts(r)             // expect: yes
+
+// if without else
+var d = if false {
+    42
+}
+puts(d)             // expect: nil
+
+// nested if
+var n = if true {
+    if false { "a" } else { "b" }
+} else {
+    "c"
+}
+puts(n)             // expect: b
+
+// switch
+var s = switch 2 {
+    1 => "one"
+    2 => "two"
+    else => "other"
+}
+puts(s)             // expect: two
+
+// discard
+discard 42
+puts "discarded"    // expect: discarded

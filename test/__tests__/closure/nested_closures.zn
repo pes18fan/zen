@@ -3,7 +3,7 @@ func outer() {
     func middle() {
         var y = "middle"
         func inner() {
-            return x + " " + y
+            return x .. " " .. y
         }
         return inner
     }

@@ -1,6 +1,6 @@
 class Foo {
   init(arg) {
-    print "Foo.init(" + arg + ")" + "\n"
+    print "Foo.init(" .. arg .. ")" .. "\n"
     this.field = "init"
   }
 }
