@@ -10,8 +10,9 @@ TypeChecker :: struct {
 	ctx:           ^TypeContext,
 	typevar_count: int,
 	current_token: Token,
-	had_error:     bool,
+	return_type:   Maybe(Type),
 	typeid_map:    map[string]Type,
+	had_error:     bool,
 }
 
 TypeContext :: struct {
@@ -383,6 +384,8 @@ apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 		}
 		c = c.enclosing
 	}
+
+	// TODO: add a debug log showing how the context got updated
 }
 
 // allocates a map (Substitution)
@@ -441,7 +444,7 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 			if config.log_type {
 				quant := type_string(type)
 				reduced := type_string(res)
-				fmt.eprintfln("-- %v instantiated to %v", quant, reduced)
+				fmt.eprintfln("-- instantiate %v to %v", quant, reduced)
 			}
 		}
 
@@ -479,7 +482,7 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 		if config.log_type {
 			mono := type_string(ty)
 			quant := type_string(res)
-			fmt.eprintfln("-- %v generalized to %v", mono, quant)
+			fmt.eprintfln("-- generalize %v to %v", mono, quant)
 		}
 	}
 
@@ -707,7 +710,12 @@ check_type :: proc(
 			}
 
 			// try for numbers
-			s1 = check_type(tc, e.left, tapp(.NUMBER)) or_return
+			num_err: ErrorMessage
+			s1, num_err = check_type(tc, e.left, tapp(.NUMBER))
+			if num_err != nil {
+				return nil, fmt.tprintf("Left side of '+' must be number or string.")
+			}
+
 			apply_substitution(s1, tc.ctx)
 			s2 = check_type(tc, e.right, tapp(.NUMBER)) or_return
 			apply_substitution(s2, tc.ctx)
@@ -715,7 +723,11 @@ check_type :: proc(
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .MINUS, .STAR, .SLASH, .PERCENT:
 			num := tapp(.NUMBER)
-			s1 := check_type(tc, e.left, num) or_return
+			s1, l_err := check_type(tc, e.left, num)
+			if l_err != nil {
+				return nil, fmt.tprintf("Left side of '%s' must be number.", e.operator.lexeme)
+			}
+
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, num) or_return
 			apply_substitution(s2, tc.ctx)
@@ -751,7 +763,47 @@ check_type :: proc(
 		return unify(type, type_never)
 	case ^CallExpr:
 		tc.current_token = e.token
-		unimplemented()
+		callee := e.callee
+		arguments := e.arguments
+
+		// build the expected function type
+		arg_types: []Type
+		if len(arguments) == 0 {
+			arg_types = make([]Type, 1)
+			arg_types[0] = tapp(.NIL)
+		} else {
+			arg_types = make([]Type, len(arguments))
+			for i in 0 ..< len(arguments) {
+				arg_types[i] = fresh(tc)
+			}
+		}
+		all_args := make([]Type, len(arg_types) + 1)
+		copy(all_args, arg_types)
+		all_args[len(arg_types)] = type
+		func_type := tapp(.FUNCTION, all_args)
+
+		// handle method calls vs regular ones
+		s := make(Substitution)
+
+		if get_expr, ok := callee.(^GetExpr); ok {
+			s1, _ := infer_type(tc, get_expr.receiver) or_return
+			apply_substitution(s1, tc.ctx)
+			s = combine_substitutions(s1, s)
+		} else {
+			s1 := check_type(tc, callee, func_type) or_return
+			apply_substitution(s1, tc.ctx)
+			s = combine_substitutions(s1, s)
+		}
+
+		// typecheck each argument
+		for arg, idx in arguments {
+			expected := apply_substitution(s, arg_types[idx])
+			s1 := check_type(tc, arg, expected) or_return
+			apply_substitution(s1, tc.ctx)
+			s = combine_substitutions(s1, s)
+		}
+
+		return s, nil
 	case ^ClassExpr:
 		unimplemented()
 	case ^ContinueExpr:
@@ -849,7 +901,52 @@ check_type :: proc(
 		return unify(type, ty) // unify typevar with the found type
 	case ^LambdaExpr:
 		tc.current_token = e.token
-		unimplemented()
+		params := e.params
+		body := e.body
+
+		param_types: []Type
+		if len(params) == 0 {
+			// a function taking no arguments is taken to be a function taking a
+			// nil argument
+			param_types = make([]Type, 1)
+			param_types[0] = tapp(.NIL)
+		} else {
+			param_types = make([]Type, len(params))
+
+			// TODO: currently all params go to fresh vars, use concrete
+			// type here for type annotations when they're here for fn args
+			for _, idx in params {
+				param_types[idx] = fresh(tc)
+			}
+		}
+		ret_type := fresh(tc)
+
+		// last arg is return type
+		all_args := make([]Type, len(param_types) + 1)
+		copy(all_args, param_types)
+		all_args[len(param_types)] = ret_type
+		func_type := tapp(.FUNCTION, all_args)
+
+		// unify with expected type first
+		s1 := unify(type, func_type) or_return
+		apply_substitution(s1, tc.ctx)
+
+		// check body with params in scope
+		push_scope(tc)
+		for param, idx in params {
+			bind_type(tc.ctx, param.lexeme, apply_substitution(s1, param_types[idx]))
+		}
+
+		// set return type context to allow ReturnExpr to check against it
+		old_ret := tc.return_type
+		tc.return_type = apply_substitution(s1, ret_type)
+		defer tc.return_type = old_ret
+
+		s2 := check_type(tc, body, apply_substitution(s1, ret_type)) or_return
+		apply_substitution(s2, tc.ctx)
+		pop_scope(tc)
+
+		return combine_substitutions(s2, s1), nil
 	case ^SequenceExpr:
 		tc.current_token = e.token
 		beta := fresh(tc)
@@ -895,7 +992,14 @@ check_type :: proc(
 			}
 
 			if binding.initializer != nil {
-				s1 := check_type(tc, binding.initializer, beta) or_return
+				s1, iz_err := check_type(tc, binding.initializer, beta)
+				if iz_err != nil {
+					return nil, fmt.tprintf(
+						"Variable %v is declared as %v so it must be that type.",
+						binding.name.lexeme,
+						type_string(beta),
+					)
+				}
 				s = combine_substitutions(s1, s)
 				apply_substitution(s, tc.ctx)
 				inferred := apply_substitution(s, beta)
