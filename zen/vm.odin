@@ -10,6 +10,7 @@ import "core:slice"
 import "core:strings"
 import "core:time"
 import "core:unicode/utf8"
+import vmem "core:mem/virtual"
 
 FRAMES_MAX :: 64
 
@@ -74,8 +75,9 @@ VM :: struct {
 	args:             ^ObjList,
 
 	/* "Registers" of the VM. */
-	it:               Value,
-	save:             Value,
+	// TODO: make `it` a stack to allow nested pipelines
+	it:               Value, // stores the intermediate value of a pipeline
+	save:             Value, // general purpose, currently stores return value of a block
 }
 
 /* The result of the interpreting. */
@@ -1149,7 +1151,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	TYPE_CHECK :: false
+	TYPE_CHECK :: true
 
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {

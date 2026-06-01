@@ -124,6 +124,10 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionAp
 type_any :: TypeAny{}
 type_never :: TypeNever{}
 
+tquant :: proc(bound: []TypeVariable, type: Type) -> TypeQuantified {
+	return TypeQuantified{bound = slice.clone(bound), type = type}
+}
+
 @(require_results)
 is_type_variable :: #force_inline proc(ty: Type) -> bool {
 	_, ok := ty.(TypeVariable)
@@ -182,6 +186,17 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	ctx := tc.ctx
 	for ctx != nil {
 		if t, ok := ctx.bindings[name]; ok {
+			when ODIN_DEBUG {
+				if config.log_type {
+					fmt.eprintfln(
+						"-- grab type %s: %v from current context %v",
+						name,
+						type_string(t),
+						ctx_string(ctx),
+					)
+				}
+			}
+
 			return t
 		}
 		ctx = ctx.enclosing
@@ -193,6 +208,21 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 
 bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
 	ctx.bindings[name] = scheme
+
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintfln(
+				"-- update current context with %s: %v to get %v",
+				name,
+				type_string(scheme),
+				ctx_string(ctx),
+			)
+		}
+	}
+}
+
+when ODIN_DEBUG {
+	scope_counter := -1
 }
 
 push_scope :: proc(tc: ^TypeChecker) {
@@ -200,11 +230,25 @@ push_scope :: proc(tc: ^TypeChecker) {
 	ctx.bindings = make(map[string]TypeScheme)
 	ctx.enclosing = tc.ctx
 	tc.ctx = ctx
+
+	when ODIN_DEBUG {
+		scope_counter += 1
+		if config.log_type {
+			fmt.eprintfln("\n-- enter scope %d", scope_counter)
+		}
+	}
 }
 
 pop_scope :: proc(tc: ^TypeChecker) {
 	ctx := tc.ctx
 	tc.ctx = ctx.enclosing
+
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintfln("-- exit scope %d\n", scope_counter)
+		}
+		scope_counter -= 1
+	}
 }
 
 @(require_results)
@@ -369,7 +413,10 @@ apply_substitution_quantified :: proc(subst: Substitution, scheme: TypeScheme) -
 		}
 
 		// apply it to the type within
-		return apply_substitution(applied, type.type)
+		new_type := apply_substitution(applied, type.type)
+
+		// now wrap it with the bound to create a new scheme
+		return tquant(type.bound, new_type)
 	}
 
 	panic("invalid typescheme kind in apply_substitution_quantified()")
@@ -386,6 +433,15 @@ apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	}
 
 	// TODO: add a debug log showing how the context got updated
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintfln(
+				"-- apply subst %v to context, current context is %v",
+				subst_string(subst),
+				ctx_string(ctx),
+			)
+		}
+	}
 }
 
 // allocates a map (Substitution)
@@ -473,10 +529,7 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 		return ty
 	}
 
-	res := TypeQuantified {
-		bound = bound[:],
-		type  = ty,
-	}
+	res := tquant(bound[:], ty)
 
 	when ODIN_DEBUG {
 		if config.log_type {
@@ -1113,6 +1166,24 @@ subst_string :: proc(subst: Substitution) -> string {
 	return fmt.tprint(strings.to_string(sb))
 }
 
+// only prints the current scope of ctx
+ctx_string :: proc(ctx: ^TypeContext) -> string {
+	sb := strings.builder_make()
+
+	sz := len(ctx.bindings)
+	count := 0
+	fmt.sbprint(&sb, "{")
+	for var_name, ty in ctx.bindings {
+		ty_string := type_string(ty)
+
+		fmt.sbprintf(&sb, "%s: %v%s", var_name, ty_string, ", " if count < sz - 1 else "")
+		count += 1
+	}
+	fmt.sbprint(&sb, "}")
+
+	return fmt.tprint(strings.to_string(sb))
+}
+
 annotation_to_type :: proc(tc: ^TypeChecker, annotation: string) -> (Type, ErrorMessage) {
 	if annotation in tc.typeid_map {
 		return tc.typeid_map[annotation], nil
@@ -1151,6 +1222,7 @@ typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 		typeid_map    = make_typeid_map(),
 	}
 	push_scope(&tc)
+	defer pop_scope(&tc)
 
 	_, ty, err := infer_type(&tc, expr)
 	if err != nil {
