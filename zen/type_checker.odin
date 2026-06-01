@@ -973,7 +973,7 @@ check_type :: proc(
 		found := resolve_type(tc, e.name.lexeme) // find typescheme in the context
 		ty := instantiate(tc, found) // instantiate the found scheme
 		return try_unify(type, ty) // unify typevar with the found type
-	case ^LambdaExpr:
+	case ^FunctionExpr:
 		tc.current_token = e.token
 		params := e.params
 		body := e.body

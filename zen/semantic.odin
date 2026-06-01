@@ -386,7 +386,7 @@ collect_forward_refs :: proc(sm: ^Semantic, expr: Expr) {
 	#partial switch e in expr {
 	case ^VarDeclExpr:
 		for binding in e.bindings {
-			if _, ok := binding.initializer.(^LambdaExpr); !ok {
+			if _, ok := binding.initializer.(^FunctionExpr); !ok {
 				continue
 			}
 
@@ -576,7 +576,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			semantic_error(sm, "Cannot use 'it' outside of a pipeline.")
 			return false
 		}
-	case ^LambdaExpr:
+	case ^FunctionExpr:
 		sm.current_token = e.token
 
 		if len(e.params) > U8_MAX {
@@ -786,13 +786,13 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			if binding.initializer != nil {
 				// Allow anonymous functions to recurse by referring to the name
 				// they've been bound to.
-				if _, ok := binding.initializer.(^LambdaExpr); ok {
+				if _, ok := binding.initializer.(^FunctionExpr); ok {
 					mark_initialized(sm)
 				}
 
 				_analyze(sm, binding.initializer) or_return
 
-				if _, ok := binding.initializer.(^LambdaExpr); !ok {
+				if _, ok := binding.initializer.(^FunctionExpr); !ok {
 					mark_initialized(sm)
 				}
 				// NOTE: Use-before-initialization at global scope is currently

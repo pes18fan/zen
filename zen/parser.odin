@@ -23,7 +23,7 @@ Expr :: union {
 	^GroupingExpr,
 	^IfExpr,
 	^ItExpr,
-	^LambdaExpr,
+	^FunctionExpr,
 	^ListExpr,
 	^LiteralExpr,
 	^LogicalExpr,
@@ -140,7 +140,7 @@ ClassExpr :: struct {
 	token:      Token,
 	name:       Token,
 	superclass: Maybe(Token),
-	methods:    []^LambdaExpr,
+	methods:    []^FunctionExpr,
 	public:     bool,
 }
 
@@ -149,7 +149,7 @@ UseExpr :: struct {
 	path:  Token,
 }
 
-LambdaExpr :: struct {
+FunctionExpr :: struct {
 	token:    Token,
 	params:   []Token,
 	body:     Expr,
@@ -318,9 +318,9 @@ parse :: proc(tokens: []Token) -> (expr: Expr, success: bool) {
 	return parse_expression_top(&p), !p.had_error
 }
 
-parse_method :: proc(p: ^Parser, can_assign: bool) -> ^LambdaExpr {
+parse_method :: proc(p: ^Parser, can_assign: bool) -> ^FunctionExpr {
 	name := parser_consume(p, .IDENT, "Expect method name.")
-	return parse_lambda(p, can_assign, name).(^LambdaExpr)
+	return parse_lambda(p, can_assign, name).(^FunctionExpr)
 }
 
 parser_get_rule :: proc(type: TokenType) -> ^ParseRule {
@@ -503,7 +503,7 @@ parse_class_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr.token = parser_previous(p)
 	expr.name = parser_consume(p, .IDENT, "Expect class name.")
 	expr.public = false
-	methods := make([dynamic]^LambdaExpr)
+	methods := make([dynamic]^FunctionExpr)
 
 	if parser_match(p, .LESS) {
 		expr.superclass = parser_consume(p, .IDENT, "Expect superclass name.")
@@ -532,7 +532,7 @@ parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		expr := parse_function(p, can_assign)
 		if var_e, v_ok := expr.(^VarDeclExpr); v_ok {
 			if len(var_e.bindings) > 0 {
-				if lambda, l_ok := var_e.bindings[0].initializer.(^LambdaExpr); l_ok {
+				if lambda, l_ok := var_e.bindings[0].initializer.(^FunctionExpr); l_ok {
 					lambda.public = true
 				}
 			}
@@ -796,7 +796,7 @@ parse_discard :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	return discard
 }
 
-/* Handles both anonymous functions (LambdaExpr) and function declarations,
+/* Handles both anonymous functions (FunctionExpr) and function declarations,
 which are interpreted as a syntactic sugar on top of a VarDeclExpr */
 parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	if !parser_check(p, .IDENT) {
@@ -820,7 +820,7 @@ parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
 }
 
 parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Expr {
-	lambda := new(LambdaExpr)
+	lambda := new(FunctionExpr)
 	lambda.token = parser_previous(p)
 	lambda.bound_to = bound_to
 	params := make([dynamic]Token)
@@ -1242,7 +1242,7 @@ free_expr :: proc(expr: Expr) {
 		free(e)
 	case ^ItExpr:
 		free(e)
-	case ^LambdaExpr:
+	case ^FunctionExpr:
 		free_expr(e.body)
 		delete(e.params)
 		free(e)
@@ -1466,7 +1466,7 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 	case ^ItExpr:
 		print_indent(b, indent)
 		strings.write_string(b, "it\n")
-	case ^LambdaExpr:
+	case ^FunctionExpr:
 		print_indent(b, indent)
 		fmt.sbprintf(b, "(func (")
 		for param, i in e.params {
