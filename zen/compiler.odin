@@ -763,7 +763,14 @@ compile_method :: proc(cg: ^Codegen, m: ^FunctionExpr) -> bool {
 	if len(name.lexeme) == 4 && strings.compare(name.lexeme, "init") == 0 {
 		type = .INITIALIZER
 	}
-	compile_function(cg, name, params, body, type, public = false) or_return
+
+	bare_params := make([dynamic]Token)
+	defer delete(bare_params)
+	for param in params {
+		append(&bare_params, param.token)
+	}
+
+	compile_function(cg, name, bare_params[:], body, type, public = false) or_return
 
 	emit_op_with_constant(cg, .OP_METHOD, .OP_METHOD_LONG, constant)
 	return true
@@ -1444,10 +1451,16 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		body := e.body
 		bound_to := e.bound_to
 
+		bare_params := make([dynamic]Token)
+		defer delete(bare_params)
+		for param in params {
+			append(&bare_params, param.token)
+		}
+
 		compile_function(
 			cg,
 			bound_to.? or_else synthetic_token("lambda"),
-			params,
+			bare_params[:],
 			body,
 			.LAMBDA,
 			public = e.public,

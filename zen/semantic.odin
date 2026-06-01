@@ -596,7 +596,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		begin_semantic_scope(sm)
 
 		for param in e.params {
-			declare_variable(sm, param, is_final = false) or_return
+			declare_variable(sm, param.token, is_final = false) or_return
 			mark_initialized(sm)
 		}
 
