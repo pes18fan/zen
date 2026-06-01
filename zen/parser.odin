@@ -44,12 +44,6 @@ Expr :: union {
 	^WhileExpr,
 }
 
-VarBinding :: struct {
-	name:        Token,
-	initializer: Expr,
-	type:        Maybe(Token),
-}
-
 // Expressions
 AssignExpr :: struct {
 	token: Token,
@@ -149,12 +143,18 @@ UseExpr :: struct {
 	path:  Token,
 }
 
+FunctionParam :: struct {
+	token: Token,
+	type:  Maybe(Token),
+}
+
 FunctionExpr :: struct {
-	token:    Token,
-	params:   []Token,
-	body:     Expr,
-	bound_to: Maybe(Token),
-	public:   bool,
+	token:       Token,
+	params:      []FunctionParam,
+	body:        Expr,
+	bound_to:    Maybe(Token),
+	return_type: Maybe(Token),
+	public:      bool,
 }
 
 ListExpr :: struct {
@@ -255,6 +255,12 @@ UnaryExpr :: struct {
 	token:    Token,
 	operator: Token,
 	right:    Expr,
+}
+
+VarBinding :: struct {
+	name:        Token,
+	initializer: Expr,
+	type:        Maybe(Token),
 }
 
 VarDeclExpr :: struct {
@@ -564,7 +570,7 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			if parser_match(p, .BANG, .IDENT) {
 				binding.type = parser_previous(p)
 			} else {
-				parser_error(p, parser_peek(p), "Expect variable type.")
+				parser_error(p, parser_peek(p), "Expect variable type after ':'.")
 			}
 		} else {
 			binding.type = nil
@@ -823,7 +829,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 	lambda := new(FunctionExpr)
 	lambda.token = parser_previous(p)
 	lambda.bound_to = bound_to
-	params := make([dynamic]Token)
+	params := make([dynamic]FunctionParam)
 
 	// TODO: improve this error message
 	parser_consume(
@@ -834,12 +840,29 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 
 	if !parser_check(p, .RPAREN) {
 		for {
-			append(&params, parser_consume(p, .IDENT, "Expect parameter name."))
+			param: FunctionParam
+			param.token = parser_consume(p, .IDENT, "Expect parameter name.")
+			if parser_match(p, .COLON) {
+				// currently the type is just a single token, will be changed later on
+				if parser_match(p, .BANG, .IDENT) {
+					param.type = parser_previous(p)
+				} else {
+					parser_error(p, parser_peek(p), "Expect parameter type after ':'.")
+				}
+			}
+			append(&params, param)
 			if !parser_match(p, .COMMA) {break}
 		}
 	}
 	lambda.params = params[:]
 	parser_consume(p, .RPAREN, "Expect ')' after function parameters.")
+	if parser_match(p, .COLON) {
+		if parser_match(p, .BANG, .IDENT) {
+			lambda.return_type = parser_previous(p)
+		} else {
+			parser_error(p, parser_peek(p), "Expect parameter type after ':'.")
+		}
+	}
 
 	if parser_match(p, .FAT_ARROW) {
 		// as parse_expression also parses blocks, you can technically have
@@ -1471,7 +1494,10 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		fmt.sbprintf(b, "(func (")
 		for param, i in e.params {
 			if i > 0 {strings.write_string(b, " ")}
-			strings.write_string(b, param.lexeme)
+			strings.write_string(b, param.token.lexeme)
+			if type, ok := param.type.(Token); ok {
+				fmt.sbprintf(b, ": %v", type.lexeme)
+			}
 		}
 		strings.write_string(b, ")\n")
 		print_indent(b, indent + 1)
@@ -1604,6 +1630,10 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		for binding, i in e.bindings {
 			if i > 0 {strings.write_string(b, " ")}
 			strings.write_string(b, binding.name.lexeme)
+			if binding.type != nil {
+				type: Token = binding.type.(Token)
+				fmt.sbprintf(b, ": %v", type.lexeme)
+			}
 			if binding.initializer != nil {
 				init: Expr = binding.initializer
 				strings.write_string(b, " =\n")

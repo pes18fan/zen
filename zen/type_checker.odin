@@ -56,19 +56,19 @@ TypeConstructor :: enum {
 type_constructor_string :: proc(c: TypeConstructor) -> string {
 	switch c {
 	case .NIL:
-		return "nil"
+		return "Nil"
 	case .BOOL:
-		return "bool"
+		return "Bool"
 	case .NUMBER:
-		return "number"
+		return "Number"
 	case .STRING:
-		return "string"
+		return "String"
 	case .FUNCTION:
-		return "func"
+		return "Func"
 	case .LIST:
-		return "list"
+		return "List"
 	case .RECORD:
-		return "record"
+		return "Record"
 	}
 
 	fmt.panicf("Internal compiler error: invalid type constructor %v", c)
@@ -452,8 +452,9 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 	for var, ty in s2 {
 		when ODIN_DEBUG {
 			if var in s1 && !types_equal(s1[var], ty) {
+				color_yellow(os.stderr, "WARNING")
 				fmt.eprintfln(
-					"WARNING: substitutions %v and %v map same variable %v to different values",
+					": substitutions %v and %v map same variable %v to different values",
 					subst_string(s1),
 					subst_string(s2),
 					type_string(var),
@@ -795,7 +796,7 @@ check_type :: proc(
 			str := tapp(.STRING)
 			s1, l_err := check_type(tc, e.left, str)
 			if l_err != nil {
-				return nil, fmt.tprintf("Operand to '..' must be a string.", e.operator.lexeme)
+				return nil, fmt.tprint("Operand to '..' must be a string.")
 			}
 
 			apply_substitution(s1, tc.ctx)
@@ -977,6 +978,7 @@ check_type :: proc(
 		tc.current_token = e.token
 		params := e.params
 		body := e.body
+		return_type := e.return_type
 
 		param_types: []Type
 		if len(params) == 0 {
@@ -989,11 +991,21 @@ check_type :: proc(
 
 			// TODO: currently all params go to fresh vars, use concrete
 			// type here for type annotations when they're here for fn args
-			for _, idx in params {
-				param_types[idx] = fresh(tc)
+			for param, idx in params {
+				if type, ok := param.type.(Token); ok {
+					param_types[idx] = annotation_to_type(tc, type.lexeme) or_return
+				} else {
+					param_types[idx] = fresh(tc)
+				}
 			}
 		}
-		ret_type := fresh(tc)
+
+		ret_type: Type
+		if rt, ok := return_type.(Token); ok {
+			ret_type = annotation_to_type(tc, rt.lexeme) or_return
+		} else {
+			ret_type = fresh(tc)
+		}
 
 		// last arg is return type
 		all_args := make([]Type, len(param_types) + 1)
@@ -1010,7 +1022,7 @@ check_type :: proc(
 		for param, idx in params {
 			bind_type(
 				tc.ctx,
-				strings.clone(param.lexeme),
+				strings.clone(param.token.lexeme),
 				apply_substitution(s1, param_types[idx]),
 			)
 		}
@@ -1039,7 +1051,21 @@ check_type :: proc(
 		apply_substitution(s2, tc.ctx)
 		return combine_substitutions(s2, s1), nil
 	case ^SwitchExpr:
-		unimplemented()
+		tc.current_token = e.token
+		cond_type := fresh(tc)
+		s := check_type(tc, e.condition, cond_type) or_return
+		apply_substitution(s, tc.ctx)
+		for c in e.cases {
+			s1 := check_type(tc, c.condition, apply_substitution(s, cond_type)) or_return
+			s = combine_substitutions(s1, s)
+			apply_substitution(s, tc.ctx)
+			s2 := check_type(tc, c.body, apply_substitution(s, type)) or_return
+			s = combine_substitutions(s2, s)
+			apply_substitution(s, tc.ctx)
+		}
+		s_else := check_type(tc, e.else_branch, apply_substitution(s, type)) or_return
+		s = combine_substitutions(s_else, s)
+		return s, nil
 	case ^UnaryExpr:
 		tc.current_token = e.token
 
@@ -1220,12 +1246,12 @@ annotation_to_type :: proc(tc: ^TypeChecker, annotation: string) -> (Type, Error
 make_typeid_map :: proc() -> map[string]Type {
 	// only including nullary types for now
 	typeid_map := make(map[string]Type)
-	typeid_map["nil"] = tapp(.NIL)
-	typeid_map["bool"] = tapp(.BOOL)
-	typeid_map["number"] = tapp(.NUMBER)
-	typeid_map["string"] = tapp(.STRING)
+	typeid_map["Nil"] = tapp(.NIL)
+	typeid_map["Bool"] = tapp(.BOOL)
+	typeid_map["Number"] = tapp(.NUMBER)
+	typeid_map["String"] = tapp(.STRING)
 	typeid_map["!"] = type_never
-	typeid_map["any"] = type_any
+	typeid_map["Any"] = type_any
 	return typeid_map
 }
 
