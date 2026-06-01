@@ -28,6 +28,7 @@ TokenType :: enum {
 	// one or two character tokens
 	BANG_EQUAL,
 	BAR_GREATER, // |>
+	DOT_DOT,
 	EQUAL,
 	EQUAL_EQUAL,
 	FAT_ARROW,
@@ -240,6 +241,7 @@ set_separators :: proc(tokens: []Token) -> []Token {
 					     .OR,
 					     .AND,
 					     .DOT,
+					     .DOT_DOT,
 					     .PLUS,
 					     .MINUS,
 					     .STAR,
@@ -629,7 +631,7 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case ',':
 		return make_token(l, .COMMA)
 	case '.':
-		return make_token(l, .DOT)
+		return make_token(l, match(l, '.') ? .DOT_DOT : .DOT)
 	case '-':
 		return make_token(l, .MINUS)
 	case '+':

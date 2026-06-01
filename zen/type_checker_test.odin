@@ -1,5 +1,4 @@
 package zen
-import "core:fmt"
 import tt "core:testing"
 
 // do variables successfully unify to primitives?
@@ -82,15 +81,7 @@ test_unify_mismatched_types :: proc(t: ^tt.T) {
 		TypeFunctionApplication{constructor = .NUMBER},
 		TypeFunctionApplication{constructor = .BOOL},
 	)
-	tt.expect(
-		t,
-		err ==
-		fmt.tprintf(
-			"Cannot unify %v with %v.",
-			type_constructor_string(.NUMBER),
-			type_constructor_string(.BOOL),
-		),
-	)
+	tt.expect(t, err == .MISMATCH)
 }
 
 // are infinite types detected correctly?
@@ -106,10 +97,7 @@ test_unify_occurs_check :: proc(t: ^tt.T) {
 		args        = {a, nullary(.BOOL)},
 	}
 	_, err := unify(a, b)
-	tt.expect(
-		t,
-		err == fmt.tprintf("Infinite type: type %v contains %v.", type_string(b), type_string(a)),
-	)
+	tt.expect(t, err == .INFINITE_TYPE)
 }
 
 // do function applications unify correctly?

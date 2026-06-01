@@ -1314,6 +1314,8 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			emit_opcode(cg, .OP_DIVIDE)
 		case .PERCENT:
 			emit_opcode(cg, .OP_MODULO)
+		case .DOT_DOT:
+			emit_opcode(cg, .OP_CONCAT)
 		case .EQUAL_EQUAL:
 			emit_opcode(cg, .OP_EQUAL)
 		case .BANG_EQUAL:

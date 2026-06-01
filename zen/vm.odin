@@ -4,13 +4,13 @@ import "base:intrinsics"
 import "core:fmt"
 import "core:math"
 import "core:mem"
+import vmem "core:mem/virtual"
 import "core:os"
 import "core:reflect"
 import "core:slice"
 import "core:strings"
 import "core:time"
 import "core:unicode/utf8"
-import vmem "core:mem/virtual"
 
 FRAMES_MAX :: 64
 
@@ -78,6 +78,11 @@ VM :: struct {
 	// TODO: make `it` a stack to allow nested pipelines
 	it:               Value, // stores the intermediate value of a pipeline
 	save:             Value, // general purpose, currently stores return value of a block
+
+	/* Persistent type checker state for the REPL. */
+	type_checker:     ^TypeChecker,
+	type_arena:       vmem.Arena,
+	type_arena_init:  bool,
 }
 
 /* The result of the interpreting. */
@@ -190,6 +195,10 @@ init_VM :: proc() -> VM {
 free_VM :: proc(vm: ^VM) {
 	free_table(&vm.compiler_globals)
 
+	if vm.type_arena_init {
+		vmem.arena_destroy(&vm.type_arena)
+	}
+
 	// don't free explicitly, let gc do it
 	vm.it = nil_val()
 	vm.save = nil_val()
@@ -234,59 +243,59 @@ Performs a binary operation on the top two values of the stack. In zen, a
 binary operator can only return either a 64-bit float or a boolean. 
 */
 @(private = "file")
-binary_op :: proc(v: ^VM, $returns: typeid, op: string) -> InterpretResult {
-	if !is_number(vm_peek(v, 0)) || !is_number(vm_peek(v, 1)) {
+binary_op :: proc(vm: ^VM, $returns: typeid, op: string) -> InterpretResult {
+	if !is_number(vm_peek(vm, 0)) || !is_number(vm_peek(vm, 1)) {
 		vm_panic(
-			v,
+			vm,
 			"Expected numbers as operands to '%s', got %v and %v instead.",
 			op,
-			type_of_value(vm_peek(v, 1)),
-			type_of_value(vm_peek(v, 0)),
+			type_of_value(vm_peek(vm, 1)),
+			type_of_value(vm_peek(vm, 0)),
 		)
 		return .INTERPRET_RUNTIME_ERROR
 	}
 
-	b := as_number(vm_pop(v))
-	a := as_number(vm_pop(v))
+	b := as_number(vm_pop(vm))
+	a := as_number(vm_pop(vm))
 
 	switch typeid_of(returns) {
 	case f64:
 		// Note: Addition is handled seperately from this procedure.
 		switch op {
 		case "-":
-			vm_push(v, number_val(a - b))
+			vm_push(vm, number_val(a - b))
 		case "*":
-			vm_push(v, number_val(a * b))
+			vm_push(vm, number_val(a * b))
 		case "/":
 			{
 				if b == 0 {
-					vm_panic(v, "Cannot divide by zero.")
+					vm_panic(vm, "Cannot divide by zero.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
-				vm_push(v, number_val(a / b))
+				vm_push(vm, number_val(a / b))
 			}
 		case "%":
 			{
 				if b == 0 {
-					vm_panic(v, "Cannot modulo by zero.")
+					vm_panic(vm, "Cannot modulo by zero.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				if a != math.floor(a) || b != math.floor(b) {
-					vm_panic(v, "Operator '%s' can only be used with integers.", "%")
+					vm_panic(vm, "Operator '%s' can only be used with integers.", "%")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
-				vm_push(v, number_val(cast(f64)(cast(int)a % cast(int)b)))
+				vm_push(vm, number_val(cast(f64)(cast(int)a % cast(int)b)))
 			}
 		}
 	case bool:
 		{
 			switch op {
 			case ">":
-				vm_push(v, bool_val(a > b))
+				vm_push(vm, bool_val(a > b))
 			case "<":
-				vm_push(v, bool_val(a < b))
+				vm_push(vm, bool_val(a < b))
 			}
 		}
 	case:
@@ -551,21 +560,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 		case .OP_LESS:
 			binary_op(vm, bool, "<") or_return
 		case .OP_ADD:
-			if is_string(vm_peek(vm, 0)) && is_string(vm_peek(vm, 1)) {
-				concatenate(vm)
-			} else if is_number(vm_peek(vm, 0)) && is_number(vm_peek(vm, 1)) {
-				b := as_number(vm_pop(vm))
-				a := as_number(vm_pop(vm))
-				vm_push(vm, number_val(a + b))
-			} else {
-				vm_panic(
-					vm,
-					"Expected two numbers or two strings as operands to '+', got %v and %v instead.",
-					type_of_value(vm_pop(vm)),
-					type_of_value(vm_pop(vm)),
-				)
-				return .INTERPRET_RUNTIME_ERROR
-			}
+			binary_op(vm, f64, "+") or_return
 		case .OP_SUBTRACT:
 			binary_op(vm, f64, "-") or_return
 		case .OP_MULTIPLY:
@@ -574,6 +569,17 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			binary_op(vm, f64, "/") or_return
 		case .OP_MODULO:
 			binary_op(vm, f64, "%") or_return
+		case .OP_CONCAT:
+			if !is_string(vm_peek(vm, 0)) || !is_string(vm_peek(vm, 1)) {
+				vm_panic(
+					vm,
+					"Expected strings as operands to '..', got %v and %v instead.",
+					type_of_value(vm_peek(vm, 1)),
+					type_of_value(vm_peek(vm, 0)),
+				)
+				return .INTERPRET_RUNTIME_ERROR
+			}
+			concatenate(vm)
 		case .OP_NOT:
 			vm_push(vm, bool_val(is_falsey(vm_pop(vm))))
 		case .OP_NEGATE:
@@ -1155,8 +1161,35 @@ interpret :: proc(
 
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
-		_, ok := typecheck(expr)
-		if !ok {
+		tc_ok: bool
+
+		// Use persistent type checker for REPL
+		if config.repl {
+			if !vm.type_arena_init {
+				err := vmem.arena_init_growing(&vm.type_arena)
+				ensure(err == nil)
+				vm.type_arena_init = true
+			}
+
+			prev_alloc := context.allocator
+			context.allocator = vmem.arena_allocator(&vm.type_arena)
+
+			if vm.type_checker == nil {
+				tc := new(TypeChecker)
+				tc^ = TypeChecker {
+					typeid_map = make_typeid_map(),
+				}
+				push_scope(tc)
+				vm.type_checker = tc
+			}
+
+			_, tc_ok = typecheck_expr(vm.type_checker, expr)
+			context.allocator = prev_alloc
+		} else {
+			_, tc_ok = typecheck(expr)
+		}
+
+		if !tc_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
 

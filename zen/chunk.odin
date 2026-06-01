@@ -47,6 +47,7 @@ OpCode :: enum u8 {
 	OP_MULTIPLY,
 	OP_DIVIDE,
 	OP_MODULO,
+	OP_CONCAT,
 	OP_NOT,
 	OP_NEGATE,
 	OP_PRINT,
