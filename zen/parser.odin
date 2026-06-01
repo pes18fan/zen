@@ -284,6 +284,7 @@ Precedence :: enum {
 	AND, // and
 	EQUALITY, // == !=
 	COMPARISON, // < > <= >=
+	CONCATENATION, // ..
 	TERM, // + -
 	FACTOR, // * / %
 	UNARY, // ! -
@@ -806,7 +807,7 @@ parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		// VarDeclExpr
 		expr := new(VarDeclExpr)
 		expr.token = parser_previous(p)
-		expr.is_final = false // func decls are reassignable
+		expr.is_final = true // func decls are NOT reassignable
 		bindings := make([dynamic]VarBinding)
 
 		func_binding: VarBinding
@@ -1010,6 +1011,7 @@ rules: [TokenType]ParseRule = {
 	.COMMA         = {nil, nil, .NONE},
 	.COLON         = {nil, nil, .NONE},
 	.DOT           = {nil, parse_dot, .CALL},
+	.DOT_DOT       = {nil, parse_binary, .CONCATENATION},
 	.MINUS         = {parse_unary, parse_binary, .TERM},
 	.PLUS          = {nil, parse_binary, .TERM},
 	.SEMI          = {nil, nil, .NONE},

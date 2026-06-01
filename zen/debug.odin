@@ -204,6 +204,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return simple_instruction("OP_DIVIDE", offset)
 	case .OP_MODULO:
 		return simple_instruction("OP_MODULO", offset)
+	case .OP_CONCAT:
+		return simple_instruction("OP_CONCAT", offset)
 	case .OP_NOT:
 		return simple_instruction("OP_NOT", offset)
 	case .OP_NEGATE:
