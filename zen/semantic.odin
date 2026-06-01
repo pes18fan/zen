@@ -6,6 +6,10 @@ import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 
+// TODO: this is an absolute mess of AI slop, clean it up. Use a simple symbol
+// table to collect all variable, class and function declarations, and pass
+// that onto the compiler
+
 /* ResolutionKind indicates how a variable reference is resolved:
    LOCAL: a local variable in the current or an enclosing scope of the
    current function. 
@@ -249,6 +253,7 @@ add_local :: proc(sm: ^Semantic, name: Token, is_final: bool) -> bool {
 	return true
 }
 
+@(private = "file")
 mark_initialized :: proc(sm: ^Semantic) {
 	if sm.current_compiler.scope_depth == 0 {return}
 	sm.current_compiler.locals[sm.current_compiler.local_count - 1].depth =
@@ -758,7 +763,8 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			mod_name = filepath.short_stem(path)
 		}
 
-		table_set(sm.globals, copy_string(sm.gc, mod_name), bool_val(true))
+		declare_variable(sm, synthetic_token(mod_name), is_final = true) or_return
+		mark_initialized(sm)
 	case ^VariableExpr:
 		sm.current_token = e.token
 		resolved := try2(sm, resolve_variable(sm, e.name)) or_return

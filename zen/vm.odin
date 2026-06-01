@@ -142,12 +142,7 @@ define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 	vm := as_vm(gc.mark_roots_arg)
 
 	obj_module := new_module(gc, copy_string(gc, name))
-	vm_push(vm, obj_val(copy_string(gc, name)))
-	vm_push(vm, obj_val(obj_module))
-	table_set(&gc.globals, as_string(vm.stack[0]), vm.stack[1])
-
-	vm_pop(vm)
-	vm_pop(vm)
+	vm_push(vm, obj_val(obj_module)) // keep it on the stack so that gc doesn't collect
 
 	module_functions := get_builtin_module(gc, module)
 	defer delete(module_functions)
@@ -156,13 +151,13 @@ define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 		vm_push(vm, obj_val(copy_string(gc, function.name)))
 		vm_push(vm, obj_val(new_native(gc, function.function, function.arity)))
 
-		table_set(&obj_module.values, as_string(vm.stack[1]), vm.stack[2])
+		table_set(&obj_module.values, as_string(vm_peek(vm, 1)), vm_peek(vm, 0))
 
 		vm_pop(vm)
 		vm_pop(vm)
 	}
 
-	vm_push(vm, obj_val(obj_module))
+	// module stays on the stack
 }
 
 /* Resets the stack. */
@@ -1154,7 +1149,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	TYPE_CHECK :: true
+	TYPE_CHECK :: false
 
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {

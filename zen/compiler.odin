@@ -889,9 +889,9 @@ compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
 			emit_byte(cg, byte(path_constant & 0xff))
 		}
 	}
+	try(cg, declare_variable(cg, synthetic_token(mod_name), is_final = true)) or_return
 	define_variable(cg, name_constant)
 
-	table_set(cg.globals, copy_string(cg.gc, mod_name), bool_val(true))
 	emit_opcode(cg, .OP_NIL)
 	return true
 }
