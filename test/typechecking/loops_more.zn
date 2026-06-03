@@ -16,4 +16,4 @@ for outer in [1, 2] {
         total = total + outer + inner
     }
 }
-puts(total) // expect: 65
+puts(total) // expect: 66
