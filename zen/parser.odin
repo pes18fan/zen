@@ -835,6 +835,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 	lambda.bound_to = bound_to
 	params := make([dynamic]FunctionParam)
 
+	// TODO: improve this error message
 	parser_consume(
 		p,
 		.LPAREN,
