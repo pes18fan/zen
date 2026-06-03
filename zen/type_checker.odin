@@ -660,6 +660,10 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 			return nil, .MISMATCH
 		}
 
+		if len(t1.args) != len(t2.args) {
+			return nil, .MISMATCH
+		}
+
 		s := make(Substitution)
 		for i in 0 ..< len(t1.args) {
 			fst := apply_substitution(s, t1.args[i])
