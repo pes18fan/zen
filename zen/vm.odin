@@ -76,7 +76,7 @@ VM :: struct {
 
 	/* "Registers" of the VM. */
 	// TODO: make `it` a stack to allow nested pipelines
-	it:               Value, // stores the intermediate value of a pipeline
+	it:               [dynamic]Value, // stores the intermediate value of a pipeline
 	save:             Value, // general purpose, currently stores return value of a block
 
 	/* Persistent type checker state for the REPL. */
@@ -184,7 +184,7 @@ init_VM :: proc() -> VM {
 		compiler_globals = init_table(),
 		stack_top        = -1,
 		frame_count      = 0,
-		it               = nil_val(),
+		it               = make([dynamic]Value),
 		save             = nil_val(),
 	}
 
@@ -200,7 +200,7 @@ free_VM :: proc(vm: ^VM) {
 	}
 
 	// don't free explicitly, let gc do it
-	vm.it = nil_val()
+	clear(&vm.it)
 	vm.save = nil_val()
 }
 
@@ -547,9 +547,14 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				return .INTERPRET_RUNTIME_ERROR
 			}
 		case .OP_GET_IT:
-			vm_push(vm, vm.it)
+			assert(
+				len(vm.it) >= 0,
+				"Internal compiler error: cannot have less than zero pipelines",
+			)
+			vm_push(vm, vm.it[len(vm.it) - 1])
 		case .OP_SET_IT:
-			vm.it = vm_pop(vm)
+			v := vm_pop(vm)
+			append(&vm.it, v)
 		case .OP_GET_SAVE:
 			vm_push(vm, vm.save)
 		case .OP_SET_SAVE:
@@ -1160,7 +1165,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	TYPE_CHECK :: true
+	TYPE_CHECK :: false
 
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
