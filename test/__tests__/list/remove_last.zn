@@ -1,3 +1,4 @@
+// NOTE: this will become invalid once CoW is introduced (as `l` is mutated)
 use "list"
 
 var l = [1, 2, 3]

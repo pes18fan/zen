@@ -362,64 +362,44 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 	vm.args = args_list
 
 	if script == "" {
-		info, stat_err := os.fstat(os.stdin, context.allocator)
-		if stat_err != nil {
-			fmt.eprintfln("Failed to check stdin status: %s", os.error_string(stat_err))
-		}
-		defer delete(info.fullpath)
-
-		if info.type == .Named_Pipe {
-			buf: [1024]byte
-			n, err := os.read(os.stdin, buf[:])
-			if err != nil {
-				fmt.eprintfln("Failed to read from stdin: %s", os.error_string(err))
-			}
-
-			res := interpret(vm, vm.gc, string(buf[:n]))
-			return interpret_result_exit_code(res)
-		} else {
-			config.repl = true
-			return repl(vm)
-		}
+		config.repl = true
+		return repl(vm)
 	} else {
 		current_dir, err := os.get_working_directory(context.allocator)
 		if err != nil {
-			fmt.eprintfln("Failed to get working directory: %s", os.error_string(err))
+			fmt.eprintf("Failed to get working directory: %s", os.error_string(err))
 			return 1
 		}
 		defer delete(current_dir)
 
 		config.__path, err = filepath.join([]string{current_dir, script}, context.allocator)
 		if err != nil {
-			fmt.eprintfln("Failed to get file path: %s", os.error_string(err))
+			fmt.eprintf("Failed to get file path: %s", os.error_string(err))
 		}
 
 		config.__dirname, _ = filepath.split(config.__path)
 		defer delete(config.__path)
 
 		result := run_file(vm, script)
-		return interpret_result_exit_code(result)
-	}
-}
 
-interpret_result_exit_code :: proc(result: InterpretResult) -> int {
-	switch result {
-	case .INTERPRET_LEX_ERROR:
-		return 65
-	case .INTERPRET_PARSE_ERROR:
-		return 65
-	case .INTERPRET_COMPILE_ERROR:
-		return 65
-	case .INTERPRET_RUNTIME_ERROR:
-		return 70
-	case .INTERPRET_READ_ERROR:
-		return 74
-	case .INTERPRET_VOLUNTARY_EXIT:
-		return config.__exit_code
-	case .INTERPRET_OK:
-		return 0
-	case:
-		return 0
+		switch result {
+		case .INTERPRET_LEX_ERROR:
+			return 65
+		case .INTERPRET_PARSE_ERROR:
+			return 65
+		case .INTERPRET_COMPILE_ERROR:
+			return 65
+		case .INTERPRET_RUNTIME_ERROR:
+			return 70
+		case .INTERPRET_READ_ERROR:
+			return 74
+		case .INTERPRET_VOLUNTARY_EXIT:
+			return config.__exit_code
+		case .INTERPRET_OK:
+			return 0
+		case:
+			return 0
+		}
 	}
 }
 
