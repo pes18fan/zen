@@ -23,7 +23,7 @@ TypeContext :: struct {
 
 Type :: union #no_nil {
 	TypeVariable,
-	TypeFunctionApplication,
+	^TypeFunctionApplication,
 	TypeAny,
 	TypeNever,
 }
@@ -41,7 +41,39 @@ TypeVariable :: struct {
 
 TypeFunctionApplication :: struct {
 	constructor: TypeConstructor,
-	args:        []Type,
+}
+
+TypeNil :: struct {
+	using base: TypeFunctionApplication,
+}
+
+TypeBool :: struct {
+	using base: TypeFunctionApplication,
+}
+
+TypeNumber :: struct {
+	using base: TypeFunctionApplication,
+}
+
+TypeString :: struct {
+	using base: TypeFunctionApplication,
+}
+
+TypeFunction :: struct {
+	using base:  TypeFunctionApplication,
+	params:      []Type,
+	return_type: Type,
+}
+
+TypeList :: struct {
+	using base:   TypeFunctionApplication,
+	element_type: Type,
+}
+
+TypeRecord :: struct {
+	using base: TypeFunctionApplication,
+	record_id:  int,
+	fields:     map[string]TypeScheme,
 }
 
 TypeConstructor :: enum {
@@ -88,10 +120,24 @@ fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	return var
 }
 
-tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionApplication {
+tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> ^TypeFunctionApplication {
 	switch constructor {
-	case .NUMBER, .NIL, .BOOL, .STRING:
-		return TypeFunctionApplication{constructor = constructor, args = nil}
+	case .NIL:
+		t := new(TypeNil)
+		t.constructor = .NIL
+		return cast(^TypeFunctionApplication)t
+	case .BOOL:
+		t := new(TypeBool)
+		t.constructor = .BOOL
+		return cast(^TypeFunctionApplication)t
+	case .NUMBER:
+		t := new(TypeNumber)
+		t.constructor = .NUMBER
+		return cast(^TypeFunctionApplication)t
+	case .STRING:
+		t := new(TypeString)
+		t.constructor = .STRING
+		return cast(^TypeFunctionApplication)t
 	case .FUNCTION:
 		assert(args != nil, "cannot have nil type args for a function type")
 
@@ -101,13 +147,24 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionAp
 		assert(len(args) > 0, "must have at least one (return type) arg for a function type")
 
 		// cloning the slice is a bit bad for performance but it keeps `tapp` reliable
-		return TypeFunctionApplication{constructor = constructor, args = slice.clone(args)}
+		t := new(TypeFunction)
+		t.constructor = .FUNCTION
+		t.params = slice.clone(args[:len(args) - 1])
+		t.return_type = args[len(args) - 1]
+		return cast(^TypeFunctionApplication)t
 	case .LIST:
 		assert(args != nil, "cannot have nil type args for a list type")
 		assert(len(args) == 1, "must have one type arg exactly for a list type")
-		return TypeFunctionApplication{constructor = constructor, args = slice.clone(args)}
+		t := new(TypeList)
+		t.constructor = .LIST
+		t.element_type = args[0]
+		return cast(^TypeFunctionApplication)t
 	case .RECORD:
-		unimplemented()
+		t := new(TypeRecord)
+		t.constructor = .RECORD
+		t.record_id = 0
+		t.fields = make(map[string]TypeScheme)
+		return cast(^TypeFunctionApplication)t
 	}
 
 	fmt.panicf("Internal compiler error: invalid type constructor %v", constructor)
@@ -128,7 +185,7 @@ is_type_variable :: #force_inline proc(ty: Type) -> bool {
 
 @(require_results)
 is_type_function_application :: #force_inline proc(ty: Type) -> bool {
-	_, ok := ty.(TypeFunctionApplication)
+	_, ok := ty.(^TypeFunctionApplication)
 	return ok
 }
 
@@ -148,8 +205,8 @@ as_type_variable :: #force_inline proc(ty: Type) -> TypeVariable {
 	return ty.(TypeVariable)
 }
 
-as_type_function_application :: #force_inline proc(ty: Type) -> TypeFunctionApplication {
-	return ty.(TypeFunctionApplication)
+as_type_function_application :: #force_inline proc(ty: Type) -> ^TypeFunctionApplication {
+	return ty.(^TypeFunctionApplication)
 }
 
 as_type_any :: #force_inline proc(ty: Type) -> TypeAny {
@@ -249,7 +306,7 @@ types_equal :: proc(a: Type, b: Type) -> bool {
 		if t1.idx != t2.idx {
 			return false
 		}
-	case TypeFunctionApplication:
+	case ^TypeFunctionApplication:
 		if !is_type_function_application(b) {
 			return false
 		}
@@ -259,12 +316,27 @@ types_equal :: proc(a: Type, b: Type) -> bool {
 			return false
 		}
 
-		if len(t1.args) != len(t2.args) {
-			return false
-		}
-
-		for i in 0 ..< len(t1.args) {
-			types_equal(t1.args[i], t2.args[i]) or_return
+		switch t1.constructor {
+		case .FUNCTION:
+			f1 := cast(^TypeFunction)t1
+			f2 := cast(^TypeFunction)t2
+			if len(f1.params) != len(f2.params) {
+				return false
+			}
+			for i in 0 ..< len(f1.params) {
+				types_equal(f1.params[i], f2.params[i]) or_return
+			}
+			return types_equal(f1.return_type, f2.return_type)
+		case .LIST:
+			l1 := cast(^TypeList)t1
+			l2 := cast(^TypeList)t2
+			return types_equal(l1.element_type, l2.element_type)
+		case .RECORD:
+			r1 := cast(^TypeRecord)t1
+			r2 := cast(^TypeRecord)t2
+			return r1.record_id == r2.record_id
+		case .NIL, .BOOL, .NUMBER, .STRING:
+			return true
 		}
 	case TypeAny:
 		if !is_type_any(b) {return false}
@@ -292,15 +364,42 @@ free_vars_typescheme :: proc(scheme: TypeScheme) -> FreeVars {
 		switch t in type {
 		case TypeVariable:
 			fvs[t] = {}
-		case TypeFunctionApplication:
-			for arg in t.args {
-				arg_fvs := free_vars(arg)
-				defer delete(arg_fvs)
-				for key in arg_fvs {
+		case ^TypeFunctionApplication:
+			// the any and never types are basically nullary type constructors
+			switch t.constructor {
+			case .FUNCTION:
+				fn := cast(^TypeFunction)t
+				for param in fn.params {
+					param_fvs := free_vars(param)
+					defer delete(param_fvs)
+					for key in param_fvs {
+						fvs[key] = {}
+					}
+				}
+				ret_fvs := free_vars(fn.return_type)
+				defer delete(ret_fvs)
+				for key in ret_fvs {
 					fvs[key] = {}
 				}
+			case .LIST:
+				l := cast(^TypeList)t
+				elem_fvs := free_vars(l.element_type)
+				defer delete(elem_fvs)
+				for key in elem_fvs {
+					fvs[key] = {}
+				}
+			case .RECORD:
+				r := cast(^TypeRecord)t
+				for _, field_scheme in r.fields {
+					scheme_fvs := free_vars(field_scheme)
+					defer delete(scheme_fvs)
+					for key in scheme_fvs {
+						fvs[key] = {}
+					}
+				}
+			case .NIL, .BOOL, .NUMBER, .STRING:
+			// nullary, no free vars
 			}
-		// the any and never types are basically nullary type constructors
 		case TypeAny:
 			return nil
 		case TypeNever:
@@ -366,12 +465,35 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 			}
 			result = val
 		}
-	case TypeFunctionApplication:
-		new_args := make([]Type, len(t.args))
-		for i in 0 ..< len(t.args) {
-			new_args[i] = apply_substitution(subst, t.args[i])
+	case ^TypeFunctionApplication:
+		#partial switch t.constructor {
+		case .FUNCTION:
+			fn := cast(^TypeFunction)t
+			new_params := make([]Type, len(fn.params))
+			for i in 0 ..< len(fn.params) {
+				new_params[i] = apply_substitution(subst, fn.params[i])
+			}
+			new_ret := apply_substitution(subst, fn.return_type)
+			all_args := make([]Type, len(new_params) + 1)
+			if len(new_params) != 0 {copy(all_args, new_params)}
+			all_args[len(new_params)] = new_ret
+			return tapp(.FUNCTION, all_args)
+		case .LIST:
+			l := cast(^TypeList)t
+			return tapp(.LIST, {apply_substitution(subst, l.element_type)})
+		case .RECORD:
+			r := cast(^TypeRecord)t
+			new_rec := new(TypeRecord)
+			new_rec.constructor = .RECORD
+			new_rec.record_id = r.record_id
+			new_rec.fields = make(map[string]TypeScheme)
+			for name, scheme in r.fields {
+				new_rec.fields[name] = apply_substitution(subst, scheme)
+			}
+			return cast(^TypeFunctionApplication)new_rec
+		case .NIL, .BOOL, .NUMBER, .STRING:
+			return t
 		}
-		return tapp(t.constructor, new_args)
 	case TypeAny:
 		return t
 	case TypeNever:
@@ -645,16 +767,40 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 			return nil, .MISMATCH
 		}
 
-		if len(t1.args) != len(t2.args) {
-			return nil, .MISMATCH
-		}
-
 		s := make(Substitution)
-		for i in 0 ..< len(t1.args) {
-			fst := apply_substitution(s, t1.args[i])
-			snd := apply_substitution(s, t2.args[i])
+
+		switch t1.constructor {
+		case .FUNCTION:
+			f1 := cast(^TypeFunction)t1
+			f2 := cast(^TypeFunction)t2
+			if len(f1.params) != len(f2.params) {
+				return nil, .MISMATCH
+			}
+			for i in 0 ..< len(f1.params) {
+				fst := apply_substitution(s, f1.params[i])
+				snd := apply_substitution(s, f2.params[i])
+				res := unify(fst, snd) or_return
+				s = combine_substitutions(s, res)
+			}
+			fst_ret := apply_substitution(s, f1.return_type)
+			snd_ret := apply_substitution(s, f2.return_type)
+			res := unify(fst_ret, snd_ret) or_return
+			s = combine_substitutions(s, res)
+		case .LIST:
+			l1 := cast(^TypeList)t1
+			l2 := cast(^TypeList)t2
+			fst := apply_substitution(s, l1.element_type)
+			snd := apply_substitution(s, l2.element_type)
 			res := unify(fst, snd) or_return
 			s = combine_substitutions(s, res)
+		case .RECORD:
+			r1 := cast(^TypeRecord)t1
+			r2 := cast(^TypeRecord)t2
+			if r1.record_id != r2.record_id {
+				return nil, .MISMATCH
+			}
+		case .NIL, .BOOL, .NUMBER, .STRING:
+		// nullary — trivially unify
 		}
 
 		when ODIN_DEBUG {
@@ -663,7 +809,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 					"-- unify %v with %v %s",
 					type_string(a, true),
 					type_string(b, true),
-					"trivially" if len(t1.args) == 0 else fmt.tprintf("through %v", subst_string(s, true)),
+					"trivially" if t1.constructor == .NIL || t1.constructor == .BOOL || t1.constructor == .NUMBER || t1.constructor == .STRING else fmt.tprintf("through %v", subst_string(s, true)),
 				)
 			}
 		}
@@ -1103,18 +1249,21 @@ check_type :: proc(
 	case ^UnaryExpr:
 		tc.current_token = e.token
 
-		must_unify_with: TypeFunctionApplication
+		operand_type: Type
+		result_type: Type
 		#partial switch e.operator.type {
 		case .MINUS:
-			must_unify_with = tapp(.NUMBER)
+			operand_type = tapp(.NUMBER)
+			result_type = tapp(.NUMBER)
 		case .NOT:
-			must_unify_with = tapp(.BOOL)
+			operand_type = fresh(tc) // not accepts any type (truthy/falsy)
+			result_type = tapp(.BOOL)
 		case:
 			fmt.panicf("Internal compiler error: Unknown unary operator '%s'", e.operator.lexeme)
 		}
 
-		s1 := check_type(tc, e.right, must_unify_with) or_return
-		sn := try_unify(type, must_unify_with) or_return
+		s1 := check_type(tc, e.right, operand_type) or_return
+		sn := try_unify(type, result_type) or_return
 		return combine_substitutions(sn, s1), nil
 	case ^UseExpr:
 		tc.current_token = e.token
@@ -1139,7 +1288,12 @@ check_type :: proc(
 				beta = fresh(tc)
 			}
 
+			name := strings.clone(binding.name.lexeme)
+
 			if binding.initializer != nil {
+				// pre-bind the name so recursive bodies can resolve it
+				bind_type(tc.ctx, name, beta)
+
 				s1 := check_type(tc, binding.initializer, beta) or_return
 				s = combine_substitutions(s1, s)
 				apply_substitution(s, tc.ctx)
@@ -1153,9 +1307,10 @@ check_type :: proc(
 				} else {
 					gen = inferred
 				}
-				bind_type(tc.ctx, strings.clone(binding.name.lexeme), gen)
+				// re-bind with the finalized type, overwriting the pre-binding
+				bind_type(tc.ctx, name, gen)
 			} else {
-				bind_type(tc.ctx, strings.clone(binding.name.lexeme), beta)
+				bind_type(tc.ctx, name, beta)
 			}
 		}
 		sn := try_unify(type, tapp(.NIL)) or_return // VarDeclExpr itself evaluates to nil
@@ -1226,32 +1381,39 @@ type_string_inner :: proc(ctx: ^TypePrintCtx, type: Type) -> string {
 	switch t in type {
 	case TypeVariable:
 		return type_var_string(ctx, t)
-	case TypeFunctionApplication:
-		if t.constructor == .FUNCTION {
+	case ^TypeFunctionApplication:
+		#partial switch t.constructor {
+		case .FUNCTION:
+			fn := cast(^TypeFunction)t
 			sb := strings.builder_make()
-			assert(len(t.args) > 0, "cannot have less than one type arg in a function type")
-
 			fmt.sbprintf(&sb, "%s ", type_constructor_string(t.constructor))
-			param_count := len(t.args) - 1
 			fmt.sbprint(&sb, "(")
-			for i in 0 ..< param_count {
+			for i in 0 ..< len(fn.params) {
 				if i > 0 {
 					fmt.sbprint(&sb, ", ")
 				}
-				fmt.sbprint(&sb, type_string_inner(ctx, t.args[i]))
+				fmt.sbprint(&sb, type_string_inner(ctx, fn.params[i]))
 			}
 			fmt.sbprint(&sb, ") -> ")
-			fmt.sbprint(&sb, type_string_inner(ctx, t.args[len(t.args) - 1]))
+			fmt.sbprint(&sb, type_string_inner(ctx, fn.return_type))
 			return strings.to_string(sb)
-		} else {
+		case .RECORD:
+			r := cast(^TypeRecord)t
+			sb := strings.builder_make()
+			fmt.sbprintf(&sb, "Record { ")
+			first := true
+			for name, scheme in r.fields {
+				if !first {
+					fmt.sbprint(&sb, ", ")
+				}
+				fmt.sbprintf(&sb, "%s: %v", name, type_string(scheme, false))
+				first = false
+			}
+			fmt.sbprint(&sb, " }")
+			return strings.to_string(sb)
+		case:
 			sb := strings.builder_make()
 			fmt.sbprint(&sb, type_constructor_string(t.constructor))
-
-			for arg in t.args {
-				fmt.sbprint(&sb, " ")
-				fmt.sbprint(&sb, type_string_inner(ctx, arg))
-			}
-
 			return strings.to_string(sb)
 		}
 	case TypeAny:
@@ -1361,7 +1523,7 @@ typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, su
 
 bind_type_to_module :: proc(
 	ctx: ^TypeContext,
-	module: TypeFunctionApplication,
+	module: ^TypeFunctionApplication,
 	name: string,
 	type: TypeScheme,
 ) {
@@ -1380,10 +1542,8 @@ register_builtin_module :: proc(tc: ^TypeChecker, module: string) {
 		fmt.panicf("Internal compiler error: Invalid builtin module %v", module)
 	}
 
-	nil_t := tapp(.NIL)
 	string_t := tapp(.STRING)
 	number_t := tapp(.NUMBER)
-	never_t := type_never
 
 	mod := tapp(.RECORD)
 

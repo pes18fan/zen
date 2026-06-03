@@ -15,18 +15,10 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 
 	var := fresh(&tc)
 
-	num_lit := TypeFunctionApplication {
-		constructor = .NUMBER,
-	}
-	bool_lit := TypeFunctionApplication {
-		constructor = .BOOL,
-	}
-	nil_lit := TypeFunctionApplication {
-		constructor = .NIL,
-	}
-	string_lit := TypeFunctionApplication {
-		constructor = .STRING,
-	}
+	num_lit := tapp(.NUMBER)
+	bool_lit := tapp(.BOOL)
+	nil_lit := tapp(.NIL)
+	string_lit := tapp(.STRING)
 
 	num_subst, err1 := unify(var, num_lit)
 	if err1 != nil {
@@ -65,9 +57,11 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 // do equal types return a nil substitution?
 @(test)
 test_unify_equal_types_returns_nil :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	subst, err := unify(
-		TypeFunctionApplication{constructor = .NUMBER},
-		TypeFunctionApplication{constructor = .NUMBER},
+		tapp(.NUMBER),
+		tapp(.NUMBER),
 	)
 	defer delete(subst)
 	tt.expect(t, err == nil)
@@ -77,9 +71,11 @@ test_unify_equal_types_returns_nil :: proc(t: ^tt.T) {
 // do incompatible type function applications fail to unify?
 @(test)
 test_unify_mismatched_types :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	_, err := unify(
-		TypeFunctionApplication{constructor = .NUMBER},
-		TypeFunctionApplication{constructor = .BOOL},
+		tapp(.NUMBER),
+		tapp(.BOOL),
 	)
 	tt.expect(t, err == .MISMATCH)
 }
@@ -92,10 +88,7 @@ test_unify_occurs_check :: proc(t: ^tt.T) {
 	a := TypeVariable {
 		idx = 0,
 	}
-	b := TypeFunctionApplication {
-		constructor = .FUNCTION,
-		args        = {a, tapp(.BOOL)},
-	}
+	b := tapp(.FUNCTION, {a, tapp(.BOOL)})
 	_, err := unify(a, b)
 	tt.expect(t, err == .INFINITE_TYPE)
 }
@@ -112,14 +105,8 @@ test_unify_function_type :: proc(t: ^tt.T) {
 		idx = 1,
 	}
 
-	fn_type_a := TypeFunctionApplication {
-		constructor = .FUNCTION,
-		args        = {a, TypeFunctionApplication{constructor = .NUMBER}},
-	}
-	fn_type_b := TypeFunctionApplication {
-		constructor = .FUNCTION,
-		args        = {TypeFunctionApplication{constructor = .NUMBER}, b},
-	}
+	fn_type_a := tapp(.FUNCTION, {a, tapp(.NUMBER)})
+	fn_type_b := tapp(.FUNCTION, {tapp(.NUMBER), b})
 
 	subst, err := unify(fn_type_a, fn_type_b)
 	defer delete(subst)
@@ -130,28 +117,26 @@ test_unify_function_type :: proc(t: ^tt.T) {
 
 	tt.expect(
 		t,
-		types_equal(apply_substitution(subst, a), TypeFunctionApplication{constructor = .NUMBER}),
+		types_equal(apply_substitution(subst, a), tapp(.NUMBER)),
 	)
 	tt.expect(
 		t,
-		types_equal(apply_substitution(subst, a), TypeFunctionApplication{constructor = .NUMBER}),
+		types_equal(apply_substitution(subst, a), tapp(.NUMBER)),
 	)
 }
 
 // do substitutions combine correctly?
 @(test)
 test_substitution_combine :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	s1 := make(Substitution)
 	defer delete(s1)
 	s2 := make(Substitution)
 	defer delete(s2)
 
-	s1[TypeVariable{idx = 0}] = TypeFunctionApplication {
-		constructor = .NUMBER,
-	}
-	s2[TypeVariable{idx = 1}] = TypeFunctionApplication {
-		constructor = .BOOL,
-	}
+	s1[TypeVariable{idx = 0}] = tapp(.NUMBER)
+	s2[TypeVariable{idx = 1}] = tapp(.BOOL)
 
 	combined := combine_substitutions(s1, s2)
 	defer delete(combined)
@@ -160,18 +145,20 @@ test_substitution_combine :: proc(t: ^tt.T) {
 		t,
 		types_equal(
 			combined[TypeVariable{idx = 0}],
-			TypeFunctionApplication{constructor = .NUMBER},
+			tapp(.NUMBER),
 		),
 	)
 	tt.expect(
 		t,
-		types_equal(combined[TypeVariable{idx = 1}], TypeFunctionApplication{constructor = .BOOL}),
+		types_equal(combined[TypeVariable{idx = 1}], tapp(.BOOL)),
 	)
 }
 
 // do substitutions recursively combine correctly?
 @(test)
 test_substitution_combine_recursively :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	s1 := make(Substitution)
 	defer delete(s1)
 	s2 := make(Substitution)
@@ -200,10 +187,9 @@ test_free_vars_type_variable :: proc(t: ^tt.T) {
 // is the result of free_vars() on an application the union of the free_vars() in the args?
 @(test)
 test_free_vars_type_application :: proc(t: ^tt.T) {
-	ty := TypeFunctionApplication {
-		constructor = .FUNCTION,
-		args        = {TypeVariable{idx = 0}, TypeVariable{idx = 1}},
-	}
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
+	ty := tapp(.FUNCTION, {TypeVariable{idx = 0}, TypeVariable{idx = 1}})
 	fvs := free_vars(ty)
 	defer delete(fvs)
 	tt.expect(t, TypeVariable{idx = 0} in fvs)
@@ -214,14 +200,14 @@ test_free_vars_type_application :: proc(t: ^tt.T) {
 // do substitutions apply correctly to type variables?
 @(test)
 test_apply_substitution_type_variable :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	subst := make(Substitution)
 	defer delete(subst)
-	subst[TypeVariable{idx = 0}] = TypeFunctionApplication {
-		constructor = .STRING,
-	}
+	subst[TypeVariable{idx = 0}] = tapp(.STRING)
 
 	result := apply_substitution(subst, TypeVariable{idx = 0})
-	tt.expect(t, types_equal(result, TypeFunctionApplication{constructor = .STRING}))
+	tt.expect(t, types_equal(result, tapp(.STRING)))
 }
 
 // do substitutions apply correctly to type function applications?
@@ -229,39 +215,28 @@ test_apply_substitution_type_variable :: proc(t: ^tt.T) {
 test_apply_substitution_function :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
-	ty := TypeFunctionApplication {
-		constructor = .FUNCTION,
-		args        = {TypeVariable{idx = 0}, TypeVariable{idx = 1}},
-	}
+	ty := tapp(.FUNCTION, {TypeVariable{idx = 0}, TypeVariable{idx = 1}})
 	subst := make(Substitution)
 	defer delete(subst)
-	subst[TypeVariable{idx = 0}] = TypeFunctionApplication {
-		constructor = .NUMBER,
-	}
-	subst[TypeVariable{idx = 1}] = TypeFunctionApplication {
-		constructor = .STRING,
-	}
+	subst[TypeVariable{idx = 0}] = tapp(.NUMBER)
+	subst[TypeVariable{idx = 1}] = tapp(.STRING)
 
 	result := apply_substitution(subst, ty)
-	expected := TypeFunctionApplication {
-		constructor = .FUNCTION,
-		args        = {
-			TypeFunctionApplication{constructor = .NUMBER},
-			TypeFunctionApplication{constructor = .STRING},
-		},
-	}
+	expected := tapp(.FUNCTION, {tapp(.NUMBER), tapp(.STRING)})
 	tt.expect(t, types_equal(result, expected))
 }
 
 // are equal types reported as so by types_equal()?
 @(test)
 test_types_equal_same :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	tt.expect(t, types_equal(TypeVariable{idx = 0}, TypeVariable{idx = 0}))
 	tt.expect(
 		t,
 		types_equal(
-			TypeFunctionApplication{constructor = .NUMBER},
-			TypeFunctionApplication{constructor = .NUMBER},
+			tapp(.NUMBER),
+			tapp(.NUMBER),
 		),
 	)
 }
@@ -269,17 +244,19 @@ test_types_equal_same :: proc(t: ^tt.T) {
 // are different types reported as so by types_equal()?
 @(test)
 test_types_equal_different :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	defer free_all(context.temp_allocator)
 	tt.expect(t, !types_equal(TypeVariable{idx = 0}, TypeVariable{idx = 1}))
 	tt.expect(
 		t,
 		!types_equal(
-			TypeFunctionApplication{constructor = .NUMBER},
-			TypeFunctionApplication{constructor = .BOOL},
+			tapp(.NUMBER),
+			tapp(.BOOL),
 		),
 	)
 	tt.expect(
 		t,
-		!types_equal(TypeVariable{idx = 0}, TypeFunctionApplication{constructor = .NUMBER}),
+		!types_equal(TypeVariable{idx = 0}, tapp(.NUMBER)),
 	)
 }
 
@@ -296,9 +273,9 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 	push_scope(&tc)
 
 	push_scope(&tc)
-	bind_type(tc.ctx, "x", TypeFunctionApplication{constructor = .NUMBER})
+	bind_type(tc.ctx, "x", tapp(.NUMBER))
 	push_scope(&tc)
-	bind_type(tc.ctx, "y", TypeFunctionApplication{constructor = .BOOL})
+	bind_type(tc.ctx, "y", tapp(.BOOL))
 
 	// if any of the resolve_types panic we failed
 	_ = resolve_type(&tc, "x")

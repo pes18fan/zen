@@ -1,1 +1,1 @@
-not 42 // expect: false
+puts(not 42) // expect: false
