@@ -1061,8 +1061,6 @@ compile_for_in_expression :: proc(cg: ^Codegen, e: ^ForInExpr) -> bool {
 	loop_variable_slot := cg.current_compiler.local_count - 1
 
 	// Push the iterable on the stack
-	// TODO: perhaps figure out a way to find out if the iterable is a valid
-	// iterable in advance
 	compile_expression(cg, iterable) or_return
 
 	try(
