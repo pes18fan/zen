@@ -1380,10 +1380,8 @@ register_builtin_module :: proc(tc: ^TypeChecker, module: string) {
 		fmt.panicf("Internal compiler error: Invalid builtin module %v", module)
 	}
 
-	nil_t := tapp(.NIL)
 	string_t := tapp(.STRING)
 	number_t := tapp(.NUMBER)
-	never_t := type_never
 
 	mod := tapp(.RECORD)
 
