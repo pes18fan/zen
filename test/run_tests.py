@@ -224,5 +224,5 @@ if __name__ == "__main__":
     elif passed == tests:
         print(f"All tests {COL_GREEN}PASSED!{RESET} :)")
     else:
-        print(f"{COL_RED}Something gone wrong.{RESET}")
+        print(f"{COL_RED}Something went wrong.{RESET}")
         print(f"{passed} tests passed, {len(failures)} failed.")
