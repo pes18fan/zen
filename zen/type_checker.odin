@@ -10,7 +10,7 @@ TypeChecker :: struct {
 	ctx:           ^TypeContext,
 	typevar_count: int,
 	current_token: Token,
-	return_type:   Maybe(Type),
+	return_type:   Type,
 	typeid_map:    map[string]Type,
 	had_error:     bool,
 }
@@ -103,16 +103,16 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionAp
 	case .FUNCTION:
 		assert(args != nil, "cannot have nil type args for a function type")
 
-		// a function type here always takes at least one value and returns exactly
-		// one; hence at least two type args. The last one is the return value.
-		// even a function like func() {} does that; it takes unit and returns unit
-		assert(len(args) > 1, "must have at least two args for a function type")
+		// a function type here may take zero or more values and returns exactly
+		// one; hence at least one type arg.
+		// for instance a function like func() {} takes nothing and returns unit
+		assert(len(args) > 0, "must have at least one (return type) arg for a function type")
 
 		// cloning the slice is a bit bad for performance but it keeps `tapp` reliable
 		return TypeFunctionApplication{constructor = constructor, args = slice.clone(args)}
 	case .LIST:
 		assert(args != nil, "cannot have nil type args for a list type")
-		assert(len(args) == 1, "must have one arg exactly for a list type")
+		assert(len(args) == 1, "must have one type arg exactly for a list type")
 		return TypeFunctionApplication{constructor = constructor, args = slice.clone(args)}
 	case .RECORD:
 		unimplemented()
@@ -301,7 +301,6 @@ free_vars_typescheme :: proc(scheme: TypeScheme) -> FreeVars {
 		case TypeVariable:
 			fvs[t] = {}
 		case TypeFunctionApplication:
-			// PERF: O(n^2), kinda sucky
 			for arg in t.args {
 				arg_fvs := free_vars(arg)
 				defer delete(arg_fvs)
@@ -566,6 +565,46 @@ try_unify :: proc(expected: Type, checking: Type) -> (Substitution, ErrorMessage
 // allocates a map
 @(require_results)
 unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationError)) {
+	if is_type_any(a) {
+		// any unifies with anything and returns a substitution that turns the
+		// other type into any. What TypeScript does. Unsound, but it works.
+		when ODIN_DEBUG {
+			if config.log_type {
+				fmt.eprintfln("-- unify any with %v trivially", type_string(b, true))
+			}
+		}
+
+		if is_type_variable(b) {
+			s := make(Substitution)
+			s[as_type_variable(b)] = a
+
+			return s, nil
+		} else {
+			// when unifying with type fn apps or any itself, the substitution is nil
+			return nil, nil
+		}
+	}
+
+	if is_type_any(b) {
+		return unify(b, a)
+	}
+
+	if is_type_never(a) {
+		// never also unifies with anything, but it does NOT turn the other
+		// type into never itself.
+		when ODIN_DEBUG {
+			if config.log_type {
+				fmt.eprintfln("-- unify ! with %v trivially", type_string(b, true))
+			}
+		}
+
+		return nil, nil
+	}
+
+	if is_type_never(b) {
+		return unify(b, a)
+	}
+
 	if is_type_variable(a) {
 		if types_equal(a, b) {
 			when ODIN_DEBUG {
@@ -603,52 +642,6 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 	}
 
 	if is_type_variable(b) {
-		return unify(b, a)
-	}
-
-	if is_type_any(a) {
-		// any unifies with anything and returns a substitution that turns the
-		// other type into any. What TypeScript does. Unsound, but it works.
-		when ODIN_DEBUG {
-			if config.log_type {
-				fmt.eprintfln("-- unify any with %v trivially", type_string(b, true))
-			}
-		}
-
-		if is_type_variable(b) {
-			s := make(Substitution)
-			s[as_type_variable(b)] = a
-
-			return s, nil
-		} else {
-			// when unifying with type fn apps or any itself, the substitution is nil
-			return nil, nil
-		}
-	}
-
-	if is_type_any(b) {
-		return unify(b, a)
-	}
-
-	if is_type_never(a) {
-		// never also unifies with anything, but it does NOT turn the other
-		// type into never itself.
-
-		// One important thing to note about never is that it has no valid
-		// values (set of values of type never is empty) so assigning anything to
-		// a never typed value (like a variable annotated with `!`), is a type
-		// error. This could be fixed by making unify non-commutative but that
-		// is annoying to work with so it is not what I use for said purpose.
-		when ODIN_DEBUG {
-			if config.log_type {
-				fmt.eprintfln("-- unify ! with %v trivially", type_string(b, true))
-			}
-		}
-
-		return nil, nil
-	}
-
-	if is_type_never(b) {
 		return unify(b, a)
 	}
 
@@ -712,6 +705,22 @@ typecheck_error :: proc(tc: ^TypeChecker, message: string) {
 	tc.had_error = true
 }
 
+// is the expression a syntactic "value"?
+is_value :: proc(expr: Expr) -> bool {
+	if expr == nil {return false}
+
+	#partial switch e in expr {
+	case ^LiteralExpr, ^FunctionExpr, ^VariableExpr:
+		return true
+	case ^ListExpr:
+		// technically a value but causes problems due to its mutability, keep
+		// it as a non-value
+		return false
+	case:
+		return false
+	}
+}
+
 // wrapper around check_type to emulate algorithm W
 @(require_results)
 infer_type :: proc(
@@ -751,18 +760,6 @@ check_type :: proc(
 	subst: Substitution,
 	err: ErrorMessage,
 ) {
-	// ! is only allowed for expressions that actually do not return.
-	if is_type_never(type) {
-		s, inferred := infer_type(tc, expr) or_return
-		if !is_type_never(inferred) {
-			return nil, fmt.tprintf(
-				"Expected a diverging expression of type !, got %v.",
-				type_string(inferred, false),
-			)
-		}
-		return s, nil
-	}
-
 	switch e in expr {
 	case ^AssignExpr:
 		tc.current_token = e.token
@@ -816,7 +813,12 @@ check_type :: proc(
 	case ^BlockExpr:
 		tc.current_token = e.token
 		push_scope(tc)
-		s := check_type(tc, e.expression, type) or_return // infer body with expected type
+		s := make(Substitution)
+		if e.expression != nil {
+			s = check_type(tc, e.expression, type) or_return // infer body with expected type
+		} else {
+			s = try_unify(type, tapp(.NIL)) or_return // infer body with expected type
+		}
 		pop_scope(tc)
 		return s, nil
 	case ^BreakExpr:
@@ -829,17 +831,15 @@ check_type :: proc(
 
 		// build the expected function type
 		arg_types: []Type
-		if len(arguments) == 0 {
-			arg_types = make([]Type, 1)
-			arg_types[0] = tapp(.NIL)
-		} else {
+		if len(arguments) != 0 {
 			arg_types = make([]Type, len(arguments))
 			for i in 0 ..< len(arguments) {
 				arg_types[i] = fresh(tc)
 			}
 		}
+
 		all_args := make([]Type, len(arg_types) + 1)
-		copy(all_args, arg_types)
+		if len(arg_types) != 0 {copy(all_args, arg_types)}
 		all_args[len(arg_types)] = type
 		func_type := tapp(.FUNCTION, all_args)
 
@@ -882,29 +882,36 @@ check_type :: proc(
 		tc.current_token = e.token
 
 		push_scope(tc)
-		s_init, _ := infer_type(tc, e.initializer) or_return
-		apply_substitution(s_init, tc.ctx)
-		s_cond := check_type(tc, e.condition, tapp(.BOOL)) or_return
-		apply_substitution(s_cond, tc.ctx)
-		s_inc, _ := infer_type(tc, e.increment) or_return
-		apply_substitution(s_inc, tc.ctx)
+		s := make(Substitution)
+		if e.initializer != nil {
+			s_init, _ := infer_type(tc, e.initializer) or_return
+			apply_substitution(s_init, tc.ctx)
+			s = combine_substitutions(s_init, s)
+		}
+
+		if e.condition != nil {
+			s_cond, _ := infer_type(tc, e.condition) or_return
+			apply_substitution(s_cond, tc.ctx)
+			s = combine_substitutions(s_cond, s)
+		}
+
+		if e.increment != nil {
+			s_inc, _ := infer_type(tc, e.increment) or_return
+			apply_substitution(s_inc, tc.ctx)
+			s = combine_substitutions(s_inc, s)
+		}
+
 		s_body := check_type(tc, e.body.expression, fresh(tc)) or_return
 		apply_substitution(s_body, tc.ctx)
+		s = combine_substitutions(s_body, s)
 		pop_scope(tc)
 		sn := try_unify(type, tapp(.NIL)) or_return
-		return combine_substitutions(
-				sn,
-				combine_substitutions(
-					s_body,
-					combine_substitutions(s_inc, combine_substitutions(s_cond, s_init)),
-				),
-			),
-			nil
+		return combine_substitutions(sn, s), nil
 	case ^ForInExpr:
 		tc.current_token = e.token
 		push_scope(tc)
-		bind_type(tc.ctx, strings.clone(e.var_name.lexeme), type_any)
-		s_iter := check_type(tc, e.iterable, type_any) or_return // any for now, should probably be replaced by a `string | list` union in future
+		bind_type(tc.ctx, strings.clone(e.var_name.lexeme), fresh(tc)) // fresh typevar for for-in loop variable
+		s_iter := check_type(tc, e.iterable, fresh(tc)) or_return // should probably be replaced by a `string | list` union in future
 		apply_substitution(s_iter, tc.ctx)
 		beta := fresh(tc)
 		s_body := check_type(tc, e.body.expression, beta) or_return
@@ -914,7 +921,7 @@ check_type :: proc(
 		return combine_substitutions(sn, combine_substitutions(s_body, s_iter)), nil
 	case ^IfExpr:
 		tc.current_token = e.token
-		s1 := check_type(tc, e.condition, tapp(.BOOL)) or_return
+		s1, _ := infer_type(tc, e.condition) or_return // the condition can be any value
 		apply_substitution(s1, tc.ctx)
 		s2, then_type := infer_type(tc, e.then_branch.expression) or_return
 		apply_substitution(s2, tc.ctx)
@@ -955,9 +962,11 @@ check_type :: proc(
 	case ^ListExpr:
 		tc.current_token = e.token
 		if len(e.elements) == 0 {
-			elem := fresh(tc)
-			return try_unify(type, tapp(.LIST, {elem}))
+			s := try_unify(type, tapp(.LIST, {fresh(tc)})) or_return
+			apply_substitution(s, tc.ctx)
+			return s, nil
 		}
+
 		elem := fresh(tc)
 		s := make(Substitution)
 		for element in e.elements {
@@ -976,16 +985,17 @@ check_type :: proc(
 		return combine_substitutions(sn, s1), nil
 	case ^ReturnExpr:
 		tc.current_token = e.token
-		if _, ok := tc.return_type.?; !ok {
-			panic(
-				"Internal compiler error: Function return type not found when typechecking ReturnExpr",
-			)
+		if e.value != nil {
+			s1 := check_type(tc, e.value, tc.return_type) or_return
+			apply_substitution(s1, tc.ctx)
+			sn := try_unify(type, type_never) or_return // return expression itself has type `!`
+			return combine_substitutions(sn, s1), nil
+		} else {
+			s1 := try_unify(tc.return_type, tapp(.NIL)) or_return
+			apply_substitution(s1, tc.ctx)
+			sn := try_unify(type, type_never) or_return
+			return combine_substitutions(sn, s1), nil
 		}
-
-		s1 := check_type(tc, e.value, tc.return_type.(Type)) or_return
-		apply_substitution(s1, tc.ctx)
-		sn := try_unify(type, type_never) or_return // return expression itself has type `!`
-		return combine_substitutions(sn, s1), nil
 	case ^SubscriptExpr:
 		unimplemented()
 	case ^SubscriptSetExpr:
@@ -1020,12 +1030,7 @@ check_type :: proc(
 		return_type := e.return_type
 
 		param_types: []Type
-		if len(params) == 0 {
-			// a function taking no arguments is taken to be a function taking a
-			// nil argument
-			param_types = make([]Type, 1)
-			param_types[0] = tapp(.NIL)
-		} else {
+		if len(params) != 0 {
 			param_types = make([]Type, len(params))
 
 			// TODO: currently all params go to fresh vars, use concrete
@@ -1048,7 +1053,7 @@ check_type :: proc(
 
 		// last arg is return type
 		all_args := make([]Type, len(param_types) + 1)
-		copy(all_args, param_types)
+		if len(param_types) != 0 {copy(all_args, param_types)}
 		all_args[len(param_types)] = ret_type
 		func_type := tapp(.FUNCTION, all_args)
 
@@ -1139,13 +1144,15 @@ check_type :: proc(
 				s = combine_substitutions(s1, s)
 				apply_substitution(s, tc.ctx)
 				inferred := apply_substitution(s, beta)
-				// gen: TypeScheme
-				// if is_value(binding.initializer) {
-				// 	gen = generalize(tc, inferred)
-				// } else {
-				// 	gen = inferred
-				// }
-				gen := generalize(tc, inferred)
+
+				// only generalize if the thing is a syntactic 'value' (the
+				// value restriction)
+				gen: TypeScheme
+				if is_value(binding.initializer) {
+					gen = generalize(tc, inferred)
+				} else {
+					gen = inferred
+				}
 				bind_type(tc.ctx, strings.clone(binding.name.lexeme), gen)
 			} else {
 				bind_type(tc.ctx, strings.clone(binding.name.lexeme), beta)
@@ -1156,7 +1163,7 @@ check_type :: proc(
 	case ^WhileExpr:
 		tc.current_token = e.token
 		push_scope(tc)
-		s1 := check_type(tc, e.condition, tapp(.BOOL)) or_return
+		s1, _ := infer_type(tc, e.condition) or_return
 		apply_substitution(s1, tc.ctx)
 		beta := fresh(tc)
 		s2 := check_type(tc, e.body.expression, beta) or_return
@@ -1203,7 +1210,7 @@ type_string :: proc(scheme: TypeScheme, $debugging: bool) -> string {
 
 type_var_string :: proc(ctx: ^TypePrintCtx, t: TypeVariable) -> string {
 	when ODIN_DEBUG {
-		return fmt.tprintf("t%d", t.idx)
+		return fmt.tprintf("?%d", t.idx)
 	}
 
 	if name, ok := ctx.names[t.idx]; ok {
@@ -1222,19 +1229,12 @@ type_string_inner :: proc(ctx: ^TypePrintCtx, type: Type) -> string {
 	case TypeFunctionApplication:
 		if t.constructor == .FUNCTION {
 			sb := strings.builder_make()
-			assert(len(t.args) > 1, "cannot have less than two type args in a function type")
+			assert(len(t.args) > 0, "cannot have less than one type arg in a function type")
 
 			fmt.sbprintf(&sb, "%s ", type_constructor_string(t.constructor))
 			param_count := len(t.args) - 1
 			fmt.sbprint(&sb, "(")
 			for i in 0 ..< param_count {
-				if i == 0 && param_count == 1 {
-					if app, ok := t.args[0].(TypeFunctionApplication);
-					   ok && app.constructor == .NIL {
-						break
-					}
-				}
-
 				if i > 0 {
 					fmt.sbprint(&sb, ", ")
 				}
@@ -1373,7 +1373,7 @@ register_builtins :: proc(tc: ^TypeChecker) {
 
 	a := fresh(tc)
 	bind_type(tc.ctx, "puts", tquant({a}, tapp(.FUNCTION, {a, nil_t})))
-	bind_type(tc.ctx, "gets", tapp(.FUNCTION, {nil_t, string_t}))
+	bind_type(tc.ctx, "gets", tapp(.FUNCTION, {string_t}))
 
 	b := fresh(tc)
 	bind_type(tc.ctx, "len", tquant({b}, tapp(.FUNCTION, {b, number_t})))
@@ -1390,8 +1390,8 @@ register_builtins :: proc(tc: ^TypeChecker) {
 	bind_type(tc.ctx, "copy", tquant({e}, tapp(.FUNCTION, {e, e})))
 
 	bind_type(tc.ctx, "panic", tapp(.FUNCTION, {string_t, never_t}))
-	bind_type(tc.ctx, "dirname", tapp(.FUNCTION, {nil_t, string_t}))
-	bind_type(tc.ctx, "filename", tapp(.FUNCTION, {nil_t, string_t}))
+	bind_type(tc.ctx, "dirname", tapp(.FUNCTION, {string_t}))
+	bind_type(tc.ctx, "filename", tapp(.FUNCTION, {string_t}))
 
 	when ODIN_DEBUG {
 		if config.log_type {
