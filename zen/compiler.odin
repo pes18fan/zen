@@ -3,7 +3,6 @@ package zen
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
-import "core:slice"
 import "core:strings"
 
 /* Maximum limit for a eight bit unsigned integer. */
@@ -843,36 +842,24 @@ compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
 
 @(require_results)
 compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
+	if e.mod_name == nil || e.type == nil {
+		panic("Internal compiler error: Module name or type not resolved by semantic analyzer")
+	}
+
+	mod_name := e.mod_name.?
+	type := e.type.?
+
+	name_constant := try2(cg, string_constant(cg, mod_name)) or_return
 	path_str := e.path.lexeme
-
-	mod_type: ModuleType
-
 	path := strings.trim(path_str[1:len(path_str) - 1], " ")
-	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
+
+	abs_path, err := filepath.join([]string{config.__dirname, path}, context.temp_allocator)
 	if err != nil {
 		codegen_error(cg, fmt.tprintf("Error when declaring module: %s", os.error_string(err)))
 		return false
 	}
-	defer delete(abs_path)
 
-	is_builtin := slice.contains(cg.gc.std_modules[:], path)
-	if is_builtin {
-		mod_type = .BUILTIN
-	} else {
-		// we do NOT check if the module path exists, was done by the semantic analyzer
-		mod_type = .USER
-	}
-
-	mod_name: string
-	switch mod_type {
-	case .BUILTIN:
-		mod_name = path
-	case .USER:
-		mod_name = filepath.short_stem(path)
-	}
-	name_constant := try2(cg, string_constant(cg, mod_name)) or_return
-
-	switch mod_type {
+	switch type {
 	case .BUILTIN:
 		emit_op_with_constant(cg, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, name_constant)
 	case .USER:
@@ -1724,7 +1711,7 @@ codegen :: proc(
 
 	/* Add all the native function names to the global table, for variable
      * existence checks. */
-	for fn_name in gc.global_native_fns {
+	for fn_name in GLOBAL_NATIVE_FN_NAMES {
 		table_set(globals, copy_string(gc, fn_name), bool_val(true))
 	}
 

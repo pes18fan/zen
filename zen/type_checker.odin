@@ -88,19 +88,10 @@ fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	return var
 }
 
-nullary :: #force_inline proc(constructor: TypeConstructor) -> TypeFunctionApplication {
-	#partial switch constructor {
-	case .NUMBER, .STRING, .NIL, .BOOL:
-		return TypeFunctionApplication{constructor = constructor, args = nil}
-	}
-
-	fmt.panicf("Internal compiler error: invalid nullary type constructor %v", constructor)
-}
-
 tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionApplication {
 	switch constructor {
-	case .NUMBER, .STRING, .NIL, .BOOL:
-		return nullary(constructor)
+	case .NUMBER, .NIL, .BOOL, .STRING:
+		return TypeFunctionApplication{constructor = constructor, args = nil}
 	case .FUNCTION:
 		assert(args != nil, "cannot have nil type args for a function type")
 
@@ -950,12 +941,11 @@ check_type :: proc(
 		return check_type(tc, e.expression, type)
 	case ^LogicalExpr:
 		tc.current_token = e.token
-		bool_ := tapp(.BOOL)
-		s1 := check_type(tc, e.left, bool_) or_return
+		s1, _ := infer_type(tc, e.left) or_return
 		apply_substitution(s1, tc.ctx)
-		s2 := check_type(tc, e.right, bool_) or_return
+		s2, _ := infer_type(tc, e.right) or_return
 		apply_substitution(s2, tc.ctx)
-		sn := try_unify(type, bool_) or_return
+		sn := try_unify(type, tapp(.BOOL)) or_return
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	case ^ItExpr:
 		unimplemented()
@@ -1127,7 +1117,17 @@ check_type :: proc(
 		sn := try_unify(type, must_unify_with) or_return
 		return combine_substitutions(sn, s1), nil
 	case ^UseExpr:
-		unimplemented()
+		tc.current_token = e.token
+		if e.mod_name == nil || e.type == nil {
+			panic("Internal compiler error: Module name or type not resolved by semantic analyzer")
+		}
+
+		switch e.type {
+		case .BUILTIN:
+			register_builtin_module(tc, e.mod_name.?)
+		case .USER:
+			unimplemented()
+		}
 	case ^VarDeclExpr:
 		tc.current_token = e.token
 		s := make(Substitution)
@@ -1357,6 +1357,115 @@ typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, su
 	}
 
 	return ty, true
+}
+
+bind_type_to_module :: proc(
+	ctx: ^TypeContext,
+	module: TypeFunctionApplication,
+	name: string,
+	type: TypeScheme,
+) {
+	if module.constructor != .RECORD {
+		fmt.panicf(
+			"Internal compiler error: %v is not a record and thus not a module type",
+			module,
+		)
+	}
+
+	unimplemented()
+}
+
+register_builtin_module :: proc(tc: ^TypeChecker, module: string) {
+	if !slice.contains(STD_MODULES[:], module) {
+		fmt.panicf("Internal compiler error: Invalid builtin module %v", module)
+	}
+
+	nil_t := tapp(.NIL)
+	string_t := tapp(.STRING)
+	number_t := tapp(.NUMBER)
+	never_t := type_never
+
+	mod := tapp(.RECORD)
+
+	switch module {
+	case "time":
+		bind_type_to_module(tc.ctx, mod, "clock", tapp(.FUNCTION, {number_t}))
+		bind_type_to_module(tc.ctx, mod, "clock_ms", tapp(.FUNCTION, {number_t}))
+	case "math":
+		bind_type_to_module(tc.ctx, mod, "sin", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "cos", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "tan", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "sqrt", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "ln", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "pow", tapp(.FUNCTION, {number_t, number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "floor", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "ceil", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "round", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "abs", tapp(.FUNCTION, {number_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "rand", tapp(.FUNCTION, {number_t}))
+	case "os":
+		bind_type_to_module(tc.ctx, mod, "read", tapp(.FUNCTION, {string_t}))
+		bind_type_to_module(tc.ctx, mod, "write", tapp(.FUNCTION, {string_t, string_t, string_t}))
+		bind_type_to_module(tc.ctx, mod, "args", tapp(.FUNCTION, {tapp(.LIST, {string_t})}))
+	case "list":
+		a := fresh(tc)
+		bind_type_to_module(
+			tc.ctx,
+			mod,
+			"push",
+			tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), tapp(.LIST, {a})})),
+		)
+
+		b := fresh(tc)
+		bind_type_to_module(
+			tc.ctx,
+			mod,
+			"pop",
+			tquant({b}, tapp(.FUNCTION, {tapp(.LIST, {b}), b})),
+		)
+
+		c := fresh(tc)
+		bind_type_to_module(
+			tc.ctx,
+			mod,
+			"remove_last",
+			tquant({c}, tapp(.FUNCTION, {tapp(.LIST, {c}), tapp(.LIST, {c})})),
+		)
+
+		d := fresh(tc)
+		bind_type_to_module(
+			tc.ctx,
+			mod,
+			"sort",
+			tquant({d}, tapp(.FUNCTION, {tapp(.LIST, {d}), tapp(.LIST, {d})})),
+		)
+
+		bind_type_to_module(
+			tc.ctx,
+			mod,
+			"sum",
+			tapp(.FUNCTION, {tapp(.LIST, {number_t}), number_t}),
+		)
+	case "string":
+		bind_type_to_module(tc.ctx, mod, "chomp", tapp(.FUNCTION, {string_t, string_t}))
+		bind_type_to_module(
+			tc.ctx,
+			mod,
+			"replace",
+			tapp(.FUNCTION, {string_t, string_t, string_t, string_t}),
+		)
+		bind_type_to_module(
+			tc.ctx,
+			mod,
+			"slice",
+			tapp(.FUNCTION, {string_t, number_t, number_t, string_t}),
+		)
+		bind_type_to_module(tc.ctx, mod, "upcase", tapp(.FUNCTION, {string_t, string_t}))
+		bind_type_to_module(tc.ctx, mod, "downcase", tapp(.FUNCTION, {string_t, string_t}))
+		bind_type_to_module(tc.ctx, mod, "reverse", tapp(.FUNCTION, {string_t, string_t}))
+		bind_type_to_module(tc.ctx, mod, "asciichar", tapp(.FUNCTION, {string_t, number_t}))
+		bind_type_to_module(tc.ctx, mod, "asciinum", tapp(.FUNCTION, {number_t, string_t}))
+	}
 }
 
 register_builtins :: proc(tc: ^TypeChecker) {

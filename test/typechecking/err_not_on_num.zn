@@ -1,2 +1,0 @@
-not 42
-// ERR: Expected an expression of type Bool, got Number

@@ -139,8 +139,12 @@ ClassExpr :: struct {
 }
 
 UseExpr :: struct {
-	token: Token,
-	path:  Token,
+	token:    Token,
+	path:     Token,
+
+	// filled in by the semantic analyzer
+	type:     Maybe(ModuleType),
+	mod_name: Maybe(string),
 }
 
 FunctionParam :: struct {

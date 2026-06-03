@@ -1,0 +1,21 @@
+var switch_result = switch "b" {
+    "a" => "alpha"
+    "b" => "bravo"
+    else => "other"
+}
+puts(switch_result) // expect: bravo
+
+var nested = if true {
+    if false { "no" } else { "yes" }
+} else {
+    "maybe"
+}
+puts(nested) // expect: yes
+
+var fallback = if false {
+    42
+}
+puts(fallback) // expect: nil
+
+var dropped = discard 42
+puts(dropped) // expect: nil
