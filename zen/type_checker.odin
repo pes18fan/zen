@@ -11,6 +11,7 @@ TypeChecker :: struct {
 	typevar_count: int,
 	current_token: Token,
 	return_type:   Type,
+	pipeline_type: Type,
 	typeid_map:    map[string]Type,
 	had_error:     bool,
 }
@@ -713,8 +714,7 @@ is_value :: proc(expr: Expr) -> bool {
 	case ^LiteralExpr, ^FunctionExpr, ^VariableExpr:
 		return true
 	case ^ListExpr:
-		// technically a value but causes problems due to its mutability, keep
-		// it as a non-value
+		// technically a value but due to its mutability, it is kept as a non-value
 		return false
 	case:
 		return false
@@ -1349,7 +1349,7 @@ make_typeid_map :: proc() -> map[string]Type {
 	return typeid_map
 }
 
-typecheck_expr :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bool) {
+typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bool) {
 	_, ty, err := infer_type(tc, expr)
 	if err != nil {
 		typecheck_error(tc, err.?)
@@ -1421,5 +1421,5 @@ typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 	defer pop_scope(&tc)
 	register_builtins(&tc)
 
-	return typecheck_expr(&tc, expr)
+	return typecheck_without_arena(&tc, expr)
 }
