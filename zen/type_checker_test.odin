@@ -20,28 +20,28 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 	nil_lit := tapp(.NIL)
 	string_lit := tapp(.STRING)
 
-	num_subst, err1 := unify(&tc, var, num_lit)
+	num_subst, err1 := unify(var, num_lit)
 	if err1 != nil {
 		tt.fail(t)
 		return
 	}
 	defer delete(num_subst)
 
-	bool_subst, err2 := unify(&tc, var, bool_lit)
+	bool_subst, err2 := unify(var, bool_lit)
 	if err2 != nil {
 		tt.fail(t)
 		return
 	}
 	defer delete(bool_subst)
 
-	nil_subst, err3 := unify(&tc, var, nil_lit)
+	nil_subst, err3 := unify(var, nil_lit)
 	if err3 != nil {
 		tt.fail(t)
 		return
 	}
 	defer delete(nil_subst)
 
-	string_subst, err4 := unify(&tc, var, string_lit)
+	string_subst, err4 := unify(var, string_lit)
 	if err4 != nil {
 		tt.fail(t)
 		return
@@ -59,13 +59,10 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 test_unify_equal_types_returns_nil :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
-	tc := TypeChecker {
-		ctx           = nil,
-		typevar_count = 0,
-		had_error     = false,
-	}
-	push_scope(&tc)
-	subst, err := unify(&tc, tapp(.NUMBER), tapp(.NUMBER))
+	subst, err := unify(
+		tapp(.NUMBER),
+		tapp(.NUMBER),
+	)
 	defer delete(subst)
 	tt.expect(t, err == nil)
 	tt.expect(t, subst == nil)
@@ -76,13 +73,10 @@ test_unify_equal_types_returns_nil :: proc(t: ^tt.T) {
 test_unify_mismatched_types :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
-	tc := TypeChecker {
-		ctx           = nil,
-		typevar_count = 0,
-		had_error     = false,
-	}
-	push_scope(&tc)
-	_, err := unify(&tc, tapp(.NUMBER), tapp(.BOOL))
+	_, err := unify(
+		tapp(.NUMBER),
+		tapp(.BOOL),
+	)
 	tt.expect(t, err == .MISMATCH)
 }
 
@@ -91,15 +85,11 @@ test_unify_mismatched_types :: proc(t: ^tt.T) {
 test_unify_occurs_check :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
-	tc := TypeChecker {
-		ctx           = nil,
-		typevar_count = 0,
-		had_error     = false,
+	a := TypeVariable {
+		idx = 0,
 	}
-	push_scope(&tc)
-	a := fresh(&tc)
 	b := tapp(.FUNCTION, {a, tapp(.BOOL)})
-	_, err := unify(&tc, a, b)
+	_, err := unify(a, b)
 	tt.expect(t, err == .INFINITE_TYPE)
 }
 
@@ -108,27 +98,31 @@ test_unify_occurs_check :: proc(t: ^tt.T) {
 test_unify_function_type :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
-	tc := TypeChecker {
-		ctx           = nil,
-		typevar_count = 0,
-		had_error     = false,
+	a := TypeVariable {
+		idx = 0,
 	}
-	push_scope(&tc)
-	a := fresh(&tc)
-	b := fresh(&tc)
+	b := TypeVariable {
+		idx = 1,
+	}
 
 	fn_type_a := tapp(.FUNCTION, {a, tapp(.NUMBER)})
 	fn_type_b := tapp(.FUNCTION, {tapp(.NUMBER), b})
 
-	subst, err := unify(&tc, fn_type_a, fn_type_b)
+	subst, err := unify(fn_type_a, fn_type_b)
 	defer delete(subst)
 	if err != nil {
 		tt.fail(t)
 		return
 	}
 
-	tt.expect(t, types_equal(apply_substitution(subst, a), tapp(.NUMBER)))
-	tt.expect(t, types_equal(apply_substitution(subst, a), tapp(.NUMBER)))
+	tt.expect(
+		t,
+		types_equal(apply_substitution(subst, a), tapp(.NUMBER)),
+	)
+	tt.expect(
+		t,
+		types_equal(apply_substitution(subst, a), tapp(.NUMBER)),
+	)
 }
 
 // do substitutions combine correctly?
@@ -147,8 +141,17 @@ test_substitution_combine :: proc(t: ^tt.T) {
 	combined := combine_substitutions(s1, s2)
 	defer delete(combined)
 
-	tt.expect(t, types_equal(combined[TypeVariable{idx = 0}], tapp(.NUMBER)))
-	tt.expect(t, types_equal(combined[TypeVariable{idx = 1}], tapp(.BOOL)))
+	tt.expect(
+		t,
+		types_equal(
+			combined[TypeVariable{idx = 0}],
+			tapp(.NUMBER),
+		),
+	)
+	tt.expect(
+		t,
+		types_equal(combined[TypeVariable{idx = 1}], tapp(.BOOL)),
+	)
 }
 
 // do substitutions recursively combine correctly?
@@ -229,7 +232,13 @@ test_types_equal_same :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
 	tt.expect(t, types_equal(TypeVariable{idx = 0}, TypeVariable{idx = 0}))
-	tt.expect(t, types_equal(tapp(.NUMBER), tapp(.NUMBER)))
+	tt.expect(
+		t,
+		types_equal(
+			tapp(.NUMBER),
+			tapp(.NUMBER),
+		),
+	)
 }
 
 // are different types reported as so by types_equal()?
@@ -238,8 +247,17 @@ test_types_equal_different :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
 	tt.expect(t, !types_equal(TypeVariable{idx = 0}, TypeVariable{idx = 1}))
-	tt.expect(t, !types_equal(tapp(.NUMBER), tapp(.BOOL)))
-	tt.expect(t, !types_equal(TypeVariable{idx = 0}, tapp(.NUMBER)))
+	tt.expect(
+		t,
+		!types_equal(
+			tapp(.NUMBER),
+			tapp(.BOOL),
+		),
+	)
+	tt.expect(
+		t,
+		!types_equal(TypeVariable{idx = 0}, tapp(.NUMBER)),
+	)
 }
 
 // does popping and pushing contexts work correctly?
@@ -282,7 +300,7 @@ test_generalize_instantiate :: proc(t: ^tt.T) {
 	push_scope(&tc)
 
 	ty := fresh(&tc)
-	scheme := generalize(tc.ctx, ty)
+	scheme := generalize(&tc, ty)
 
 	inst := instantiate(&tc, scheme)
 	tt.expect(t, is_type_variable(inst))
