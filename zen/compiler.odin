@@ -256,19 +256,12 @@ patch_jump :: proc(cg: ^Codegen, offset: int) -> ErrorMessage {
 }
 
 /* 
-Emit instructions to make the current function return nil; or if the current
-function is an initializer make it return its receiver.
+Emit instructions to make the current function return whatever is on top of the
+stack.
 */
 @(private = "file")
 emit_return :: proc(cg: ^Codegen) {
-	if cg.current_compiler.type == .INITIALIZER {
-		emit_opcode(cg, .OP_GET_LOCAL)
-		emit_byte(cg, 0) /* Since the receiver is always stored in slot zero. */
-	} else {
-		// emit_opcode(cg, .OP_NIL)
-	}
-
-	if config.repl {
+	if config.repl && cg.current_compiler.type == .SCRIPT {
 		emit_opcode(cg, .OP_PRINT_REPL)
 	}
 
@@ -715,11 +708,14 @@ compile_function :: proc(
 	} else {
 		compile_expression(cg, body) or_return
 	}
-	if cg.current_compiler.type == .INITIALIZER {
+
+	if type == .INITIALIZER {
+		emit_pop(cg) // initializer only returns its instance
 		emit_opcode(cg, .OP_GET_LOCAL)
-		emit_byte(cg, 0)
+		emit_byte(cg, 0) /* Since the receiver is always stored in slot zero. */
 	}
-	emit_opcode(cg, .OP_RETURN)
+
+	emit_return(cg)
 	cg.current_compiler.function.has_returned = true
 
 	function := end_compiler(cg)
@@ -1264,10 +1260,17 @@ compile_return_expression :: proc(cg: ^Codegen, s: ^ReturnExpr) -> bool {
 
 	if s.value != nil {
 		compile_expression(cg, value) or_return
-		emit_opcode(cg, .OP_RETURN)
 	} else {
-		emit_return(cg)
+		emit_opcode(cg, .OP_NIL)
 	}
+
+	if cg.current_compiler.type == .INITIALIZER {
+		emit_pop(cg) // initializer only returns its instance
+		emit_opcode(cg, .OP_GET_LOCAL)
+		emit_byte(cg, 0) /* Since the receiver is always stored in slot zero. */
+	}
+
+	emit_return(cg)
 
 	/* Set a flag to true if the function returns in its outermost scope.
 	This flag is to check if the function needs an implicit return in the end. */

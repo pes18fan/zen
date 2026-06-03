@@ -1197,6 +1197,7 @@ interpret :: proc(
 		} else {
 			_, tc_ok = typecheck(expr)
 		}
+
 		when ODIN_DEBUG {
 			if config.log_type {
 				fmt.eprintln("\n-- typechecker end")
