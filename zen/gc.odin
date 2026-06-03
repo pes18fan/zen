@@ -190,9 +190,7 @@ mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
 	}
 
 	/* Mark the VM's registers. */
-	for v in vm.it {
-		if is_obj(v) {mark_object(gc, as_obj(v))}
-	}
+	if is_obj(vm.it) {mark_object(gc, as_obj(vm.it))}
 	if is_obj(vm.save) {mark_object(gc, as_obj(vm.save))}
 
 	/* Mark closure objects in the CallFrames. These need to be marked to 
