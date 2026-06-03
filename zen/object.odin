@@ -475,7 +475,7 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 	when ODIN_DEBUG {
 		if config.log_gc {
 			str := stringify_object(obj)
-			fmt.eprintf("%p free %s of type %v", obj, str, type_of_obj(obj))
+			fmt.eprintfln("%p free %s of type %v", obj, str, type_of_obj(obj))
 		}
 	}
 
