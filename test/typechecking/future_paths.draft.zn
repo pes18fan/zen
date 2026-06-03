@@ -1,0 +1,7 @@
+// DRAFT
+
+use "string"
+
+print "hello"
+    |> string.upcase()
+    |> it .. ", world" // expect: HELLO, world

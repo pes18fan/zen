@@ -446,7 +446,6 @@ main :: proc() {
 
 	vm.gc.init_string = copy_string(vm.gc, "init")
 
-	init_builtin_modules(&gc)
 	init_natives(&gc)
 
 	status = parse_argv(&vm)

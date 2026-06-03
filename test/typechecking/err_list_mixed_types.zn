@@ -1,0 +1,1 @@
+var bad = [1, "two"] // ERR: Expected an expression of type Number, got String

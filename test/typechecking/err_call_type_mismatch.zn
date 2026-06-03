@@ -1,0 +1,2 @@
+func inc(x: Number): Number => x + 1
+inc("nope") // ERR: Expected an expression of type Number, got String

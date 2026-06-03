@@ -1,0 +1,4 @@
+func bad(): String {
+    42
+}
+bad() // ERR: Expected an expression of type String, got Number

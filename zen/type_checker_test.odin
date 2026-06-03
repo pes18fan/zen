@@ -94,7 +94,7 @@ test_unify_occurs_check :: proc(t: ^tt.T) {
 	}
 	b := TypeFunctionApplication {
 		constructor = .FUNCTION,
-		args        = {a, nullary(.BOOL)},
+		args        = {a, tapp(.BOOL)},
 	}
 	_, err := unify(a, b)
 	tt.expect(t, err == .INFINITE_TYPE)
@@ -180,12 +180,12 @@ test_substitution_combine_recursively :: proc(t: ^tt.T) {
 	s1[TypeVariable{idx = 0}] = TypeVariable {
 		idx = 1,
 	}
-	s2[TypeVariable{idx = 1}] = nullary(.BOOL)
+	s2[TypeVariable{idx = 1}] = tapp(.BOOL)
 
 	combined := combine_substitutions(s1, s2)
 	defer delete(combined)
 
-	tt.expect(t, types_equal(combined[TypeVariable{idx = 0}], nullary(.BOOL)))
+	tt.expect(t, types_equal(combined[TypeVariable{idx = 0}], tapp(.BOOL)))
 }
 
 // is the result of free_vars() on a type variable the variable itself?

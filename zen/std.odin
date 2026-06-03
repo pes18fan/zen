@@ -23,11 +23,6 @@ ModuleFunction :: struct {
 	arity:    int,
 }
 
-/* Initialize the list of builtin modules. */
-init_builtin_modules :: proc(gc: ^GC) {
-	append(&gc.std_modules, "time", "math", "os", "string", "list")
-}
-
 /* Get all the information required to import a builtin module into the global
  * scope. */
 get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunction {
@@ -83,42 +78,46 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 	return module_functions[:]
 }
 
+/* The list of standard modules built into the language. */
+@(rodata)
+STD_MODULES := [?]string{"time", "math", "os", "string", "list"}
+
+@(rodata)
+GLOBAL_NATIVE_FN_NAMES := [?]string {
+	"puts",
+	"panic",
+	"gets",
+	"len",
+	"str",
+	"parse",
+	"typeof",
+	"copy",
+	"dirname",
+	"filename",
+}
+
+
 /* These are the functions available in the global scope. Ten very commonly used
  * functions are available as such. The rest are in their corresponding modules. */
 init_natives :: proc(gc: ^GC) {
-	/* Add all the names of the globally present native functions to the name list. */
-	append(
-		&gc.global_native_fns,
-		"puts",
-		"panic",
-		"gets",
-		"len",
-		"str",
-		"parse",
-		"typeof",
-		"copy",
-		"dirname",
-		"filename",
-	)
+	GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
+		puts_native,
+		panic_native,
+		gets_native,
+		len_native,
+		str_native,
+		parse_native,
+		typeof_native,
+		copy_native,
+		dirname_native,
+		filename_native,
+	}
 
-	// io
-	define_native(gc, "puts", puts_native, arity = 1)
-	define_native(gc, "gets", gets_native, arity = 0)
+	GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 1, 0, 1, 1, 1, 1, 1, 0, 0}
 
-	define_native(gc, "len", len_native, arity = 1)
-
-	// types and conversion
-	define_native(gc, "str", str_native, arity = 1)
-	define_native(gc, "parse", parse_native, arity = 1)
-	define_native(gc, "typeof", typeof_native, arity = 1)
-
-	// mem
-	define_native(gc, "copy", copy_native, arity = 1)
-
-	// others
-	define_native(gc, "panic", panic_native, arity = 1)
-	define_native(gc, "dirname", dirname_native, arity = 0)
-	define_native(gc, "filename", filename_native, arity = 0)
+	for name, idx in GLOBAL_NATIVE_FN_NAMES {
+		define_native(gc, name, GLOBAL_NATIVE_FN_PROCS[idx], GLOBAL_NATIVE_FN_ARITIES[idx])
+	}
 }
 
 

@@ -740,13 +740,17 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		path_str := e.path.lexeme
 		path := strings.trim(path_str[1:len(path_str) - 1], " ")
 
-		builtin_found := slice.contains(sm.gc.std_modules[:], path)
+		builtin_found := slice.contains(STD_MODULES[:], path)
 
 		mod_name: string
 		if builtin_found {
 			mod_name = path
+			e.type = .BUILTIN
 		} else {
-			abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
+			abs_path, err := filepath.join(
+				[]string{config.__dirname, path},
+				context.temp_allocator,
+			)
 			if err != nil {
 				semantic_error(
 					sm,
@@ -754,14 +758,15 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 				)
 				return false
 			}
-			defer delete(abs_path)
 
 			if !os.exists(abs_path) {
 				semantic_error(sm, fmt.tprintf("Module '%s' not found.", abs_path))
 				return false
 			}
 			mod_name = filepath.short_stem(path)
+			e.type = .USER
 		}
+		e.mod_name = mod_name
 
 		declare_variable(sm, synthetic_token(mod_name), is_final = true) or_return
 		mark_initialized(sm)
@@ -897,7 +902,7 @@ analyze :: proc(
 	}
 
 	// Add native function names to the globals table
-	for fn_name in gc.global_native_fns {
+	for fn_name in GLOBAL_NATIVE_FN_NAMES {
 		table_set(globals, copy_string(gc, fn_name), bool_val(true))
 	}
 
