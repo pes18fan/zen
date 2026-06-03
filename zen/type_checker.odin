@@ -75,7 +75,7 @@ TypeRecord :: struct {
 
 	// TODO: this should probably be a polymorphic type, avoided for now
 	// cuz its annoying in `unify`, should find a way to get this working later
-	fields:     map[string]TypeScheme,
+	fields:     map[string]Type,
 }
 
 TypeConstructor :: enum {
@@ -173,7 +173,7 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> ^TypeFunctionA
 	case .RECORD:
 		t := new(TypeRecord)
 		t.constructor = .RECORD
-		t.fields = make(map[string]TypeScheme)
+		t.fields = make(map[string]Type)
 		return cast(^TypeFunctionApplication)t
 	}
 
@@ -505,7 +505,7 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 			r := cast(^TypeRecord)t
 			new_rec := new(TypeRecord)
 			new_rec.constructor = .RECORD
-			new_rec.fields = make(map[string]TypeScheme)
+			new_rec.fields = make(map[string]Type)
 			for name, scheme in r.fields {
 				new_rec.fields[name] = apply_substitution(subst, scheme)
 			}
@@ -634,8 +634,8 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 }
 
 // Generalize a type over all free vars not in the current ctx
-generalize :: proc(ctx: ^TypeContext, ty: Type) -> TypeScheme {
-	ctx_fvs := free_vars(ctx)
+generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
+	ctx_fvs := free_vars(tc.ctx)
 	defer delete(ctx_fvs)
 
 	ty_fvs := free_vars(ty)
@@ -673,15 +673,8 @@ UnificationError :: enum {
 // tries to unify an expected type with another given one
 // done to provide nicer error messages as just applying unify() makes it
 // unclear which is the expected type
-try_unify :: proc(
-	tc: ^TypeChecker,
-	expected: Type,
-	checking: Type,
-) -> (
-	Substitution,
-	ErrorMessage,
-) {
-	subst, err := unify(tc, expected, checking)
+try_unify :: proc(expected: Type, checking: Type) -> (Substitution, ErrorMessage) {
+	subst, err := unify(expected, checking)
 	if err != nil {
 		switch err {
 		case .INFINITE_TYPE:
@@ -704,14 +697,7 @@ try_unify :: proc(
 
 // allocates a map
 @(require_results)
-unify :: proc(
-	tc: ^TypeChecker,
-	a: Type,
-	b: Type,
-) -> (
-	subst: Substitution,
-	err: Maybe(UnificationError),
-) {
+unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationError)) {
 	if is_type_any(a) {
 		// any unifies with anything and returns a substitution that turns the
 		// other type into any. What TypeScript does. Unsound, but it works.
@@ -733,7 +719,7 @@ unify :: proc(
 	}
 
 	if is_type_any(b) {
-		return unify(tc, b, a)
+		return unify(b, a)
 	}
 
 	if is_type_never(a) {
@@ -749,7 +735,7 @@ unify :: proc(
 	}
 
 	if is_type_never(b) {
-		return unify(tc, b, a)
+		return unify(b, a)
 	}
 
 	if is_type_variable(a) {
@@ -789,7 +775,7 @@ unify :: proc(
 	}
 
 	if is_type_variable(b) {
-		return unify(tc, b, a)
+		return unify(b, a)
 	}
 
 	if is_type_function_application(a) && is_type_function_application(b) {
@@ -812,19 +798,19 @@ unify :: proc(
 			for i in 0 ..< len(f1.params) {
 				fst := apply_substitution(s, f1.params[i])
 				snd := apply_substitution(s, f2.params[i])
-				res := unify(tc, fst, snd) or_return
+				res := unify(fst, snd) or_return
 				s = combine_substitutions(s, res)
 			}
 			fst_ret := apply_substitution(s, f1.return_type)
 			snd_ret := apply_substitution(s, f2.return_type)
-			res := unify(tc, fst_ret, snd_ret) or_return
+			res := unify(fst_ret, snd_ret) or_return
 			s = combine_substitutions(s, res)
 		case .LIST:
 			l1 := cast(^TypeList)t1
 			l2 := cast(^TypeList)t2
 			fst := apply_substitution(s, l1.element_type)
 			snd := apply_substitution(s, l2.element_type)
-			res := unify(tc, fst, snd) or_return
+			res := unify(fst, snd) or_return
 			s = combine_substitutions(s, res)
 		case .RECORD:
 			r1 := cast(^TypeRecord)t1
@@ -844,11 +830,9 @@ unify :: proc(
 					return nil, .MISMATCH
 				}
 
-				fst_sc := apply_substitution(s, v)
-				fst := instantiate(tc, fst_sc)
-				snd_sc := apply_substitution(s, r2.fields[k])
-				snd := instantiate(tc, snd_sc)
-				res := unify(tc, fst, snd) or_return
+				fst := apply_substitution(s, v)
+				snd := apply_substitution(s, r2.fields[k])
+				res := unify(fst, snd) or_return
 				s = combine_substitutions(s, res)
 			}
 		case .NIL, .BOOL, .NUMBER, .STRING:
@@ -956,9 +940,9 @@ check_type :: proc(
 		apply_substitution(s1, tc.ctx)
 		found := resolve_type(tc, e.name.lexeme)
 		ty := instantiate(tc, found)
-		sn := try_unify(tc, ty, t1) or_return
+		sn := try_unify(ty, t1) or_return
 		apply_substitution(sn, tc.ctx)
-		sn2 := try_unify(tc, type, apply_substitution(sn, ty)) or_return
+		sn2 := try_unify(type, apply_substitution(sn, ty)) or_return
 		return combine_substitutions(sn2, combine_substitutions(sn, s1)), nil
 	case ^BinaryExpr:
 		tc.current_token = e.token
@@ -970,7 +954,7 @@ check_type :: proc(
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, num) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := try_unify(tc, type, num) or_return
+			sn := try_unify(type, num) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .DOT_DOT:
 			str := tapp(.STRING)
@@ -978,7 +962,7 @@ check_type :: proc(
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, str) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := try_unify(tc, type, str) or_return
+			sn := try_unify(type, str) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL:
 			bool_ := tapp(.BOOL)
@@ -987,14 +971,14 @@ check_type :: proc(
 			apply_substitution(s1, tc.ctx)
 			s2 := check_type(tc, e.right, num) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := try_unify(tc, type, bool_) or_return
+			sn := try_unify(type, bool_) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .EQUAL_EQUAL, .BANG_EQUAL:
 			s1, _ := infer_type(tc, e.left) or_return
 			apply_substitution(s1, tc.ctx)
 			s2, _ := infer_type(tc, e.right) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := try_unify(tc, type, tapp(.BOOL)) or_return
+			sn := try_unify(type, tapp(.BOOL)) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case:
 			fmt.panicf("Internal compiler error: Invalid binary operator '%s'.", e.operator.lexeme)
@@ -1006,13 +990,13 @@ check_type :: proc(
 		if e.expression != nil {
 			s = check_type(tc, e.expression, type) or_return // infer body with expected type
 		} else {
-			s = try_unify(tc, type, tapp(.NIL)) or_return // infer body with expected type
+			s = try_unify(type, tapp(.NIL)) or_return // infer body with expected type
 		}
 		pop_scope(tc)
 		return s, nil
 	case ^BreakExpr:
 		tc.current_token = e.token
-		return try_unify(tc, type, type_never)
+		return try_unify(type, type_never)
 	case ^CallExpr:
 		tc.current_token = e.token
 		callee := e.callee
@@ -1058,15 +1042,15 @@ check_type :: proc(
 		unimplemented()
 	case ^ContinueExpr:
 		tc.current_token = e.token
-		return try_unify(tc, type, type_never)
+		return try_unify(type, type_never)
 	case ^DiscardExpr:
 		tc.current_token = e.token
 		s1, _ := infer_type(tc, e.expression) or_return // infer inner and discard it
-		sn := try_unify(tc, type, tapp(.NIL)) or_return
+		sn := try_unify(type, tapp(.NIL)) or_return
 		return combine_substitutions(sn, s1), nil
 	case ^ExitExpr:
 		tc.current_token = e.token
-		return try_unify(tc, type, type_never)
+		return try_unify(type, type_never)
 	case ^ForExpr:
 		tc.current_token = e.token
 
@@ -1094,7 +1078,7 @@ check_type :: proc(
 		apply_substitution(s_body, tc.ctx)
 		s = combine_substitutions(s_body, s)
 		pop_scope(tc)
-		sn := try_unify(tc, type, tapp(.NIL)) or_return
+		sn := try_unify(type, tapp(.NIL)) or_return
 		return combine_substitutions(sn, s), nil
 	case ^ForInExpr:
 		tc.current_token = e.token
@@ -1106,7 +1090,7 @@ check_type :: proc(
 		s_body := check_type(tc, e.body.expression, beta) or_return
 		apply_substitution(s_body, tc.ctx)
 		pop_scope(tc)
-		sn := try_unify(tc, type, tapp(.NIL)) or_return
+		sn := try_unify(type, tapp(.NIL)) or_return
 		return combine_substitutions(sn, combine_substitutions(s_body, s_iter)), nil
 	case ^IfExpr:
 		tc.current_token = e.token
@@ -1121,11 +1105,11 @@ check_type :: proc(
 			s3 := check_type(tc, e.else_branch.expression, then_type) or_return
 			apply_substitution(s3, tc.ctx)
 			s = combine_substitutions(s3, s)
-			s4 := try_unify(tc, type, apply_substitution(s, then_type)) or_return
+			s4 := try_unify(type, apply_substitution(s, then_type)) or_return
 			s = combine_substitutions(s4, s)
 		} else {
 			// evaluate to nil if no else branch
-			sn := try_unify(tc, apply_substitution(s, type), tapp(.NIL)) or_return
+			sn := try_unify(apply_substitution(s, type), tapp(.NIL)) or_return
 			s = combine_substitutions(sn, s)
 		}
 
@@ -1143,14 +1127,14 @@ check_type :: proc(
 		apply_substitution(s1, tc.ctx)
 		s2, _ := infer_type(tc, e.right) or_return
 		apply_substitution(s2, tc.ctx)
-		sn := try_unify(tc, type, tapp(.BOOL)) or_return
+		sn := try_unify(type, tapp(.BOOL)) or_return
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	case ^ItExpr:
 		unimplemented()
 	case ^ListExpr:
 		tc.current_token = e.token
 		if len(e.elements) == 0 {
-			s := try_unify(tc, type, tapp(.LIST, {fresh(tc)})) or_return
+			s := try_unify(type, tapp(.LIST, {fresh(tc)})) or_return
 			apply_substitution(s, tc.ctx)
 			return s, nil
 		}
@@ -1162,26 +1146,26 @@ check_type :: proc(
 			s = combine_substitutions(s1, s)
 			apply_substitution(s, tc.ctx)
 		}
-		sn := try_unify(tc, type, tapp(.LIST, {apply_substitution(s, elem)})) or_return
+		sn := try_unify(type, tapp(.LIST, {apply_substitution(s, elem)})) or_return
 		return combine_substitutions(sn, s), nil
 	case ^PipeExpr:
 		unimplemented()
 	case ^PrintExpr:
 		tc.current_token = e.token
 		s1, t1 := infer_type(tc, e.expr) or_return
-		sn := try_unify(tc, type, t1) or_return // print returns what it printed
+		sn := try_unify(type, t1) or_return // print returns what it printed
 		return combine_substitutions(sn, s1), nil
 	case ^ReturnExpr:
 		tc.current_token = e.token
 		if e.value != nil {
 			s1 := check_type(tc, e.value, tc.return_type) or_return
 			apply_substitution(s1, tc.ctx)
-			sn := try_unify(tc, type, type_never) or_return // return expression itself has type `!`
+			sn := try_unify(type, type_never) or_return // return expression itself has type `!`
 			return combine_substitutions(sn, s1), nil
 		} else {
-			s1 := try_unify(tc, tc.return_type, tapp(.NIL)) or_return
+			s1 := try_unify(tc.return_type, tapp(.NIL)) or_return
 			apply_substitution(s1, tc.ctx)
-			sn := try_unify(tc, type, type_never) or_return
+			sn := try_unify(type, type_never) or_return
 			return combine_substitutions(sn, s1), nil
 		}
 	case ^SubscriptExpr:
@@ -1198,19 +1182,19 @@ check_type :: proc(
 		// just unify with the matching literal constructor
 		switch l in e.value {
 		case f64:
-			return try_unify(tc, type, tapp(.NUMBER))
+			return try_unify(type, tapp(.NUMBER))
 		case string:
-			return try_unify(tc, type, tapp(.STRING))
+			return try_unify(type, tapp(.STRING))
 		case bool:
-			return try_unify(tc, type, tapp(.BOOL))
+			return try_unify(type, tapp(.BOOL))
 		case:
-			return try_unify(tc, type, tapp(.NIL))
+			return try_unify(type, tapp(.NIL))
 		}
 	case ^VariableExpr:
 		tc.current_token = e.token
 		found := resolve_type(tc, e.name.lexeme) // find typescheme in the context
 		ty := instantiate(tc, found) // instantiate the found scheme
-		return try_unify(tc, type, ty) // unify typevar with the found type
+		return try_unify(type, ty) // unify typevar with the found type
 	case ^FunctionExpr:
 		tc.current_token = e.token
 		params := e.params
@@ -1246,7 +1230,7 @@ check_type :: proc(
 		func_type := tapp(.FUNCTION, all_args)
 
 		// unify with expected type first
-		s1 := try_unify(tc, type, func_type) or_return
+		s1 := try_unify(type, func_type) or_return
 		apply_substitution(s1, tc.ctx)
 
 		// check body with params in scope
@@ -1276,7 +1260,7 @@ check_type :: proc(
 		apply_substitution(s1, tc.ctx)
 		if e.right == nil {
 			// seq evaluates to nil if there is no right side
-			sn := try_unify(tc, type, tapp(.NIL)) or_return
+			sn := try_unify(type, tapp(.NIL)) or_return
 			return combine_substitutions(sn, s1), nil
 		}
 		s2 := check_type(tc, e.right, apply_substitution(s1, type)) or_return // infer right with expected type
@@ -1315,7 +1299,7 @@ check_type :: proc(
 		}
 
 		s1 := check_type(tc, e.right, operand_type) or_return
-		sn := try_unify(tc, type, result_type) or_return
+		sn := try_unify(type, result_type) or_return
 		return combine_substitutions(sn, s1), nil
 	case ^UseExpr:
 		tc.current_token = e.token
@@ -1355,7 +1339,7 @@ check_type :: proc(
 				// value restriction)
 				gen: TypeScheme
 				if is_value(binding.initializer) {
-					gen = generalize(tc.ctx, inferred)
+					gen = generalize(tc, inferred)
 				} else {
 					gen = inferred
 				}
@@ -1365,7 +1349,7 @@ check_type :: proc(
 				bind_type(tc.ctx, name, beta)
 			}
 		}
-		sn := try_unify(tc, type, tapp(.NIL)) or_return // VarDeclExpr itself evaluates to nil
+		sn := try_unify(type, tapp(.NIL)) or_return // VarDeclExpr itself evaluates to nil
 		return combine_substitutions(sn, s), nil
 	case ^WhileExpr:
 		tc.current_token = e.token
@@ -1376,7 +1360,7 @@ check_type :: proc(
 		s2 := check_type(tc, e.body.expression, beta) or_return
 		apply_substitution(s2, tc.ctx)
 		pop_scope(tc)
-		sn := try_unify(tc, type, tapp(.NIL)) or_return
+		sn := try_unify(type, tapp(.NIL)) or_return
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	}
 
@@ -1586,8 +1570,7 @@ bind_type_to_module :: proc(
 		)
 	}
 
-	mod := cast(^TypeRecord)module
-	mod.fields[name] = type
+	unimplemented()
 }
 
 register_builtin_module :: proc(tc: ^TypeChecker, module: string) {
