@@ -1171,6 +1171,7 @@ interpret :: proc(
 				fmt.eprintln("-- typechecker begin")
 			}
 		}
+
 		// Use persistent type checker for REPL
 		if config.repl {
 			if !vm.type_arena_init {
@@ -1192,7 +1193,7 @@ interpret :: proc(
 				vm.type_checker = tc
 			}
 
-			_, tc_ok = typecheck_expr(vm.type_checker, expr)
+			_, tc_ok = typecheck_without_arena(vm.type_checker, expr)
 			context.allocator = prev_alloc
 		} else {
 			_, tc_ok = typecheck(expr)
