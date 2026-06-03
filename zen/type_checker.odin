@@ -72,10 +72,8 @@ TypeList :: struct {
 
 TypeRecord :: struct {
 	using base: TypeFunctionApplication,
-
-	// TODO: this should probably be a polymorphic type, avoided for now
-	// cuz its annoying in `unify`, should find a way to get this working later
-	fields:     map[string]Type,
+	record_id:  int,
+	fields:     map[string]TypeScheme,
 }
 
 TypeConstructor :: enum {
@@ -122,15 +120,6 @@ fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	return var
 }
 
-is_nullary :: proc(app: ^TypeFunctionApplication) -> bool {
-	return(
-		app.constructor == .NIL ||
-		app.constructor == .BOOL ||
-		app.constructor == .NUMBER ||
-		app.constructor == .STRING \
-	)
-}
-
 tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> ^TypeFunctionApplication {
 	switch constructor {
 	case .NIL:
@@ -173,7 +162,8 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> ^TypeFunctionA
 	case .RECORD:
 		t := new(TypeRecord)
 		t.constructor = .RECORD
-		t.fields = make(map[string]Type)
+		t.record_id = 0
+		t.fields = make(map[string]TypeScheme)
 		return cast(^TypeFunctionApplication)t
 	}
 
@@ -344,17 +334,7 @@ types_equal :: proc(a: Type, b: Type) -> bool {
 		case .RECORD:
 			r1 := cast(^TypeRecord)t1
 			r2 := cast(^TypeRecord)t2
-			if len(r1.fields) != len(r2.fields) {
-				return false
-			}
-
-			for k, _ in r1.fields {
-				_, ok := r2.fields[k]
-				if !ok {
-					return false
-				}
-			}
-			return true
+			return r1.record_id == r2.record_id
 		case .NIL, .BOOL, .NUMBER, .STRING:
 			return true
 		}
@@ -505,7 +485,8 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 			r := cast(^TypeRecord)t
 			new_rec := new(TypeRecord)
 			new_rec.constructor = .RECORD
-			new_rec.fields = make(map[string]Type)
+			new_rec.record_id = r.record_id
+			new_rec.fields = make(map[string]TypeScheme)
 			for name, scheme in r.fields {
 				new_rec.fields[name] = apply_substitution(subst, scheme)
 			}
@@ -815,28 +796,11 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		case .RECORD:
 			r1 := cast(^TypeRecord)t1
 			r2 := cast(^TypeRecord)t2
-
-			if len(r1.fields) != len(r2.fields) {
+			if r1.record_id != r2.record_id {
 				return nil, .MISMATCH
 			}
-
-
-			// two records must have unifying fields
-			// NOTE: for now the fields must have the same names as well;
-			// realistically they should only need to match on types, need to
-			// fix this eventually
-			for k, v in r1.fields {
-				if ok := k in r2.fields; !ok {
-					return nil, .MISMATCH
-				}
-
-				fst := apply_substitution(s, v)
-				snd := apply_substitution(s, r2.fields[k])
-				res := unify(fst, snd) or_return
-				s = combine_substitutions(s, res)
-			}
 		case .NIL, .BOOL, .NUMBER, .STRING:
-		// nullary, trivially unify
+		// nullary — trivially unify
 		}
 
 		when ODIN_DEBUG {
@@ -845,7 +809,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 					"-- unify %v with %v %s",
 					type_string(a, true),
 					type_string(b, true),
-					"trivially" if is_nullary(t1) else fmt.tprintf("through %v", subst_string(s, true)),
+					"trivially" if t1.constructor == .NIL || t1.constructor == .BOOL || t1.constructor == .NUMBER || t1.constructor == .STRING else fmt.tprintf("through %v", subst_string(s, true)),
 				)
 			}
 		}
