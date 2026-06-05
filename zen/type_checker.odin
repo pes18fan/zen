@@ -113,6 +113,22 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionAp
 	fmt.panicf("Internal compiler error: invalid type constructor %v", constructor)
 }
 
+// not necessary for the type checker as it just uses an arena; but the
+// parser needs it because it allocates types for annotations
+free_type :: proc(type: ^Type) {
+	switch t in type {
+	case TypeVariable: // nothing
+	case TypeFunctionApplication:
+		switch t.constructor {
+		case .NUMBER, .STRING, .NIL, .BOOL: // nothing to free
+		case .FUNCTION, .LIST, .RECORD:
+			delete(t.args)
+		}
+	case TypeAny: // nothing
+	case TypeNever: // nothing
+	}
+}
+
 type_any :: TypeAny{}
 type_never :: TypeNever{}
 
@@ -1026,20 +1042,11 @@ check_type :: proc(
 			// TODO: currently all params go to fresh vars, use concrete
 			// type here for type annotations when they're here for fn args
 			for param, idx in params {
-				if type, ok := param.type.(Token); ok {
-					param_types[idx] = annotation_to_type(tc, type.lexeme) or_return
-				} else {
-					param_types[idx] = fresh(tc)
-				}
+				param_types[idx] = param.type.? or_else fresh(tc)
 			}
 		}
 
-		ret_type: Type
-		if rt, ok := return_type.(Token); ok {
-			ret_type = annotation_to_type(tc, rt.lexeme) or_return
-		} else {
-			ret_type = fresh(tc)
-		}
+		ret_type := return_type.? or_else fresh(tc)
 
 		// last arg is return type
 		all_args := make([]Type, len(param_types) + 1)
@@ -1132,12 +1139,7 @@ check_type :: proc(
 		tc.current_token = e.token
 		s := make(Substitution)
 		for binding in e.bindings {
-			beta: Type
-			if binding.type != nil {
-				beta = annotation_to_type(tc, binding.type.?.lexeme) or_return
-			} else {
-				beta = fresh(tc)
-			}
+			beta := binding.type.? or_else fresh(tc)
 
 			if binding.initializer != nil {
 				s1 := check_type(tc, binding.initializer, beta) or_return
@@ -1204,6 +1206,7 @@ type_string :: proc(scheme: TypeScheme, $debugging: bool) -> string {
 		next      = 0,
 		debugging = debugging,
 	}
+	defer delete(ctx.names)
 
 	return type_string_with_ctx(&ctx, scheme)
 }
@@ -1228,10 +1231,10 @@ type_string_inner :: proc(ctx: ^TypePrintCtx, type: Type) -> string {
 		return type_var_string(ctx, t)
 	case TypeFunctionApplication:
 		if t.constructor == .FUNCTION {
-			sb := strings.builder_make()
 			assert(len(t.args) > 0, "cannot have less than one type arg in a function type")
+			sb := strings.builder_make()
+			defer strings.builder_destroy(&sb)
 
-			fmt.sbprintf(&sb, "%s ", type_constructor_string(t.constructor))
 			param_count := len(t.args) - 1
 			fmt.sbprint(&sb, "(")
 			for i in 0 ..< param_count {
@@ -1245,6 +1248,7 @@ type_string_inner :: proc(ctx: ^TypePrintCtx, type: Type) -> string {
 			return strings.to_string(sb)
 		} else {
 			sb := strings.builder_make()
+			defer strings.builder_destroy(&sb)
 			fmt.sbprint(&sb, type_constructor_string(t.constructor))
 
 			for arg in t.args {
@@ -1276,6 +1280,7 @@ type_string_with_ctx :: proc(ctx: ^TypePrintCtx, scheme: TypeScheme) -> string {
 		}
 
 		bound_names := strings.builder_make()
+		defer strings.builder_destroy(&bound_names)
 
 		for bound in s.bound {
 			name := type_var_string(ctx, bound)
