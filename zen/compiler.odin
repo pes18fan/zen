@@ -18,7 +18,6 @@ U8_COUNT :: 256
 /* Number of sixteen bit unsigned integers in existence. */
 U16_COUNT :: 65536
 
-
 /* Struct holding state of codegen. */
 Codegen :: struct {
 	current_compiler: ^Compiler,
@@ -263,11 +262,9 @@ emit_return :: proc(cg: ^Codegen) {
 	if cg.current_compiler.type == .INITIALIZER {
 		emit_opcode(cg, .OP_GET_LOCAL)
 		emit_byte(cg, 0) /* Since the receiver is always stored in slot zero. */
-	} else {
-		// emit_opcode(cg, .OP_NIL)
 	}
 
-	if config.repl {
+	if config.repl && cg.current_compiler.type == .SCRIPT {
 		emit_opcode(cg, .OP_PRINT_REPL)
 	}
 
@@ -376,7 +373,6 @@ patch_breaks :: proc(cg: ^Codegen) -> ErrorMessage {
 }
 
 /* Check if two idents are equal. */
-@(private = "file")
 identifiers_equal :: proc(a: Token, b: Token) -> bool {
 	if len(a.lexeme) != len(b.lexeme) {return false}
 	if a.lexeme == b.lexeme {
@@ -402,7 +398,7 @@ synthetic_token :: proc(text: string) -> Token {
 Resolve a local name binding from the Compiler struct.
 */
 @(private = "file")
-resolve_local :: proc(cg: ^Codegen, compiler: ^Compiler, name: Token) -> (int, Maybe(string)) {
+resolve_local :: proc(cg: ^Codegen, compiler: ^Compiler, name: Token) -> (int, ErrorMessage) {
 	// Look for the name in the local scopes of the current function.
 	for i := compiler.local_count - 1; i >= 0; i -= 1 {
 		local := &compiler.locals[i]
@@ -420,7 +416,7 @@ resolve_local :: proc(cg: ^Codegen, compiler: ^Compiler, name: Token) -> (int, M
 
 /* 
 Add a local name binding.
-Errors if there are too many local variables in the scope already.
+Errors if there are too many local variables in the function already.
 */
 @(private = "file")
 @(require_results)

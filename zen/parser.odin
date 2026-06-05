@@ -139,12 +139,8 @@ ClassExpr :: struct {
 }
 
 UseExpr :: struct {
-	token:    Token,
-	path:     Token,
-
-	// filled in by the semantic analyzer
-	type:     Maybe(ModuleType),
-	mod_name: Maybe(string),
+	token: Token,
+	path:  Token,
 }
 
 FunctionParam :: struct {
@@ -583,6 +579,9 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 			type = tapp(.LIST, {inner_type})
 		case "Any":
 			type = type_any
+		case:
+			parser_error(p, parser_previous(p), "Invalid type annotation.")
+			return {}
 		}
 
 		return type

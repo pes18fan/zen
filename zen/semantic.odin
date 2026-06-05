@@ -381,20 +381,11 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 	return true
 }
 
-ResolutionInfo :: struct {}
-
 // Two-pass semantic analyzer
 @(require_results)
-analyze :: proc(
-	gc: ^GC,
-	expr: Expr,
-	globals: ^Table,
-) -> (
-	resolution: map[uintptr]ResolutionInfo,
-	success: bool,
-) {
+analyze :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (success: bool) {
 	if expr == nil {
-		return nil, true
+		return true
 	}
 
 	// Add native function names to the globals table
@@ -416,7 +407,7 @@ analyze :: proc(
 	// Pass 2: Full semantic analysis
 	ok := _analyze(&sm, expr)
 	if !ok {
-		return nil, false
+		return false
 	}
-	return nil, true
+	return true
 }
