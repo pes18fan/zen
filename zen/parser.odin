@@ -595,8 +595,7 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 		if !parser_check(p, .RPAREN) {
 			for {
 				append(&arg_types, parse_type_annotation(p))
-
-				if !parser_match(p, .COMMA) {break}
+				parser_match(p, .COMMA) or_break
 			}
 		}
 
@@ -643,7 +642,7 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		}
 		append(&bindings, binding)
 
-		if !parser_match(p, .COMMA) {break}
+		parser_match(p, .COMMA) or_break
 	}
 	expr.bindings = bindings[:]
 	return expr
@@ -832,7 +831,7 @@ parse_super :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		if !parser_check(p, .RPAREN) {
 			for {
 				append(&method_args, parse_expression(p))
-				if !parser_match(p, .COMMA) {break}
+				parser_match(p, .COMMA) or_break
 			}
 		}
 		super_expr.method_args = method_args[:]
@@ -908,7 +907,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 				param.type = parse_type_annotation(p)
 			}
 			append(&params, param)
-			if !parser_match(p, .COMMA) {break}
+			parser_match(p, .COMMA) or_break
 		}
 	}
 	lambda.params = params[:]
