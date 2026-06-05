@@ -395,7 +395,6 @@ identifiers_equal :: proc(a: Token, b: Token) -> bool {
 
 /* Create a synthetic token i.e. a token that doesn't actually exist in the
  * source code. Used for `super` and `this`, to create a variable out of them. */
-@(private = "file")
 synthetic_token :: proc(text: string) -> Token {
 	return Token{lexeme = text}
 }
@@ -1157,7 +1156,7 @@ compile_for_in_expression :: proc(cg: ^Codegen, e: ^ForInExpr) -> bool {
 	loop_start := len(current_chunk(cg).code)
 	exit_jump := -1
 
-	// Push idx and iter for ITERATE_NEXT.
+	// Push idx and iter for ITERATE.
 	emit_opcode(cg, .OP_GET_LOCAL)
 	emit_byte(cg, byte(idx_slot))
 
@@ -1168,7 +1167,7 @@ compile_for_in_expression :: proc(cg: ^Codegen, e: ^ForInExpr) -> bool {
 	// If true, pushs (iter[idx], idx+1, true) or false.
 	emit_opcode(cg, .OP_ITERATE)
 
-	// Jump out of the loop if ITERATE_NEXT said false.
+	// Jump out of the loop if ITERATE said false.
 	exit_jump = emit_jump(cg, .OP_JUMP_IF_FALSE)
 	emit_pop(cg) // Condition.
 
@@ -1652,9 +1651,20 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		emit_opcode(cg, .OP_SUBSCRIPT)
 	case ^SubscriptSetExpr:
 		cg.current_token = e.token
-		compile_expression(cg, e.receiver) or_return
-		compile_expression(cg, e.index) or_return
-		compile_expression(cg, e.value) or_return
+		receiver := e.receiver
+		index := e.index
+		value := e.value
+
+		if r, ok := receiver.(^VariableExpr); ok {
+			if binding_exists_and_is_final(cg, r.name) {
+				codegen_error(cg, "Can only set a final variable once.")
+				return false
+			}
+		}
+
+		compile_expression(cg, receiver) or_return
+		compile_expression(cg, index) or_return
+		compile_expression(cg, value) or_return
 		emit_opcode(cg, .OP_SUBSCRIPT_SET)
 	case ^SuperExpr:
 		cg.current_token = e.token
