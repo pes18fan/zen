@@ -1144,13 +1144,13 @@ interpret :: proc(
 		}
 	}
 
-	SEMANTIC_ANALYZE :: false
+	SEMANTIC_ANALYZE :: true
 	when SEMANTIC_ANALYZE {
-		resolution, sm_ok := analyze(gc, expr, &vm.compiler_globals)
-		defer delete(resolution)
+		cmp, sm_ok := analyze(gc, expr, &vm.compiler_globals)
 		if !sm_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
+		defer destroy_semantic_compiler(cmp)
 	}
 
 	/* Time semantic analysis. */
