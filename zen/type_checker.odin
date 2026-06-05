@@ -870,7 +870,6 @@ check_type :: proc(
 			apply_substitution(s1, tc.ctx)
 			s = combine_substitutions(s1, s)
 		}
-
 		return s, nil
 	case ^ClassExpr:
 		unimplemented()
@@ -969,7 +968,6 @@ check_type :: proc(
 		tc.current_token = e.token
 		if len(e.elements) == 0 {
 			s := try_unify(type, tapp(.LIST, {fresh(tc)})) or_return
-			apply_substitution(s, tc.ctx)
 			return s, nil
 		}
 
@@ -1027,8 +1025,8 @@ check_type :: proc(
 	case ^VariableExpr:
 		tc.current_token = e.token
 		found := resolve_type(tc, e.name.lexeme) // find typescheme in the context
-		ty := instantiate(tc, found) // instantiate the found scheme
-		return try_unify(type, ty) // unify typevar with the found type
+		found_t := instantiate(tc, found) // instantiate the found scheme
+		return try_unify(type, found_t) // unify typevar with the found type
 	case ^FunctionExpr:
 		tc.current_token = e.token
 		params := e.params
@@ -1124,17 +1122,7 @@ check_type :: proc(
 		sn := try_unify(type, must_unify_with) or_return
 		return combine_substitutions(sn, s1), nil
 	case ^UseExpr:
-		tc.current_token = e.token
-		if e.mod_name == nil || e.type == nil {
-			panic("Internal compiler error: Module name or type not resolved by semantic analyzer")
-		}
-
-		switch e.type {
-		case .BUILTIN:
-			register_builtin_module(tc, e.mod_name.?)
-		case .USER:
-			unimplemented()
-		}
+		unimplemented()
 	case ^VarDeclExpr:
 		tc.current_token = e.token
 		s := make(Substitution)
@@ -1212,7 +1200,7 @@ type_string :: proc(scheme: TypeScheme, $debugging: bool) -> string {
 }
 
 type_var_string :: proc(ctx: ^TypePrintCtx, t: TypeVariable) -> string {
-	when ODIN_DEBUG {
+	if ctx.debugging {
 		return fmt.tprintf("?%d", t.idx)
 	}
 
