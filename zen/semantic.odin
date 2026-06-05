@@ -2,56 +2,6 @@ package zen
 
 import "core:fmt"
 import "core:os"
-import "core:path/filepath"
-import "core:slice"
-import "core:strings"
-
-// TODO: this is an absolute mess of AI slop, clean it up. Use a simple symbol
-// table to collect all variable, class and function declarations, and pass
-// that onto the compiler
-
-/* ResolutionKind indicates how a variable reference is resolved:
-   LOCAL: a local variable in the current or an enclosing scope of the
-   current function. 
-   UPVALUE: captured from an enclosing function's scope.
-   GLOBAL: a top-level variable in the program's global table. */
-ResolutionKind :: enum {
-	LOCAL,
-	UPVALUE,
-	GLOBAL,
-}
-
-/* ResolutionInfo is the per-expression entry stored in the resolution map
-that the codegen reads during bytecode emission. For LOCAL and GLOBAL
-variables, index is the slot/constant index. For UPVALUE variables, index
-is the upvalue index in the current function's upvalue table, and
-upv_slot / upv_is_local are the parameters that codegen passes to its own
-add_upvalue call to create the upvalue entry in the runtime compiler. */
-ResolutionInfo :: struct {
-	kind:         ResolutionKind,
-	index:        int, // local slot, upvalue index, or -1 for globals
-	is_final:     bool,
-	name:         string,
-	upv_slot:     int,
-	upv_is_local: bool,
-}
-
-/* An entry in the current semantic compiler's local variable array.
-Mirrors the `Compiler.local` struct in compiler.odin but lives only
-for the duration of the analysis pass. */
-SemanticLocal :: struct {
-	name:        Token,
-	depth:       int,
-	is_final:    bool,
-	is_captured: bool,
-}
-
-/* An entry in the current semantic compiler's upvalue array.
-Each upvalue represents a variable captured from an enclosing scope. */
-SemanticUpvalue :: struct {
-	index:    int,
-	is_local: bool,
-}
 
 /* SemanticCompiler mirrors the Compiler struct from compiler.odin, tracking
 the lexical scope stack, locals, and upvalues for one function scope during
@@ -59,14 +9,10 @@ the analysis pass. The name resolution results are ultimately stored in
 the resolution map, but intermediate per-function state (locals, upvalues)
 is maintained here in parallel with codegen's Compiler. */
 SemanticCompiler :: struct {
-	enclosing:     ^SemanticCompiler,
-	func_type:     FunctionType,
-	loop_depth:    int,
-	scope_depth:   int,
-	local_count:   int,
-	locals:        [U8_COUNT]SemanticLocal,
-	upvalue_count: int,
-	upvalues:      [U8_COUNT]SemanticUpvalue,
+	enclosing:   ^SemanticCompiler,
+	func_type:   FunctionType,
+	loop_depth:  int,
+	scope_depth: int,
 }
 
 /* Main state for the semantic analysis pass. Holds the current scope,
@@ -79,7 +25,6 @@ Semantic :: struct {
 	current_token:    Token,
 	had_error:        bool,
 	pipeline_active:  bool,
-	resolution:       map[uintptr]ResolutionInfo,
 	gc:               ^GC,
 	globals:          ^Table,
 }
@@ -90,23 +35,10 @@ at slot 0 ("this" for methods/initializers) to match the codegen's
 slot layout. */
 init_semantic_compiler :: proc(sm: ^Semantic, c: ^SemanticCompiler, type: FunctionType) {
 	c^ = SemanticCompiler {
-		scope_depth   = 0,
-		loop_depth    = 0,
-		local_count   = 0,
-		upvalue_count = 0,
-		enclosing     = sm.current_compiler,
-		func_type     = type,
-	}
-
-	local := &c.locals[c.local_count]
-	c.local_count += 1
-	local.depth = 0
-	local.is_captured = false
-
-	if type == .METHOD || type == .INITIALIZER {
-		local.name.lexeme = "this"
-	} else {
-		local.name.lexeme = ""
+		scope_depth = 0,
+		loop_depth  = 0,
+		enclosing   = sm.current_compiler,
+		func_type   = type,
 	}
 
 	sm.current_compiler = c
@@ -123,7 +55,6 @@ init_semantic :: proc(gc: ^GC, globals: ^Table) -> Semantic {
 		current_class = nil,
 		had_error = false,
 		pipeline_active = false,
-		resolution = make(map[uintptr]ResolutionInfo),
 		gc = gc,
 		globals = globals,
 	}
@@ -157,225 +88,8 @@ OP_POP or OP_CLOSE_UPVALUE bytecodes during its own end_scope pass.)
 */
 @(private = "file")
 end_semantic_scope :: proc(sm: ^Semantic) {
-	curr := sm.current_compiler
-	curr.scope_depth -= 1
-
-	for curr.local_count > 0 && curr.locals[curr.local_count - 1].depth > curr.scope_depth {
-		curr.local_count -= 1
-	}
+	sm.current_compiler.scope_depth -= 1
 }
-
-// === VARIABLE DECLARATION ===
-
-/* 
-Declare a name binding.
-Errors if the variable of that name already exists in the scope.
-*/
-@(private = "file")
-@(require_results)
-declare_variable :: proc(sm: ^Semantic, name: Token, is_final: bool) -> bool {
-	comp := sm.current_compiler
-
-	if comp.scope_depth == 0 {
-		// Global scope.
-		// NOTE: Duplicate declarations at global scope are currently allowed for
-		// non-final variables. To disallow them, check table_get(sm.globals, ...)
-		// for any existing binding and error with
-		// "A variable with name '...' already exists in this scope."
-		global_o_str := copy_string(sm.gc, name.lexeme)
-
-		if value, ok := table_get(sm.globals, global_o_str); ok && !is_nil(value) {
-			if values_equal(value, bool_val(true)) {
-				msg := "Cannot redefine a final variable as normal variable."
-				if is_final {
-					msg = "Cannot redefine a final variable."
-				}
-				semantic_error(sm, msg)
-				return false
-			} else if is_final {
-				semantic_error(sm, "Cannot redefine a variable as final variable.")
-				return false
-			}
-		} else {
-			table_set(sm.globals, global_o_str, bool_val(is_final))
-		}
-
-		return true
-	}
-
-	// Local scope: check for duplicates
-	for i := comp.local_count - 1; i >= 0; i -= 1 {
-		local := &comp.locals[i]
-		if local.depth != -1 && local.depth < comp.scope_depth {
-			break
-		}
-
-		if identifiers_equal(name, local.name) {
-			semantic_error(sm, "A variable with this name in this scope already exists.")
-			return false
-		}
-	}
-
-	if comp.local_count == U8_COUNT {
-		semantic_error(sm, "Too many local variables in function.")
-		return false
-	}
-
-	local := &comp.locals[comp.local_count]
-	comp.local_count += 1
-	local.name = name
-	local.depth = -1
-	local.is_final = is_final
-	local.is_captured = false
-	return true
-}
-
-/* 
-Add a local name binding.
-Errors if there are too many local variables in the scope already.
-*/
-@(private = "file")
-@(require_results)
-add_local :: proc(sm: ^Semantic, name: Token, is_final: bool) -> bool {
-	comp := sm.current_compiler
-
-	if comp.local_count == U8_COUNT {
-		semantic_error(sm, "Too many local variables in function.")
-		return false
-	}
-
-	local := &comp.locals[comp.local_count]
-	comp.local_count += 1
-	local.name = name
-	local.depth = -1
-	local.is_final = is_final
-	local.is_captured = false
-	return true
-}
-
-@(private = "file")
-mark_initialized :: proc(sm: ^Semantic) {
-	if sm.current_compiler.scope_depth == 0 {return}
-	sm.current_compiler.locals[sm.current_compiler.local_count - 1].depth =
-		sm.current_compiler.scope_depth
-}
-
-// === LOCAL RESOLUTION ===
-
-/* Resolve a local name binding from the SemanticCompiler struct. */
-@(private = "file")
-@(require_results)
-resolve_local :: proc(
-	sm: ^Semantic,
-	compiler: ^SemanticCompiler,
-	name: Token,
-) -> (
-	int,
-	ErrorMessage,
-) {
-	for i := compiler.local_count - 1; i >= 0; i -= 1 {
-		local := &compiler.locals[i]
-		if identifiers_equal(name, local.name) {
-			if local.depth == -1 {
-				return -1, "Cannot read local variable in its own initializer."
-			}
-			return i, nil
-		}
-	}
-
-	return -1, nil
-}
-
-// === UPVALUE MANAGEMENT ===
-
-/* Add an upvalue to the function or return it if it already exists. */
-@(private = "file")
-@(require_results)
-add_upvalue :: proc(
-	sm: ^Semantic,
-	compiler: ^SemanticCompiler,
-	index: int,
-	is_local: bool,
-) -> (
-	int,
-	ErrorMessage,
-) {
-	upvalue_count := compiler.upvalue_count
-
-	for i in 0 ..< upvalue_count {
-		upvalue := &compiler.upvalues[i]
-		if upvalue.index == index && upvalue.is_local == is_local {
-			return i, nil
-		}
-	}
-
-	if upvalue_count == U8_COUNT {
-		return 0, "Too many closure variables in function."
-	}
-
-	compiler.upvalues[upvalue_count].is_local = is_local
-	compiler.upvalues[upvalue_count].index = index
-	defer compiler.upvalue_count += 1
-	return compiler.upvalue_count, nil
-}
-
-/*
-Find an upvalue in the function's local scope and scopes above it, and return
-the index to its name in the constant table. Also return whether the upvalue was
-initially declared with `val` or `var`.
-*/
-@(private = "file")
-@(require_results)
-resolve_upvalue :: proc(
-	sm: ^Semantic,
-	compiler: ^SemanticCompiler,
-	name: Token,
-) -> (
-	index: int,
-	is_final: bool,
-	error: ErrorMessage,
-) {
-	/* Base case 1: We reached the end of the compiler stack, so the name is probably in the
-	global scope. */
-	if compiler.enclosing == nil {
-		return -1, false, nil
-	}
-
-	/* Look for the name in the enclosing function's local scope. 
-	Base case 2: If we find the name there, return it. */
-	local := resolve_local(sm, compiler.enclosing, name) or_return
-	if local != -1 {
-		// Mark the local as captured and see if its a `var` or `val`.
-		compiler.enclosing.locals[local].is_captured = true
-		final := compiler.enclosing.locals[local].is_final
-		/* is_local is true since we're capturing a local variable from the
-		immediately enclosing function. */
-		idx, err := add_upvalue(sm, compiler, local, is_local = true)
-		return idx, final, err
-	}
-
-	/* Recursively look for an upvalue in the enclosing function. */
-	upvalue, final := resolve_upvalue(sm, compiler.enclosing, name) or_return
-	if upvalue != -1 {
-		/* Once the local variable is found in the most deeply nested recursive call, 
-		which is the outermost function, capture it as an upvalue, add it to the 
-		current (outermost) function's upvalue list and return the index. That 
-		returns to the inner function's declaration, which captures the upvalue
-		from that surrounding function from where we just returned, and so on, 
-		until we eventually return to the function declaration where the
-		identifier we are looking for appears. */
-		/* The boolean is_local flag is false since here, we're capturing an
-		upvalue which captures either a local variable of its surrounding
-		function or another upvalue. */
-		idx, err := add_upvalue(sm, compiler, upvalue, is_local = false)
-		return idx, final, err
-	}
-
-	// Nope, didn't find anything.
-	return -1, false, nil
-}
-
-// === FORWARD REFERENCE COLLECTION ===
 
 /* Register names of top-level function declarations and named lambdas in the
 globals table, to allow mutual recursion. Native function names are also
@@ -426,16 +140,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 
 	switch e in expr {
 	case ^AssignExpr:
-		sm.current_token = e.token
-		// Resolve the assigned variable
-		resolved := try2(sm, resolve_variable(sm, e.name)) or_return
-		if resolved.is_final {
-			semantic_error(sm, "Can only set a final variable once.")
-			return false
-		}
-
-		_analyze(sm, e.value) or_return
-		sm.resolution[uintptr(e)] = resolved
+		unimplemented()
 	case ^BinaryExpr:
 		sm.current_token = e.token
 		_analyze(sm, e.left) or_return
@@ -470,27 +175,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			_analyze(sm, arg) or_return
 		}
 	case ^ClassExpr:
-		sm.current_token = e.token
-
-		// Register the class name as a variable, then immediately mark it
-		// initialized so methods in the body can reference the class name.
-		declare_variable(sm, e.name, is_final = false) or_return
-		mark_initialized(sm)
-
-		class_compiler: ClassCompiler
-		class_compiler.has_superclass = false
-		class_compiler.enclosing = sm.current_class
-		sm.current_class = &class_compiler
-
-		if e.superclass != nil {
-			class_compiler.has_superclass = true
-		}
-
-		for method in e.methods {
-			_analyze(sm, method) or_return
-		}
-
-		sm.current_class = sm.current_class.enclosing
+		unimplemented()
 	case ^ContinueExpr:
 		sm.current_token = e.token
 		if sm.current_compiler.loop_depth == 0 {
@@ -526,37 +211,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 
 		end_semantic_scope(sm)
 	case ^ForInExpr:
-		sm.current_token = e.token
-
-		begin_semantic_scope(sm)
-
-		// Declare the loop variable as final
-		declare_variable(sm, e.var_name, is_final = true) or_return
-		mark_initialized(sm)
-
-		_analyze(sm, e.iterable) or_return
-
-		// Add hidden __iter variable (not accessible by user code)
-		add_local(sm, synthetic_token("__iter"), is_final = true) or_return
-		mark_initialized(sm)
-
-		// Add hidden __idx variable
-		add_local(sm, synthetic_token("__idx"), is_final = true) or_return
-		mark_initialized(sm)
-
-		loop_depth := 0
-		if sm.current_compiler != nil {
-			loop_depth = sm.current_compiler.loop_depth
-			sm.current_compiler.loop_depth += 1
-		}
-
-		_analyze(sm, e.body) or_return
-
-		if sm.current_compiler != nil {
-			sm.current_compiler.loop_depth = loop_depth
-		}
-
-		end_semantic_scope(sm)
+		unimplemented()
 	case ^GetExpr:
 		sm.current_token = e.token
 		_analyze(sm, e.receiver) or_return
@@ -577,32 +232,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			return false
 		}
 	case ^FunctionExpr:
-		sm.current_token = e.token
-
-		if len(e.params) > U8_MAX {
-			semantic_error(sm, "Cannot have more than 255 parameters.")
-			return false
-		}
-
-		c: SemanticCompiler
-		if sm.current_class != nil &&
-		   sm.current_compiler.scope_depth == 0 &&
-		   e.bound_to != nil &&
-		   e.bound_to.?.lexeme == "init" {
-			init_semantic_compiler(sm, &c, .INITIALIZER)
-		} else {
-			init_semantic_compiler(sm, &c, .LAMBDA)
-		}
-		begin_semantic_scope(sm)
-
-		for param in e.params {
-			declare_variable(sm, param.token, is_final = false) or_return
-			mark_initialized(sm)
-		}
-
-		_analyze(sm, e.body) or_return
-
-		end_semantic_compiler(sm)
+		unimplemented()
 	case ^ListExpr:
 		sm.current_token = e.token
 
@@ -662,38 +292,13 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			}
 		}
 	case ^SetExpr:
-		sm.current_token = e.token
-
-		// If the receiver is a VariableExpr, check that it's not a final binding
-		if r, ok := e.receiver.(^VariableExpr); ok {
-			sm.current_token = r.token
-			resolved := try2(sm, resolve_variable(sm, r.name)) or_return
-			if resolved.is_final {
-				semantic_error(sm, "Can only set a final variable once.")
-				return false
-			}
-		}
-
-		_analyze(sm, e.receiver) or_return
-		_analyze(sm, e.value) or_return
+		unimplemented()
 	case ^SubscriptExpr:
 		sm.current_token = e.token
 		_analyze(sm, e.receiver) or_return
 		_analyze(sm, e.index) or_return
 	case ^SubscriptSetExpr:
-		sm.current_token = e.token
-		_analyze(sm, e.receiver) or_return
-		if r, ok := e.receiver.(^VariableExpr); ok {
-			sm.current_token = r.token
-			resolved := try2(sm, resolve_variable(sm, r.name)) or_return
-			if resolved.is_final {
-				semantic_error(sm, "Can only set a final variable once.")
-				return false
-			}
-		}
-
-		_analyze(sm, e.index) or_return
-		_analyze(sm, e.value) or_return
+		unimplemented()
 	case ^SuperExpr:
 		sm.current_token = e.token
 
@@ -733,79 +338,11 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		sm.current_token = e.token
 		_analyze(sm, e.right) or_return
 	case ^UseExpr:
-		sm.current_token = e.token
-
-		// Pre-register the module name in the globals table so it can be
-		// resolved by subsequent variable references.
-		path_str := e.path.lexeme
-		path := strings.trim(path_str[1:len(path_str) - 1], " ")
-
-		builtin_found := slice.contains(STD_MODULES[:], path)
-
-		mod_name: string
-		if builtin_found {
-			mod_name = path
-			e.type = .BUILTIN
-		} else {
-			abs_path, err := filepath.join(
-				[]string{config.__dirname, path},
-				context.temp_allocator,
-			)
-			if err != nil {
-				semantic_error(
-					sm,
-					fmt.tprintf("Error when declaring module: %s", os.error_string(err)),
-				)
-				return false
-			}
-
-			if !os.exists(abs_path) {
-				semantic_error(sm, fmt.tprintf("Module '%s' not found.", abs_path))
-				return false
-			}
-			mod_name = filepath.short_stem(path)
-			e.type = .USER
-		}
-		e.mod_name = mod_name
-
-		declare_variable(sm, synthetic_token(mod_name), is_final = true) or_return
-		mark_initialized(sm)
+		unimplemented()
 	case ^VariableExpr:
-		sm.current_token = e.token
-		resolved := try2(sm, resolve_variable(sm, e.name)) or_return
-		sm.resolution[uintptr(e)] = resolved
+		unimplemented()
 	case ^VarDeclExpr:
-		sm.current_token = e.token
-
-		for binding in e.bindings {
-			sm.current_token = binding.name
-			if binding.initializer == nil {
-				if e.is_final {
-					semantic_error(sm, "Final variables must be initialized.")
-					return false
-				}
-			}
-
-			declare_variable(sm, binding.name, e.is_final) or_return
-
-			if binding.initializer != nil {
-				// Allow anonymous functions to recurse by referring to the name
-				// they've been bound to.
-				if _, ok := binding.initializer.(^FunctionExpr); ok {
-					mark_initialized(sm)
-				}
-
-				_analyze(sm, binding.initializer) or_return
-
-				if _, ok := binding.initializer.(^FunctionExpr); !ok {
-					mark_initialized(sm)
-				}
-				// NOTE: Use-before-initialization at global scope is currently
-				// not checked. To add it, defer the analysis of initializers
-				// that reference their own binding and error with
-				// "Cannot read local variable in its own initializer."
-			}
-		}
+		unimplemented()
 	case ^WhileExpr:
 		sm.current_token = e.token
 
@@ -826,66 +363,7 @@ _analyze :: proc(sm: ^Semantic, expr: Expr) -> bool {
 	return true
 }
 
-/* 
-Resolve a variable by walking the scope chain and checking the globals table.
-Returns ResolutionInfo or an error message.
-The resolution order is: local -> upvalue -> global.
-For upvalues, the upv_slot/upv_is_local fields store the parameters that
-would be passed to add_upvalue in the codegen phase.
-*/
-@(private = "file")
-@(require_results)
-resolve_variable :: proc(sm: ^Semantic, name: Token) -> (info: ResolutionInfo, err: ErrorMessage) {
-	comp := sm.current_compiler
-
-	// Check locals of the current function
-	local, resolve_err := resolve_local(sm, comp, name)
-	if resolve_err != nil {
-		return {}, resolve_err
-	}
-	if local != -1 {
-		return ResolutionInfo {
-				kind = .LOCAL,
-				index = local,
-				is_final = comp.locals[local].is_final,
-				name = name.lexeme,
-			},
-			nil
-	}
-
-	// Check upvalues (walks enclosing functions recursively)
-	// After this call, comp.upvalues will have the newly added upvalue
-	// with its .index and .is_local fields set correctly.
-	upvalue, final, up_err := resolve_upvalue(sm, comp, name)
-	if up_err != nil {
-		return {}, up_err
-	}
-	if upvalue != -1 {
-		return ResolutionInfo {
-				kind = .UPVALUE,
-				index = upvalue,
-				is_final = final,
-				name = name.lexeme,
-				upv_slot = comp.upvalues[upvalue].index,
-				upv_is_local = comp.upvalues[upvalue].is_local,
-			},
-			nil
-	}
-
-	// Not found in local scopes or upvalues. Check globals.
-	global_o_str := copy_string(sm.gc, name.lexeme)
-	if _, exists := table_get(sm.globals, global_o_str); exists {
-		is_final := false
-		if v, ok := table_get(sm.globals, global_o_str); ok {
-			is_final = !is_nil(v) && values_equal(v, bool_val(true))
-		}
-
-		return ResolutionInfo{kind = .GLOBAL, index = -1, is_final = is_final, name = name.lexeme},
-			nil
-	}
-
-	return {}, fmt.tprintf("Undefined variable '%s'.", name.lexeme)
-}
+ResolutionInfo :: struct {}
 
 // Two-pass semantic analyzer
 @(require_results)
@@ -920,8 +398,7 @@ analyze :: proc(
 	// Pass 2: Full semantic analysis
 	ok := _analyze(&sm, expr)
 	if !ok {
-		if sm.resolution != nil {delete(sm.resolution)}
 		return nil, false
 	}
-	return sm.resolution, true
+	return nil, true
 }
