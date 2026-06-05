@@ -1144,12 +1144,13 @@ interpret :: proc(
 		}
 	}
 
-	// Semantic analysis: collect forward refs for mutual recursion,
-	// validate scoping rules, and produce a resolution map for codegen.
-	resolution, sm_ok := analyze(gc, expr, &vm.compiler_globals)
-	defer delete(resolution)
-	if !sm_ok {
-		return .INTERPRET_COMPILE_ERROR
+	SEMANTIC_ANALYZE :: false
+	when SEMANTIC_ANALYZE {
+		resolution, sm_ok := analyze(gc, expr, &vm.compiler_globals)
+		defer delete(resolution)
+		if !sm_ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
 	}
 
 	/* Time semantic analysis. */
@@ -1160,7 +1161,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	TYPE_CHECK :: true
+	TYPE_CHECK :: false
 
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
@@ -1222,7 +1223,8 @@ interpret :: proc(
 	// remove instructions that cancel each other out (e.g. in push -> pop -> push,
 	// keep just the last push)
 
-	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals, resolution)
+	collect_globals(&vm.compiler_globals, gc, expr)
+	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
