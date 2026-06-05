@@ -82,7 +82,9 @@ Local :: struct {
 	/* A loop variable is a variable used for operation of a loop itself.
      * In the case of a C-style for loop it is the iteration variable only,
      * and in case of for-in loops it is the iteration variable, and the
-     * hidden iterator and index variables. */
+     * hidden iterator and index variables.
+     * Loop variables are special because they are not discarded on continue
+     * expressions, and always closed over by any closures within the loop body. */
 	is_loop_variable: bool,
 }
 
@@ -349,7 +351,11 @@ end_loop :: proc(cg: ^Codegen) -> ErrorMessage {
 	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
 
 	assert(cg.current_compiler.loop_count > 0, "number of loops should not be less than zero")
-	patch_breaks(cg) or_return
+	err := patch_breaks(cg)
+	if err != nil {
+		delete(loop.breaks)
+		return err
+	}
 	cg.current_compiler.loop_count -= 1
 
 	/* Remove all the break statements that were in the loop we just ended. */
@@ -398,20 +404,28 @@ synthetic_token :: proc(text: string) -> Token {
 Resolve a local name binding from the Compiler struct.
 */
 @(private = "file")
-resolve_local :: proc(cg: ^Codegen, compiler: ^Compiler, name: Token) -> (int, ErrorMessage) {
+resolve_local :: proc(
+	cg: ^Codegen,
+	compiler: ^Compiler,
+	name: Token,
+) -> (
+	index: int,
+	is_final: bool,
+	err: ErrorMessage,
+) {
 	// Look for the name in the local scopes of the current function.
 	for i := compiler.local_count - 1; i >= 0; i -= 1 {
 		local := &compiler.locals[i]
 		if identifiers_equal(name, local.name) {
 			if local.depth == -1 {
-				return -1, "Cannot read local variable in its own initializer."
+				return -1, local.is_final, "Cannot read local variable in its own initializer."
 			}
-			return i, nil
+			return i, local.is_final, nil
 		}
 	}
 
 	// Not found in the scopes of the current function.
-	return -1, nil
+	return -1, false, nil
 }
 
 /* 
@@ -457,26 +471,25 @@ resolve_upvalue :: proc(
 	error: ErrorMessage,
 ) {
 	/* Base case 1: We reached the end of the compiler stack, so the name is probably in the
-	global scope. The .VAR is just a dummy value. */
+	global scope. */
 	if compiler.enclosing == nil {
 		return -1, false, nil
 	}
 
 	/* Look for the name in the enclosing function's local scope. 
 	Base case 2: If we find the name there, return it. */
-	local := resolve_local(cg, compiler.enclosing, name) or_return
+	local, local_is_final := resolve_local(cg, compiler.enclosing, name) or_return
 	if local != -1 {
 		// Mark the local as captured and see if its a `var` or `val`.
 		compiler.enclosing.locals[local].is_captured = true
-		final := compiler.enclosing.locals[local].is_final
 		/* is_local is true since we're capturing a local variable from the
 		immediately enclosing function. */
 		idx, err := add_upvalue(cg, compiler, u8(local), is_local = true)
-		return idx, final, err
+		return idx, local_is_final, err
 	}
 
 	/* Recursively look for an upvalue in the enclosing function. */
-	upvalue, final := resolve_upvalue(cg, compiler.enclosing, name) or_return
+	upvalue, upvalue_is_final := resolve_upvalue(cg, compiler.enclosing, name) or_return
 	if upvalue != -1 {
 		/* Once the local variable is found in the most deeply nested recursive call, 
 		which is the outermost function, capture it as an upvalue, add it to the 
@@ -489,11 +502,10 @@ resolve_upvalue :: proc(
 		upvalue which captures either a local variable of its surrounding
 		function or another upvalue. */
 		idx, err := add_upvalue(cg, compiler, u8(upvalue), is_local = false)
-		return idx, final, err
+		return idx, upvalue_is_final, err
 	}
 
 	// Nope, didn't find anything.
-	// The `false` is just a dummy value.
 	return -1, false, nil
 }
 
@@ -542,7 +554,7 @@ declare_variable :: proc(
 	is_final: bool,
 	is_loop_variable: bool = false,
 ) -> ErrorMessage {
-	if cg.current_compiler.scope_depth == 0 {return nil}
+	if in_global_scope(cg) {return nil}
 
 	for i := cg.current_compiler.local_count - 1; i >= 0; i -= 1 {
 		local := &cg.current_compiler.locals[i]
@@ -561,7 +573,7 @@ declare_variable :: proc(
 /* Mark a local name binding as initialized. */
 @(private = "file")
 mark_initialized :: proc(cg: ^Codegen) {
-	if cg.current_compiler.scope_depth == 0 {return}
+	if in_global_scope(cg) {return}
 	cg.current_compiler.locals[cg.current_compiler.local_count - 1].depth =
 		cg.current_compiler.scope_depth
 }
@@ -569,12 +581,17 @@ mark_initialized :: proc(cg: ^Codegen) {
 /* Define a local or global name binding. */
 @(private = "file")
 define_variable :: proc(cg: ^Codegen, global: int) {
-	if cg.current_compiler.scope_depth > 0 {
-		mark_initialized(cg)
+	if in_global_scope(cg) {
+		emit_op_with_constant(cg, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG, global)
 		return
 	}
 
-	emit_op_with_constant(cg, .OP_DEFINE_GLOBAL, .OP_DEFINE_GLOBAL_LONG, global)
+	mark_initialized(cg)
+}
+
+@(private = "file")
+in_global_scope :: proc(cg: ^Codegen) -> bool {
+	return cg.current_compiler.type == .SCRIPT && cg.current_compiler.scope_depth == 0
 }
 
 @(private = "file")
@@ -597,13 +614,13 @@ global_exists_and_is_final :: proc(cg: ^Codegen, global_o_str: ^ObjString) -> bo
 
 @(private = "file")
 binding_exists_and_is_final :: proc(cg: ^Codegen, name: Token) -> bool {
-	local, _ := resolve_local(cg, cg.current_compiler, name)
-	upvalue, _, _ := resolve_upvalue(cg, cg.current_compiler, name)
+	local, local_is_final, _ := resolve_local(cg, cg.current_compiler, name)
+	upvalue, upvalue_is_final, _ := resolve_upvalue(cg, cg.current_compiler, name)
 
 	if local != -1 {
-		return true
+		return local_is_final
 	} else if upvalue != -1 {
-		return true
+		return upvalue_is_final
 	} else {
 		global_o_str := copy_string(cg.gc, name.lexeme)
 		return global_exists_and_is_final(cg, global_o_str)
@@ -613,7 +630,7 @@ binding_exists_and_is_final :: proc(cg: ^Codegen, name: Token) -> bool {
 @(private = "file")
 @(require_results)
 emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> ErrorMessage {
-	local := resolve_local(cg, cg.current_compiler, name) or_return
+	local, _ := resolve_local(cg, cg.current_compiler, name) or_return
 	upvalue, _ := resolve_upvalue(cg, cg.current_compiler, name) or_return
 
 	if local != -1 {
@@ -636,11 +653,11 @@ emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> Erro
 @(private = "file")
 @(require_results)
 emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
-	local := resolve_local(cg, cg.current_compiler, name) or_return
+	local, local_is_final := resolve_local(cg, cg.current_compiler, name) or_return
 	upvalue, upvalue_is_final := resolve_upvalue(cg, cg.current_compiler, name) or_return
 
 	if local != -1 {
-		if cg.current_compiler.locals[local].is_final {
+		if local_is_final {
 			return "Can only set a final variable once."
 		}
 		emit_instruction(cg, .OP_SET_LOCAL, byte(local))
@@ -876,7 +893,7 @@ compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
 
 @(require_results)
 compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
-	if cg.current_compiler.type != .SCRIPT || cg.current_compiler.scope_depth > 0 {
+	if !in_global_scope(cg) {
 		codegen_error(cg, "Can only declare modules at the top level.")
 		return false
 	}
@@ -1290,7 +1307,7 @@ compile_var_declaration :: proc(
 			}
 		} else {
 			/* Allow anonymous functions to recurse by referring to the name they've
-				  * been bound to. */
+			 * been bound to. */
 			if _, ok := binding.initializer.(^FunctionExpr); ok {
 				mark_initialized(cg)
 			}

@@ -148,7 +148,7 @@ mark_object :: proc(gc: ^GC, object: ^Obj) {
  * garbage collected. */
 mark_value :: proc(gc: ^GC, value: Value) {
 	/* Only Objs are garbage collected. */
-	if (is_obj(value)) {
+	if is_obj(value) {
 		mark_object(gc, as_obj(value))
 	}
 }
@@ -183,7 +183,7 @@ mark_compiler_roots :: proc(gc: ^GC, compiler: ^Compiler) {
 /* Mark all roots for the VM; including its stack, closures in the callframe,
  * open upvalues. */
 mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
-	/* Mark the VM's stack */
+	/* Mark the VM's stack. */
 	for i := 0; i <= vm.stack_top; i += 1 {
 		value := vm.stack[i]
 		mark_value(gc, value)
