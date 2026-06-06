@@ -139,6 +139,16 @@ free_type :: proc(type: ^Type) {
 	}
 }
 
+free_typescheme :: proc(scheme: ^TypeScheme) {
+	switch &type in scheme {
+	case Type:
+		free_type(&type)
+	case TypeQuantified:
+		delete(type.bound)
+		free_type(&type.type)
+	}
+}
+
 type_any :: TypeAny{}
 type_never :: TypeNever{}
 
@@ -283,6 +293,17 @@ pop_scope :: proc(ctx: ^TypeContext) {
 		if config.log_type {
 			fmt.eprintfln("-- exit block %d\n", ctx.scope_depth + 1)
 		}
+	}
+}
+
+destroy_all_scopes :: proc(ctx: ^TypeContext) {
+	c := ctx
+	for c != nil {
+		for _, &symb in c.bindings {
+			free_typescheme(&symb.scheme)
+		}
+		delete(c.bindings)
+		c = c.enclosing
 	}
 }
 
