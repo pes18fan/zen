@@ -26,3 +26,5 @@ awful hacky designs. Some points:
      A lot of changes are needed throughout zen for this; some perhaps in the
      semantic analyzer.
 */
+
+UntypedContext :: struct {}

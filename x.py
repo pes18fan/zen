@@ -139,11 +139,23 @@ def create_chaotic_build():
         exit(1)
 
 
-def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, strict: bool = False):
+def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, typechecking: bool = False, strict: bool = False):
     if recompile:
         create_debug_build()
         os.makedirs("bin/test", exist_ok=True)
         shutil.copy(f"bin/dbg/{DBG_OUT}", f"bin/test/{OUT}")
+
+    if typechecking:
+        print("Running typechecking tests:")
+        typechecking_args = ["python", "./run_tests.py", "-d", "typechecking/"]
+        if strict:
+            typechecking_args.append("--strict")
+        try:
+            subprocess.run(typechecking_args, cwd="test/", check=True)
+        except ProcError as e:
+            print(f"Error during typechecking tests: {e}", file=sys.stderr)
+            exit(1)
+        return
 
     if not e2e_only:
         print("Running unit tests:")
@@ -264,8 +276,12 @@ def main():
         "--e2e", "-e", action="store_true",
         help="only run end-to-end tests"
     )
+    test_parser.add_argument(
+        "--typechecking", "-t", action="store_true",
+        help="only run typechecking tests (limited time option)"
+    )
     test_parser.set_defaults(
-        func=lambda args: test(args.recompile, args.unit, args.e2e, args.strict))
+        func=lambda args: test(args.recompile, args.unit, args.e2e, args.typechecking, args.strict))
 
     # benchmark
     bench_parser = subparsers.add_parser("bench", help="run benchmarks")
