@@ -239,11 +239,18 @@ read_string_long :: #force_inline proc(frame: ^CallFrame) -> ^ObjString {
 }
 
 /*
-Performs a binary operation on the top two values of the stack. In zen, a
-binary operator can only return either a 64-bit float or a boolean. 
+Performs a binary operation on the top two values of the stack. In zen, except
+for the concatenation operator '..' which is handled separately, a binary
+operator can only return either a 64-bit float or a boolean. All of these
+operators take numbers as their arguments, hence 'numeric'.
 */
 @(private = "file")
-binary_op :: proc(vm: ^VM, $returns: typeid, op: string) -> InterpretResult {
+numeric_binary_op :: proc(
+	vm: ^VM,
+	$returns: typeid,
+	op: string,
+) -> InterpretResult where intrinsics.type_is_numeric(returns) ||
+	intrinsics.type_is_boolean(returns) {
 	if !is_number(vm_peek(vm, 0)) || !is_number(vm_peek(vm, 1)) {
 		vm_panic(
 			vm,
@@ -370,7 +377,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			name := read_string(frame)
 
 			/* No runtime check is done for variable existence since that is
-                 * done at compile time. */
+             * done at compile time. */
 			value, _ := table_get(&vm.gc.globals, name)
 			vm_push(vm, value)
 		case .OP_GET_GLOBAL_LONG:
@@ -389,7 +396,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			name := read_string(frame)
 
 			/* No runtime check is done for variable existence since that is
-                 * done at compile time. */
+             * done at compile time. */
 			table_set(&vm.gc.globals, name, vm_peek(vm, 0))
 		case .OP_SET_GLOBAL_LONG:
 			name := read_string_long(frame)
@@ -559,19 +566,19 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			a := vm_pop(vm)
 			vm_push(vm, bool_val(values_equal(a, b)))
 		case .OP_GREATER:
-			binary_op(vm, bool, ">") or_return
+			numeric_binary_op(vm, bool, ">") or_return
 		case .OP_LESS:
-			binary_op(vm, bool, "<") or_return
+			numeric_binary_op(vm, bool, "<") or_return
 		case .OP_ADD:
-			binary_op(vm, f64, "+") or_return
+			numeric_binary_op(vm, f64, "+") or_return
 		case .OP_SUBTRACT:
-			binary_op(vm, f64, "-") or_return
+			numeric_binary_op(vm, f64, "-") or_return
 		case .OP_MULTIPLY:
-			binary_op(vm, f64, "*") or_return
+			numeric_binary_op(vm, f64, "*") or_return
 		case .OP_DIVIDE:
-			binary_op(vm, f64, "/") or_return
+			numeric_binary_op(vm, f64, "/") or_return
 		case .OP_MODULO:
-			binary_op(vm, f64, "%") or_return
+			numeric_binary_op(vm, f64, "%") or_return
 		case .OP_CONCAT:
 			if !is_string(vm_peek(vm, 0)) || !is_string(vm_peek(vm, 1)) {
 				vm_panic(
@@ -1146,11 +1153,10 @@ interpret :: proc(
 
 	SEMANTIC_ANALYZE :: true
 	when SEMANTIC_ANALYZE {
-		cmp, sm_ok := analyze(gc, expr, &vm.compiler_globals)
+		sm_ok := semcheck(gc, expr, &vm.compiler_globals)
 		if !sm_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
-		defer destroy_semantic_compiler(cmp)
 	}
 
 	/* Time semantic analysis. */
