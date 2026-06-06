@@ -1321,15 +1321,15 @@ compile_var_declaration :: proc(
 }
 
 @(require_results)
-compile_return_expression :: proc(cg: ^Codegen, s: ^ReturnExpr) -> bool {
-	value := s.value
+compile_return_expression :: proc(cg: ^Codegen, e: ^ReturnExpr) -> bool {
+	value := e.value
 
 	if cg.current_compiler.type == .SCRIPT {
 		codegen_error(cg, "Cannot return from the top level.")
 		return false
 	}
 
-	if s.value != nil {
+	if e.value != nil {
 		if cg.current_compiler.type == .INITIALIZER {
 			codegen_error(cg, "Cannot return a value from an initializer.")
 			return false
@@ -1350,14 +1350,14 @@ compile_return_expression :: proc(cg: ^Codegen, s: ^ReturnExpr) -> bool {
 }
 
 @(require_results)
-compile_exit_expression :: proc(cg: ^Codegen, s: ^ExitExpr) -> bool {
-	code := s.code
+compile_exit_expression :: proc(cg: ^Codegen, e: ^ExitExpr) -> bool {
+	code := e.code
 
 	/* A bare exit will exit the program successfully (with status code 0),
      * and you can add a number after it to make it exit with a certain
      * status code. */
 	if code != nil {
-		compile_expression(cg, s.code) or_return
+		compile_expression(cg, e.code) or_return
 	} else {
 		try(cg, emit_constant(cg, 0)) or_return
 	}
