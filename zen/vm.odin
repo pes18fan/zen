@@ -1151,12 +1151,9 @@ interpret :: proc(
 		}
 	}
 
-	SEMANTIC_ANALYZE :: true
-	when SEMANTIC_ANALYZE {
-		sm_ok := semcheck(gc, expr, &vm.compiler_globals)
-		if !sm_ok {
-			return .INTERPRET_COMPILE_ERROR
-		}
+	sm_ok := semcheck(expr)
+	if !sm_ok {
+		return .INTERPRET_COMPILE_ERROR
 	}
 
 	/* Time semantic analysis. */
