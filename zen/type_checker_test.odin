@@ -11,7 +11,8 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 		typevar_count = 0,
 		had_error     = false,
 	}
-	push_scope(&tc)
+	push_function_scope(&tc)
+	defer pop_function_scope(&tc)
 
 	var := fresh(&tc)
 
@@ -293,21 +294,19 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 		typevar_count = 0,
 		had_error     = false,
 	}
-	push_scope(&tc)
+	push_function_scope(&tc)
+	defer pop_function_scope(&tc)
 
-	push_scope(&tc)
 	bind_type(tc.ctx, "x", TypeFunctionApplication{constructor = .NUMBER})
-	push_scope(&tc)
+	push_scope(tc.ctx)
 	bind_type(tc.ctx, "y", TypeFunctionApplication{constructor = .BOOL})
 
 	// if any of the resolve_types panic we failed
 	_ = resolve_type(&tc, "x")
 	_ = resolve_type(&tc, "y")
 
-	pop_scope(&tc)
+	pop_scope(tc.ctx)
 	_ = resolve_type(&tc, "x")
-
-	pop_scope(&tc)
 }
 
 // do generalization and instantiation work correctly?
@@ -320,7 +319,8 @@ test_generalize_instantiate :: proc(t: ^tt.T) {
 		typevar_count = 0,
 		had_error     = false,
 	}
-	push_scope(&tc)
+	push_function_scope(&tc)
+	defer pop_function_scope(&tc)
 
 	ty := fresh(&tc)
 	scheme := generalize(&tc, ty)

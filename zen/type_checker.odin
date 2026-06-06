@@ -17,8 +17,18 @@ TypeChecker :: struct {
 }
 
 TypeContext :: struct {
-	bindings:  map[string]TypeScheme,
-	enclosing: ^TypeContext,
+	enclosing:   ^TypeContext,
+	bindings:    map[string]Symbol,
+	scope_depth: int,
+}
+
+Symbol :: struct {
+	scope_depth: int,
+	scheme:      TypeScheme,
+}
+
+make_symbol :: proc(ctx: ^TypeContext, scheme: TypeScheme) -> Symbol {
+	return Symbol{scope_depth = ctx.scope_depth, scheme = scheme}
 }
 
 Type :: union #no_nil {
@@ -193,7 +203,8 @@ Substitution :: map[TypeVariable]Type
 resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	ctx := tc.ctx
 	for ctx != nil {
-		if t, ok := ctx.bindings[name]; ok {
+		if symb, ok := ctx.bindings[name]; ok {
+			t := symb.scheme
 			when ODIN_DEBUG {
 				if config.log_type {
 					fmt.eprintfln(
@@ -214,7 +225,7 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 }
 
 bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
-	ctx.bindings[name] = scheme
+	ctx.bindings[name] = make_symbol(ctx, scheme)
 
 	when ODIN_DEBUG {
 		if config.log_type {
@@ -224,32 +235,54 @@ bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
 }
 
 when ODIN_DEBUG {
-	scope_counter := -1
+	fn_scope_counter := -1
 }
 
-push_scope :: proc(tc: ^TypeChecker) {
+push_function_scope :: proc(tc: ^TypeChecker) {
 	ctx := new(TypeContext)
-	ctx.bindings = make(map[string]TypeScheme)
+	ctx.bindings = make(map[string]Symbol)
 	ctx.enclosing = tc.ctx
+	ctx.scope_depth = 0
 	tc.ctx = ctx
 
 	when ODIN_DEBUG {
-		scope_counter += 1
+		fn_scope_counter += 1
 		if config.log_type {
-			fmt.eprintfln("\n-- enter scope %d", scope_counter)
+			fmt.eprintfln("\n-- enter fn %d", fn_scope_counter)
 		}
 	}
 }
 
-pop_scope :: proc(tc: ^TypeChecker) {
+pop_function_scope :: proc(tc: ^TypeChecker) {
 	ctx := tc.ctx
 	tc.ctx = ctx.enclosing
 
 	when ODIN_DEBUG {
 		if config.log_type {
-			fmt.eprintfln("-- exit scope %d\n", scope_counter)
+			fmt.eprintfln("-- exit fn %d\n", fn_scope_counter)
 		}
-		scope_counter -= 1
+		fn_scope_counter -= 1
+	}
+}
+
+push_scope :: proc(ctx: ^TypeContext) {
+	ctx.scope_depth += 1
+
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintfln("\n-- enter block %d", ctx.scope_depth)
+		}
+	}
+}
+
+pop_scope :: proc(ctx: ^TypeContext) {
+	assert(ctx.scope_depth > 0, "cannot have less than zero block scopes")
+	ctx.scope_depth -= 1
+
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintfln("-- exit block %d\n", ctx.scope_depth + 1)
+		}
 	}
 }
 
@@ -342,7 +375,8 @@ free_vars_context :: proc(ctx: ^TypeContext) -> FreeVars {
 	c := ctx
 
 	for c != nil {
-		for _, scheme in c.bindings {
+		for _, symb in c.bindings {
+			scheme := symb.scheme
 			scheme_fvs := free_vars(scheme)
 			defer delete(scheme_fvs)
 			for k in scheme_fvs {fvs[k] = {}}
@@ -427,8 +461,9 @@ apply_substitution_quantified :: proc(subst: Substitution, scheme: TypeScheme) -
 apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	c := ctx
 	for c != nil {
-		for name, scheme in c.bindings {
-			c.bindings[name] = apply_substitution(subst, scheme)
+		for name, symb in c.bindings {
+			scheme := symb.scheme
+			c.bindings[name] = make_symbol(ctx, apply_substitution(subst, scheme))
 		}
 		c = c.enclosing
 	}
@@ -819,14 +854,14 @@ check_type :: proc(
 		}
 	case ^BlockExpr:
 		tc.current_token = e.token
-		push_scope(tc)
+		push_scope(tc.ctx)
 		s := make(Substitution)
 		if e.expression != nil {
 			s = check_type(tc, e.expression, type) or_return // infer body with expected type
 		} else {
 			s = try_unify(type, tapp(.NIL)) or_return // infer body with expected type
 		}
-		pop_scope(tc)
+		pop_scope(tc.ctx)
 		return s, nil
 	case ^BreakExpr:
 		tc.current_token = e.token
@@ -887,7 +922,7 @@ check_type :: proc(
 	case ^ForExpr:
 		tc.current_token = e.token
 
-		push_scope(tc)
+		push_scope(tc.ctx)
 		s := make(Substitution)
 		if e.initializer != nil {
 			s_init, _ := infer_type(tc, e.initializer) or_return
@@ -910,19 +945,19 @@ check_type :: proc(
 		s_body := check_type(tc, e.body.expression, fresh(tc)) or_return
 		apply_substitution(s_body, tc.ctx)
 		s = combine_substitutions(s_body, s)
-		pop_scope(tc)
+		pop_scope(tc.ctx)
 		sn := try_unify(type, tapp(.NIL)) or_return
 		return combine_substitutions(sn, s), nil
 	case ^ForInExpr:
 		tc.current_token = e.token
-		push_scope(tc)
+		push_scope(tc.ctx)
 		bind_type(tc.ctx, strings.clone(e.var_name.lexeme), fresh(tc)) // fresh typevar for for-in loop variable
 		s_iter := check_type(tc, e.iterable, fresh(tc)) or_return // should probably be replaced by a `string | list` union in future
 		apply_substitution(s_iter, tc.ctx)
 		beta := fresh(tc)
 		s_body := check_type(tc, e.body.expression, beta) or_return
 		apply_substitution(s_body, tc.ctx)
-		pop_scope(tc)
+		pop_scope(tc.ctx)
 		sn := try_unify(type, tapp(.NIL)) or_return
 		return combine_substitutions(sn, combine_substitutions(s_body, s_iter)), nil
 	case ^IfExpr:
@@ -1029,6 +1064,7 @@ check_type :: proc(
 		return try_unify(type, found_t) // unify typevar with the found type
 	case ^FunctionExpr:
 		tc.current_token = e.token
+		bound_to := e.bound_to
 		params := e.params
 		body := e.body
 		return_type := e.return_type
@@ -1037,8 +1073,6 @@ check_type :: proc(
 		if len(params) != 0 {
 			param_types = make([]Type, len(params))
 
-			// TODO: currently all params go to fresh vars, use concrete
-			// type here for type annotations when they're here for fn args
 			for param, idx in params {
 				param_types[idx] = param.type.? or_else fresh(tc)
 			}
@@ -1056,8 +1090,14 @@ check_type :: proc(
 		s1 := try_unify(type, func_type) or_return
 		apply_substitution(s1, tc.ctx)
 
-		// check body with params in scope
-		push_scope(tc)
+		// start the function scope
+		push_function_scope(tc)
+
+		// firstly, bind the function type to ctx so that recursion is possible
+		if name, ok := bound_to.?; ok {
+			bind_type(tc.ctx, strings.clone(name.lexeme), apply_substitution(s1, func_type))
+		}
+
 		for param, idx in params {
 			bind_type(
 				tc.ctx,
@@ -1073,7 +1113,7 @@ check_type :: proc(
 
 		s2 := check_type(tc, body, apply_substitution(s1, ret_type)) or_return
 		apply_substitution(s2, tc.ctx)
-		pop_scope(tc)
+		pop_function_scope(tc)
 
 		return combine_substitutions(s2, s1), nil
 	case ^SequenceExpr:
@@ -1108,19 +1148,19 @@ check_type :: proc(
 	case ^UnaryExpr:
 		tc.current_token = e.token
 
-		must_unify_with: TypeFunctionApplication
 		#partial switch e.operator.type {
 		case .MINUS:
-			must_unify_with = tapp(.NUMBER)
+			s1 := check_type(tc, e.right, tapp(.NUMBER)) or_return
+			sn := try_unify(type, tapp(.NUMBER)) or_return
+			return combine_substitutions(sn, s1), nil
 		case .NOT:
-			must_unify_with = tapp(.BOOL)
+			s1, _ := infer_type(tc, e.right) or_return
+			sn := try_unify(type, tapp(.BOOL)) or_return
+			return combine_substitutions(sn, s1), nil
 		case:
 			fmt.panicf("Internal compiler error: Unknown unary operator '%s'", e.operator.lexeme)
 		}
 
-		s1 := check_type(tc, e.right, must_unify_with) or_return
-		sn := try_unify(type, must_unify_with) or_return
-		return combine_substitutions(sn, s1), nil
 	case ^UseExpr:
 		unimplemented()
 	case ^VarDeclExpr:
@@ -1152,13 +1192,13 @@ check_type :: proc(
 		return combine_substitutions(sn, s), nil
 	case ^WhileExpr:
 		tc.current_token = e.token
-		push_scope(tc)
+		push_scope(tc.ctx)
 		s1, _ := infer_type(tc, e.condition) or_return
 		apply_substitution(s1, tc.ctx)
 		beta := fresh(tc)
 		s2 := check_type(tc, e.body.expression, beta) or_return
 		apply_substitution(s2, tc.ctx)
-		pop_scope(tc)
+		pop_scope(tc.ctx)
 		sn := try_unify(type, tapp(.NIL)) or_return
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	}
@@ -1517,8 +1557,8 @@ typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 		had_error     = false,
 		typeid_map    = make_typeid_map(),
 	}
-	push_scope(&tc)
-	defer pop_scope(&tc)
+	push_function_scope(&tc)
+	defer pop_function_scope(&tc)
 	register_builtins(&tc)
 
 	return typecheck_without_arena(&tc, expr)

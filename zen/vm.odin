@@ -1164,7 +1164,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	TYPE_CHECK :: false
+	TYPE_CHECK :: true
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		tc_ok: bool
@@ -1191,7 +1191,7 @@ interpret :: proc(
 				tc^ = TypeChecker {
 					typeid_map = make_typeid_map(),
 				}
-				push_scope(tc)
+				push_function_scope(tc)
 				register_builtins(tc)
 				vm.type_checker = tc
 			}
