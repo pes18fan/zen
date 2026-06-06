@@ -729,11 +729,6 @@ compile_function :: proc(
 	/* Note that this scope doesn't need to be explicitly closed, since the 
     Compiler itself is ended when we reach the end of the function body. */
 	begin_scope(cg)
-
-	if len(params) > U8_MAX {
-		codegen_error(cg, "Cannot have more than 255 parameters.")
-		return false
-	}
 	cg.current_compiler.function.arity = u8(len(params))
 
 	for param in params {
@@ -854,14 +849,8 @@ compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
 	class_compiler.enclosing = cg.current_class
 	cg.current_class = &class_compiler
 
-	if superclass != nil {
-		superclass := superclass.?
-		if identifiers_equal(class_name, superclass) {
-			codegen_error(cg, "A class can't inherit from itself.")
-			return false
-		}
-
-		try(cg, emit_named_variable(cg, superclass, can_assign = false)) or_return
+	if superclass_name, ok := superclass.?; ok {
+		try(cg, emit_named_variable(cg, superclass_name, can_assign = false)) or_return
 
 		begin_scope(cg)
 		try(cg, add_local(cg, synthetic_token("super"), is_final = true)) or_return
@@ -892,11 +881,6 @@ compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
 
 @(require_results)
 compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
-	if !in_global_scope(cg) {
-		codegen_error(cg, "Can only declare modules at the top level.")
-		return false
-	}
-
 	path_str := e.path.lexeme
 
 	mod_type: ModuleType
@@ -1242,11 +1226,6 @@ compile_while_expression :: proc(cg: ^Codegen, e: ^WhileExpr) -> bool {
 
 @(require_results)
 compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
-	if cg.current_compiler.loop_count == 0 {
-		codegen_error(cg, "Cannot break outside a loop.")
-		return false
-	}
-
 	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
 
 	// Discard correct number of values from the stack.
@@ -1264,11 +1243,6 @@ compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
 
 @(require_results)
 compile_continue_expression :: proc(cg: ^Codegen, s: ^ContinueExpr) -> bool {
-	if cg.current_compiler.loop_count == 0 {
-		codegen_error(cg, "Cannot use 'continue' outside a loop.")
-		return false
-	}
-
 	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
 
 	// Discard correct number of values from the stack.
@@ -1298,12 +1272,7 @@ compile_var_declaration :: proc(
 	for binding in bindings {
 		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
 		if binding.initializer == nil {
-			if is_final {
-				codegen_error(cg, "Final variables must be initialized.")
-				return false
-			} else {
-				emit_opcode(cg, .OP_NIL)
-			}
+			emit_opcode(cg, .OP_NIL)
 		} else {
 			/* Allow anonymous functions to recurse by referring to the name they've
 			 * been bound to. */
@@ -1324,17 +1293,7 @@ compile_var_declaration :: proc(
 compile_return_expression :: proc(cg: ^Codegen, e: ^ReturnExpr) -> bool {
 	value := e.value
 
-	if cg.current_compiler.type == .SCRIPT {
-		codegen_error(cg, "Cannot return from the top level.")
-		return false
-	}
-
 	if e.value != nil {
-		if cg.current_compiler.type == .INITIALIZER {
-			codegen_error(cg, "Cannot return a value from an initializer.")
-			return false
-		}
-
 		compile_expression(cg, value) or_return
 		emit_opcode(cg, .OP_RETURN)
 	} else {
@@ -1448,12 +1407,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 				arg_count += 1
 			}
 
-			// Arg count can't be more than 255 since it's stuffed in one byte.
-			if len(arguments) > U8_MAX {
-				codegen_error(cg, "Cannot have more than 255 arguments.")
-				return false
-			}
-
 			for arg in e.arguments {
 				compile_expression(cg, arg) or_return
 			}
@@ -1468,11 +1421,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			if cg.pipeline_active {
 				emit_opcode(cg, .OP_GET_IT)
 				arg_count += 1
-			}
-
-			if len(arguments) > U8_MAX {
-				codegen_error(cg, "Cannot have more than 255 arguments.")
-				return false
 			}
 
 			for arg in arguments {
@@ -1528,11 +1476,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_if_expression(cg, e) or_return
 	case ^ItExpr:
 		cg.current_token = e.token
-		if !cg.pipeline_active {
-			codegen_error(cg, "Cannot use 'it' outside of a pipeline.")
-			return false
-		}
-
 		emit_opcode(cg, .OP_GET_IT)
 	case ^ClassExpr:
 		cg.current_token = e.token
@@ -1565,10 +1508,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ListExpr:
 		cg.current_token = e.token
 		elements := e.elements
-		if len(elements) > U8_MAX {
-			codegen_error(cg, "Cannot have more than 255 items in a list literal.")
-			return false
-		}
 
 		for element in elements {
 			compile_expression(cg, element) or_return
@@ -1671,14 +1610,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		method := e.method
 		method_args := e.method_args
 
-		if cg.current_class == nil {
-			codegen_error(cg, "Can't use 'super' outside a class.")
-			return false
-		} else if !cg.current_class.has_superclass {
-			codegen_error(cg, "Can't use 'super' in a class with no superclass.")
-			return false
-		}
-
 		name := try2(cg, identifier_constant(cg, method)) or_return
 
 		/* Place both the current receiver and the superclass on the stack. */
@@ -1687,10 +1618,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		/* Check if the method is immediately invoked or not; since we can apply
      	an optimization involving no use of bound methods if it is. */
 		if method_args != nil {
-			if len(method_args) > U8_COUNT {
-				codegen_error(cg, "Cannot have more than 255 arguments.")
-				return false
-			}
 			arg_count := u8(len(method_args))
 
 			for arg in method_args {
@@ -1715,10 +1642,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_switch_expression(cg, e) or_return
 	case ^ThisExpr:
 		cg.current_token = e.token
-		if cg.current_class == nil {
-			codegen_error(cg, "Cannot use 'this' outside a class.")
-			return false
-		}
 
 		/* `this` is treated as a lexically scoped local variable whose value is
         somehow magically initialized. Also, can_assign is set to false because

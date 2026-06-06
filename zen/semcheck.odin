@@ -3,64 +3,32 @@ package zen
 import "core:fmt"
 import "core:os"
 
-/*
-TODO: Variable resolution / symbol table creation. Needs very careful
-design so that it can be used seamlessly in the codegen part without any
-awful hacky designs. Some points:
-- Classes and OOP SHOULD work fine and without hacks because records will be
-     in soon and therefore will need to work nicely, but on that same note
-     they're not a huge priority as they'll be replaced by said records
-- The upvalue-based approach used in clox and inherited by zen ever since
-     its creation can now safely be replaced because zen now has an AST
-     and therefore enough context to know what variables are closed over
-     and when; the idea now is to create a new ObjCell type to replace
-     ObjUpvalue that is nothing but a heap-allocated value used for closed
-     over variables. This point needs to be kept in mind for closing over
-     loop variables as well.
-- Because of the addition of the Hindley-Milner type checker, modules can
-     no longer be viably used as values. Why? Well, if we wanted to viably
-     use modules as values, we'd need to typecheck them. So they'd be
-     some sort of record type. But, these modules have polymorphic functions
-     inside of them; for instance the list.pop function which has a quantified
-     type of `forall a. List a -> a`. The list module would then be a type
-     that looks something like `Record (forall a. List a -> a, ...)`, and
-     this directly hits a limit of Hindley-Milner; polymorphic types are
-     NOT allowed as type parameters i.e. we can only have rank-1 polymorphism.
-     A lot of changes are needed throughout zen for this; some perhaps in the
-     semantic analyzer.
-*/
-
 SemanticCompiler :: struct {
-	enclosing:     ^SemanticCompiler, // The enclosing function.
-	func_type:     FunctionType, // Type of the function being checked.
-	loop_depth:    int, // How many loops in are we?
-	scope_depth:   int, // The number of blocks in scope of this function.
-	local_count:   int, // Number of local variables.
-	capture_count: int, // Number of variables captured from outer scopes.
+	enclosing:   ^SemanticCompiler, // The enclosing function.
+	func_type:   FunctionType, // Type of the function being checked.
+	loop_depth:  int, // How many loops in are we?
+	scope_depth: int, // The number of blocks in scope of this function.
+	local_count: int, // Number of local variables.
 }
 
 /* Main state for the semantic analysis pass. Holds the current scope,
 class context, pipeline state and some other necessary items.
-One Semantic instance is created per call to `analyze` and lives until
-the caller (codegen) finishes consuming the resolution map. */
+One Semantic instance is created per call to `semcheck`. */
 Semantic :: struct {
 	current_compiler: ^SemanticCompiler,
 	current_class:    ^ClassCompiler,
 	current_token:    Token,
 	had_error:        bool,
 	pipeline_active:  bool,
-	gc:               ^GC,
-	globals:          ^Table,
 }
 
 init_semantic_compiler :: proc(sm: ^Semantic, c: ^SemanticCompiler, type: FunctionType) {
 	c^ = SemanticCompiler {
-		capture_count = 0,
-		local_count   = 0,
-		scope_depth   = 0,
-		loop_depth    = 0,
-		enclosing     = sm.current_compiler,
-		func_type     = type,
+		local_count = 0,
+		scope_depth = 0,
+		loop_depth  = 0,
+		enclosing   = sm.current_compiler,
+		func_type   = type,
 	}
 
 	sm.current_compiler = c
@@ -71,14 +39,12 @@ end_semantic_compiler :: proc(sm: ^Semantic) {
 	sm.current_compiler = sm.current_compiler.enclosing
 }
 
-init_semantic :: proc(gc: ^GC, globals: ^Table) -> Semantic {
+init_semantic :: proc() -> Semantic {
 	return Semantic {
 		current_compiler = nil,
 		current_class = nil,
 		had_error = false,
 		pipeline_active = false,
-		gc = gc,
-		globals = globals,
 	}
 }
 
@@ -116,6 +82,26 @@ end_semantic_scope :: proc(sm: ^Semantic) {
 @(require_results)
 in_global_scope :: proc(sm: ^Semantic) -> bool {
 	return sm.current_compiler.func_type == .SCRIPT && sm.current_compiler.scope_depth == 0
+}
+
+@(require_results)
+semcheck_function_expr :: proc(sm: ^Semantic, e: ^FunctionExpr, type: FunctionType) -> bool {
+	params := e.params
+	body := e.body
+
+	compiler: SemanticCompiler
+	init_semantic_compiler(sm, &compiler, type)
+
+	begin_semantic_scope(sm)
+	if len(params) > U8_MAX {
+		semantic_error(sm, "Cannot have more than 255 parameters.")
+		return false
+	}
+	semcheck_expr(sm, body) or_return
+	end_semantic_scope(sm)
+
+	end_semantic_compiler(sm)
+	return true
 }
 
 // Full semantic analysis phase, done after resolving forward references in the
@@ -165,8 +151,33 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		}
 	case ^ClassExpr:
 		sm.current_token = e.token
+		name := e.name
+		methods := e.methods
+		superclass := e.superclass
 
 		class_compiler: ClassCompiler
+		class_compiler.enclosing = sm.current_class
+		class_compiler.has_superclass = superclass != nil
+		sm.current_class = &class_compiler
+
+		if superclass_name, ok := superclass.?; ok {
+			if identifiers_equal(name, superclass_name) {
+				semantic_error(sm, "A class can't inherit from itself.")
+				return false
+			}
+		}
+
+		for method in methods {
+			assert(method.bound_to != nil, "method must be bound to a name")
+			method_name := method.bound_to.?
+			if method_name.lexeme == "init" {
+				semcheck_function_expr(sm, method, .INITIALIZER) or_return
+			} else {
+				semcheck_function_expr(sm, method, .METHOD) or_return
+			}
+		}
+
+		sm.current_class = sm.current_class.enclosing
 	case ^ContinueExpr:
 		sm.current_token = e.token
 		if sm.current_compiler.loop_depth == 0 {
@@ -239,24 +250,15 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		}
 	case ^FunctionExpr:
 		sm.current_token = e.token
-		bound_to := e.bound_to
-		params := e.params
-		body := e.body
-
-		compiler: SemanticCompiler
-		init_semantic_compiler(sm, &compiler, .FUNCTION)
-
-		begin_semantic_scope(sm)
-		if len(params) > U8_COUNT {
-			semantic_error(sm, "Cannot have more than 255 parameters.")
-			return false
+		if e.bound_to == nil {
+			semcheck_function_expr(sm, e, .LAMBDA) or_return
+		} else {
+			semcheck_function_expr(sm, e, .FUNCTION) or_return
 		}
-		semcheck_expr(sm, body) or_return
-		end_semantic_scope(sm)
 	case ^ListExpr:
 		sm.current_token = e.token
-
-		if len(e.elements) > U8_MAX {
+		elements := e.elements
+		if len(elements) > U8_MAX {
 			semantic_error(sm, "Cannot have more than 255 items in a list literal.")
 			return false
 		}
@@ -383,6 +385,10 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 				semantic_error(sm, "Final variables must be initialized.")
 				return false
 			}
+
+			if binding.initializer != nil {
+				semcheck_expr(sm, binding.initializer) or_return
+			}
 		}
 	case ^WhileExpr:
 		sm.current_token = e.token
@@ -402,19 +408,13 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 	return true
 }
 
-// Two-pass semantic analyzer
 @(require_results)
-semcheck :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (success: bool) {
+semcheck :: proc(expr: Expr) -> (success: bool) {
 	if expr == nil {
 		return true
 	}
 
-	// Add native function names to the globals table
-	for fn_name in GLOBAL_NATIVE_FN_NAMES {
-		table_set(globals, copy_string(gc, fn_name), bool_val(true))
-	}
-
-	sm := init_semantic(gc, globals)
+	sm := init_semantic()
 
 	// allocate on the heap, we need this for codegen
 	script_compiler: SemanticCompiler
