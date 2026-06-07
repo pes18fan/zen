@@ -18,6 +18,7 @@ OpCode :: enum u8 {
 	OP_TRUE,
 	OP_FALSE,
 	OP_POP,
+	OP_POPN,
 	OP_DUP,
 	OP_GET_LOCAL,
 	OP_SET_LOCAL,
