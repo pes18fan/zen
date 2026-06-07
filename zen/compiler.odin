@@ -183,6 +183,17 @@ emit_pop :: proc(cg: ^Codegen) {
 	emit_opcode(cg, .OP_POP)
 }
 
+@(private = "file")
+emit_popn :: proc(cg: ^Codegen, n: int) {
+	if n == 0 {return}
+
+	if n == 1 {
+		emit_pop(cg)
+		return
+	}
+	emit_instruction(cg, .OP_POPN, u8(n))
+}
+
 /* Write a OP_CONSTANT or OP_CONSTANT_LONG to the current chunk. */
 @(private = "file")
 @(require_results)
@@ -314,17 +325,22 @@ end_scope :: proc(cg: ^Codegen) {
 	curr := cg.current_compiler
 	curr.scope_depth -= 1
 
+	to_pop := 0
 	for curr.local_count > 0 && curr.locals[curr.local_count - 1].depth > curr.scope_depth {
 		/* If the local was captured, close its upvalue instead of popping it
 		to allow closures to work. Closing the upvalue requires no operand,
 		since the upvalue to close is right on top of the stack at this point. */
 		if curr.locals[curr.local_count - 1].is_captured {
+			emit_popn(cg, to_pop)
+			to_pop = 0
 			emit_opcode(cg, .OP_CLOSE_UPVALUE)
 		} else {
-			emit_pop(cg)
+			to_pop += 1
 		}
 		cg.current_compiler.local_count -= 1
 	}
+
+	emit_popn(cg, to_pop)
 }
 
 /* Add a loop to the current compiler's loop stack. */
@@ -1008,8 +1024,7 @@ compile_switch_expression :: proc(cg: ^Codegen, e: ^SwitchExpr) -> bool {
 		// If a case matches, pop out both the residual boolean comparison
 		// and the switch value. We can do this since the switch statement
 		// is exhaustive.
-		emit_pop(cg)
-		emit_pop(cg)
+		emit_popn(cg, 2)
 		compile_expression(cg, switch_case.body) or_return
 
 		append(&case_jumps_to_end, emit_jump(cg, .OP_JUMP))

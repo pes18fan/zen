@@ -365,6 +365,11 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			vm_push(vm, bool_val(false))
 		case .OP_POP:
 			vm_pop(vm)
+		case .OP_POPN:
+			n := read_byte(frame)
+			for _ in 0 ..< n {
+				vm_pop(vm)
+			}
 		case .OP_DUP:
 			vm_push(vm, vm_peek(vm, 0))
 		case .OP_GET_LOCAL:
@@ -1164,7 +1169,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	TYPE_CHECK :: true
+	TYPE_CHECK :: false
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		tc_ok: bool
@@ -1223,7 +1228,8 @@ interpret :: proc(
 
 	// TODO: optimization pass: constant folding, inlining whenever possible,
 	// remove instructions that cancel each other out (e.g. in push -> pop -> push,
-	// keep just the last push)
+	// keep just the last push), remove instructions that make no difference
+	// to the final (correct) result
 
 	collect_globals(&vm.compiler_globals, gc, expr)
 	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
