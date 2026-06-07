@@ -916,6 +916,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
 				if !ok {
 					vm_panic(vm, "Unknown builtin module %s.", module_str)
+					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				module_str_lower := strings.to_lower(module_str)
@@ -930,6 +931,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
 				if !ok {
 					vm_panic(vm, "Unknown builtin module %s.", module_str)
+					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				module_str_lower := strings.to_lower(module_str)
@@ -1034,6 +1036,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					}
 				} else {
 					vm_panic(vm, "Can only iterate over lists and strings.")
+					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
 		case .OP_EXIT:
@@ -1042,6 +1045,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				if !is_number(top) {
 					vm_panic(vm, "Exit code must be a number, not %v.", type_of_value(top))
+					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				// clear the stack
