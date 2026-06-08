@@ -2,7 +2,16 @@
 
 ## Project Overview
 
-**Zen** is a lightweight dynamically typed programming language implemented in **Odin**. It features bytecode interpretation, garbage collection, OOP with classes and inheritance, first-class functions with closures, Elixir-inspired pipes (`|>`), and a file-based module system. 
+**Zen** is a lightweight dynamically typed programming language implemented in 
+**Odin**. It features bytecode interpretation, garbage collection, OOP with 
+classes and inheritance, first-class functions with closures, Elixir-inspired 
+pipes (`|>`),  and a file-based module system. 
+
+Zen originates from the `clox` implementation of the Lox programming language,
+a toy language implemented in the book Crafting Interpreters by Robert
+Nystrom. Hence, it inherits a lot of its working mechanisms as well as some
+syntax from said language and interpreter.
+
 Files use the `.zn` extension. Version `0.0.1`, authored by **pes18fan**, licensed under MIT.
 
 ## Repository Structure
@@ -14,7 +23,8 @@ zen/
 │   ├── lexer.odin        # Tokenizer with ASI
 │   ├── parser.odin       # Pratt parser → AST
 │   ├── compiler.odin     # Bytecode compiler (AST → bytecode; consumes resolution map)
-│   ├── semantic.odin     # Semantic analyzer (name resolution, validation, resolution map)
+│   ├── semcheck.odin     # Semantic validation pass (scope, loop, class, return checks)
+│   ├── resolver.odin     # Variable resolver / symbol table (WIP, behind `RESOLVE` flag)
 │   ├── vm.odin           # Bytecode interpreter
 │   ├── value.odin        # Value representation (NaN boxing)
 │   ├── object.odin       # Heap objects (ObjFunction, ObjString, ObjClosure, etc.)
@@ -99,8 +109,9 @@ Requires **Odin compiler** and **Python**. The `isocline` REPL library is auto-d
 Source string ->
     Lexer -> Token stream (with ASI) ->
     Parser -> AST (Expr-based, no Stmt/Decl nodes) ->
-    Semantic analysis -> Resolution map ->
-    [Type checker (Hindley-Milner, Algorithm M, always-on via TYPE_CHECK)] ->
+    Semantic analysis (semcheck) -> Validation errors ->
+    [Resolver (WIP, behind RESOLVE flag)] -> Resolution map ->
+    [Type checker (Hindley-Milner, Algorithm M, behind TYPE_CHECK flag)] ->
     Compiler -> Bytecode (Chunk) 
     -> VM (interpreter) + GC
 ```
@@ -300,12 +311,12 @@ available on debug builds of zen. Otherwise, they are hidden behind a compile-ti
 
 ## When Adding Features
 
-1. The pipeline is: Lexer -> Parser -> Semantic analyzer -> [Type checker] -> Compiler -> VM (+ GC)
+1. The pipeline is: Lexer -> Parser -> Semantic analyzer -> [Resolver] -> [Type checker] -> Compiler -> VM (+ GC)
 2. VERY IMPORTANT: Do NOT ever delete comments, at most correct blatantly incorrect ones
 2. Add new tokens to the lexer if needed, new AST nodes to the parser, new opcodes to `chunk.odin`'s `OpCode` enum, codegen in compiler, execution in VM
 3. Update `type_checker.odin` for any new AST nodes (add `when TYPE_CHECK` guarded cases in `check_type`)
 4. Update `debug.odin` for disassembly of new opcodes
-5. Update `semantic.odin` for any new scope/semantic validation rules
+5. Update `semcheck.odin` for any new scope/semantic validation rules; update `resolver.odin` for variable resolution
 6. Add standard library functions in `std.odin` if applicable
 7. Register new builtin functions in `register_builtins` in `type_checker.odin` 
     (use `tquant` for polymorphic ones)
