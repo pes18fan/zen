@@ -18,17 +18,18 @@ TypeChecker :: struct {
 
 TypeContext :: struct {
 	enclosing:   ^TypeContext,
-	bindings:    map[string]Symbol,
+	bindings:    map[string]Variable,
 	scope_depth: int,
 }
 
-Symbol :: struct {
-	scope_depth: int,
-	scheme:      TypeScheme,
+Variable :: struct {
+	using _: UntypedVariable,
+	scheme:  TypeScheme,
 }
 
-make_symbol :: proc(ctx: ^TypeContext, scheme: TypeScheme) -> Symbol {
-	return Symbol{scope_depth = ctx.scope_depth, scheme = scheme}
+make_variable :: proc(ctx: ^TypeContext, scheme: TypeScheme) -> Variable {
+	// NOTE: currently most the fields from `Variable` are unused here
+	return Variable{scope_depth = ctx.scope_depth, scheme = scheme}
 }
 
 Type :: union #no_nil {
@@ -213,7 +214,7 @@ Substitution :: map[TypeVariable]Type
 resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	ctx := tc.ctx
 	for ctx != nil {
-		if symb, ok := ctx.bindings[name]; ok {
+		if symb, ok := ctx.bindings[name]; ok && symb.scope_depth <= ctx.scope_depth {
 			t := symb.scheme
 			when ODIN_DEBUG {
 				if config.log_type {
@@ -235,7 +236,7 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 }
 
 bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
-	ctx.bindings[name] = make_symbol(ctx, scheme)
+	ctx.bindings[name] = make_variable(ctx, scheme)
 
 	when ODIN_DEBUG {
 		if config.log_type {
@@ -250,7 +251,7 @@ when ODIN_DEBUG {
 
 push_function_scope :: proc(tc: ^TypeChecker) {
 	ctx := new(TypeContext)
-	ctx.bindings = make(map[string]Symbol)
+	ctx.bindings = make(map[string]Variable)
 	ctx.enclosing = tc.ctx
 	ctx.scope_depth = 0
 	tc.ctx = ctx
@@ -264,8 +265,7 @@ push_function_scope :: proc(tc: ^TypeChecker) {
 }
 
 pop_function_scope :: proc(tc: ^TypeChecker) {
-	ctx := tc.ctx
-	tc.ctx = ctx.enclosing
+	tc.ctx = tc.ctx.enclosing
 
 	when ODIN_DEBUG {
 		if config.log_type {
@@ -296,13 +296,14 @@ pop_scope :: proc(ctx: ^TypeContext) {
 	}
 }
 
-destroy_all_scopes :: proc(ctx: ^TypeContext) {
+destroy_type_context :: proc(ctx: ^TypeContext) {
 	c := ctx
 	for c != nil {
 		for _, &symb in c.bindings {
 			free_typescheme(&symb.scheme)
 		}
 		delete(c.bindings)
+		free(c)
 		c = c.enclosing
 	}
 }
@@ -484,7 +485,7 @@ apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	for c != nil {
 		for name, symb in c.bindings {
 			scheme := symb.scheme
-			c.bindings[name] = make_symbol(ctx, apply_substitution(subst, scheme))
+			c.bindings[name] = make_variable(ctx, apply_substitution(subst, scheme))
 		}
 		c = c.enclosing
 	}

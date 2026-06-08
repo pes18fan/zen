@@ -528,7 +528,7 @@ resolve_upvalue :: proc(
 @(private = "file")
 @(require_results)
 add_upvalue :: proc(
-	p: ^Codegen,
+	cg: ^Codegen,
 	compiler: ^Compiler,
 	index: u8,
 	is_local: bool,

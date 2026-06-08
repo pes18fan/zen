@@ -1169,6 +1169,17 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
+	RESOLVE :: false
+	when RESOLVE {
+		ucx, rs_ok := resolve(expr)
+		if !rs_ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
+
+		// need to connect this through to the type checker seamlessly somehow
+		ctx := untyped_to_typed_context(ucx^)
+	}
+
 	TYPE_CHECK :: false
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
