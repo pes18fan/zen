@@ -51,6 +51,7 @@ when NAN_BOXING {
 	is_bool :: #force_inline proc(value: Value) -> bool {
 		return (value | 1) == TRUE_VAL
 	}
+
 	is_nil :: #force_inline proc(value: Value) -> bool {
 		return value == nil_val()
 	}
@@ -74,6 +75,7 @@ when NAN_BOXING {
 	as_number :: #force_inline proc(value: Value) -> f64 {
 		return transmute(f64)value
 	}
+
 	as_bool :: #force_inline proc(value: Value) -> bool {
 		return value == TRUE_VAL
 	}
@@ -105,6 +107,36 @@ when NAN_BOXING {
 	*/
 	obj_val :: #force_inline proc(obj: ^Obj) -> Value {
 		return (Value)(SIGN_BIT | QNAN | cast(u64)(cast(uintptr)obj))
+	}
+
+	// sketchup for integer types, WIP; not a part of the language yet
+	TAG_INT :: 4 // 100.
+
+	int_val :: #force_inline proc(n: i32) -> Value {
+		return QNAN | TAG_INT | (cast(u64)cast(u32)n << 3)
+	}
+
+	is_int :: #force_inline proc(value: Value) -> bool {
+		// lower 3 bits must have TAG_INT and the sign bit must be clear
+		return (value & (QNAN | SIGN_BIT | 0x7)) == (QNAN | TAG_INT)
+	}
+
+	INT_MASK :: cast(u64)0x00000000FFFFFFFF
+
+	as_int :: #force_inline proc(value: Value) -> i32 {
+		return cast(i32)cast(u32)((value >> 3) & INT_MASK)
+	}
+
+	is_numeric :: #force_inline proc(value: Value) -> bool {
+		return is_int(value) || is_number(value)
+	}
+
+	float_val_to_int_val :: #force_inline proc(value: Value) -> Value {
+		return int_val(cast(i32)math.floor(as_number(value)))
+	}
+
+	int_val_to_float_val :: #force_inline proc(value: Value) -> Value {
+		return number_val(cast(f64)as_int(value))
 	}
 } else {
 	Value :: union {
