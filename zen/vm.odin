@@ -12,7 +12,7 @@ import "core:strings"
 import "core:time"
 import "core:unicode/utf8"
 
-FRAMES_MAX :: 64
+FRAMES_MAX :: 96
 
 /* The maximum size for the stack. Going past this causes a stack overflow. */
 STACK_MAX :: FRAMES_MAX * U8_COUNT
@@ -289,12 +289,7 @@ numeric_binary_op :: proc(
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
-				if a != math.floor(a) || b != math.floor(b) {
-					vm_panic(vm, "Operator '%s' can only be used with integers.", "%")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				vm_push(vm, number_val(cast(f64)(cast(int)a % cast(int)b)))
+				vm_push(vm, number_val(math.mod_f64(a, b)))
 			}
 		case:
 			color_red(os.stderr, "bug: ")
