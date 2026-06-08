@@ -113,13 +113,7 @@ Resolve a local name binding from the Compiler struct.
 */
 @(private = "file")
 @(require_results)
-resolve_local :: proc(
-	ucx: ^UntypedContext,
-	name: Token,
-) -> (
-	var: UntypedVariable,
-	err: ErrorMessage,
-) {
+resolve_local :: proc(ucx: ^UntypedContext, name: Token) -> (UntypedVariable, ErrorMessage) {
 	// Look for the name in the local scopes of the current function.
 	if var, ok := ucx.bindings[name.lexeme]; ok && var.scope_depth <= ucx.scope_depth {
 		if !var.initialized {
@@ -289,9 +283,10 @@ resolver_error :: proc(rs: ^Resolver, message: string) {
 // need to ensure parser-like synchronization on errors so that we don't bail
 // out on just one error; will help for nicer error messages
 resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
-	switch e in expr {}
-
-	return true
+	// switch e in expr {
+	//
+	//    }
+	unimplemented()
 }
 
 // Takes in the AST, resolves all variables and puts the info in an `UntypedContext`.
