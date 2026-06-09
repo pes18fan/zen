@@ -878,7 +878,7 @@ parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		bindings := make([dynamic]VarBinding)
 
 		func_binding: VarBinding
-		func_binding.name = parser_consume(p, .IDENT, "Expect variable name.")
+		func_binding.name = parser_consume(p, .IDENT, "Expect function name.")
 		func_binding.initializer = parse_lambda(p, can_assign, func_binding.name)
 		append(&bindings, func_binding)
 		expr.bindings = bindings[:]
