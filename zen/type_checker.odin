@@ -16,10 +16,16 @@ TypeChecker :: struct {
 	had_error:     bool,
 }
 
+TypedBinding :: struct {
+	name: string,
+	var:  Variable,
+}
+
 TypeContext :: struct {
-	enclosing:   ^TypeContext,
-	bindings:    map[string]Variable,
-	scope_depth: int,
+	enclosing:        ^TypeContext,
+	bindings:         [dynamic]TypedBinding,
+	scope_depth:      int,
+	scope_boundaries: [dynamic]int,
 }
 
 Variable :: struct {
@@ -214,19 +220,22 @@ Substitution :: map[TypeVariable]Type
 resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	ctx := tc.ctx
 	for ctx != nil {
-		if symb, ok := ctx.bindings[name]; ok && symb.scope_depth <= ctx.scope_depth {
-			t := symb.scheme
-			when ODIN_DEBUG {
-				if config.log_type {
-					fmt.eprintfln(
-						"-- grab type %v of %s from current context",
-						type_string(t, true),
-						name,
-					)
+		for i := len(ctx.bindings) - 1; i >= 0; i -= 1 {
+			b := ctx.bindings[i]
+			if b.name == name && b.var.scope_depth <= ctx.scope_depth {
+				t := b.var.scheme
+				when ODIN_DEBUG {
+					if config.log_type {
+						fmt.eprintfln(
+							"-- grab type %v of %s from current context",
+							type_string(t, true),
+							name,
+						)
+					}
 				}
-			}
 
-			return t
+				return t
+			}
 		}
 		ctx = ctx.enclosing
 	}
@@ -236,7 +245,7 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 }
 
 bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
-	ctx.bindings[name] = make_variable(ctx, scheme)
+	append(&ctx.bindings, TypedBinding{name = name, var = make_variable(ctx, scheme)})
 
 	when ODIN_DEBUG {
 		if config.log_type {
@@ -251,7 +260,8 @@ when ODIN_DEBUG {
 
 push_function_scope :: proc(tc: ^TypeChecker) {
 	ctx := new(TypeContext)
-	ctx.bindings = make(map[string]Variable)
+	ctx.bindings = make([dynamic]TypedBinding)
+	ctx.scope_boundaries = make([dynamic]int)
 	ctx.enclosing = tc.ctx
 	ctx.scope_depth = 0
 	tc.ctx = ctx
@@ -276,6 +286,7 @@ pop_function_scope :: proc(tc: ^TypeChecker) {
 }
 
 push_scope :: proc(ctx: ^TypeContext) {
+	append(&ctx.scope_boundaries, len(ctx.bindings))
 	ctx.scope_depth += 1
 
 	when ODIN_DEBUG {
@@ -287,6 +298,8 @@ push_scope :: proc(ctx: ^TypeContext) {
 
 pop_scope :: proc(ctx: ^TypeContext) {
 	assert(ctx.scope_depth > 0, "cannot have less than zero block scopes")
+	old_len := pop(&ctx.scope_boundaries)
+	resize(&ctx.bindings, old_len)
 	ctx.scope_depth -= 1
 
 	when ODIN_DEBUG {
@@ -299,10 +312,11 @@ pop_scope :: proc(ctx: ^TypeContext) {
 destroy_type_context :: proc(ctx: ^TypeContext) {
 	c := ctx
 	for c != nil {
-		for _, &symb in c.bindings {
-			free_typescheme(&symb.scheme)
+		for i in 0 ..< len(c.bindings) {
+			free_typescheme(&c.bindings[i].var.scheme)
 		}
 		delete(c.bindings)
+		delete(c.scope_boundaries)
 		free(c)
 		c = c.enclosing
 	}
@@ -397,8 +411,8 @@ free_vars_context :: proc(ctx: ^TypeContext) -> FreeVars {
 	c := ctx
 
 	for c != nil {
-		for _, symb in c.bindings {
-			scheme := symb.scheme
+		for i in 0 ..< len(c.bindings) {
+			scheme := c.bindings[i].var.scheme
 			scheme_fvs := free_vars(scheme)
 			defer delete(scheme_fvs)
 			for k in scheme_fvs {fvs[k] = {}}
@@ -483,9 +497,9 @@ apply_substitution_quantified :: proc(subst: Substitution, scheme: TypeScheme) -
 apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	c := ctx
 	for c != nil {
-		for name, symb in c.bindings {
-			scheme := symb.scheme
-			c.bindings[name] = make_variable(ctx, apply_substitution(subst, scheme))
+		for i in 0 ..< len(c.bindings) {
+			b := &c.bindings[i]
+			b.var.scheme = apply_substitution(subst, b.var.scheme)
 		}
 		c = c.enclosing
 	}
@@ -1114,8 +1128,6 @@ check_type :: proc(
 
 		// start the function scope
 		push_function_scope(tc)
-
-		// firstly, bind the function type to ctx so that recursion is possible
 		if name, ok := bound_to.?; ok {
 			bind_type(tc.ctx, strings.clone(name.lexeme), apply_substitution(s1, func_type))
 		}
@@ -1153,8 +1165,17 @@ check_type :: proc(
 		return combine_substitutions(s2, s1), nil
 	case ^SwitchExpr:
 		tc.current_token = e.token
-		cond_type := fresh(tc)
-		s := check_type(tc, e.condition, cond_type) or_return
+		cond_type: Type
+
+		s := make(Substitution)
+		if e.condition != nil {
+			s_cond, t_cond := infer_type(tc, e.condition) or_return
+			s = combine_substitutions(s_cond, s)
+			cond_type = t_cond
+		} else {
+			cond_type = tapp(.BOOL)
+		}
+
 		apply_substitution(s, tc.ctx)
 		for c in e.cases {
 			s1 := check_type(tc, c.condition, apply_substitution(s, cond_type)) or_return
@@ -1192,7 +1213,12 @@ check_type :: proc(
 			beta := binding.type.? or_else fresh(tc)
 
 			if binding.initializer != nil {
+				// allow recursion for anonymous fns
+				if _, ok := binding.initializer.(^FunctionExpr); ok {
+					bind_type(tc.ctx, strings.clone(binding.name.lexeme), beta)
+				}
 				s1 := check_type(tc, binding.initializer, beta) or_return
+
 				s = combine_substitutions(s1, s)
 				apply_substitution(s, tc.ctx)
 				inferred := apply_substitution(s, beta)
@@ -1373,10 +1399,11 @@ ctx_string :: proc(ctx: ^TypeContext, $debugging: bool) -> string {
 	sz := len(ctx.bindings)
 	count := 0
 	fmt.sbprint(&sb, "{")
-	for var_name, ty in ctx.bindings {
-		ty_string := type_string(ty, debugging)
+	for i in 0 ..< len(ctx.bindings) {
+		b := ctx.bindings[i]
+		ty_string := type_string(b.var.scheme, debugging)
 
-		fmt.sbprintf(&sb, "%s: %v%s", var_name, ty_string, ", " if count < sz - 1 else "")
+		fmt.sbprintf(&sb, "%s: %v%s", b.name, ty_string, ", " if count < sz - 1 else "")
 		count += 1
 	}
 	fmt.sbprint(&sb, "}")

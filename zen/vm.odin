@@ -1175,7 +1175,7 @@ interpret :: proc(
 		ctx := untyped_to_typed_context(ucx^)
 	}
 
-	TYPE_CHECK :: false
+	TYPE_CHECK :: true
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		tc_ok: bool
