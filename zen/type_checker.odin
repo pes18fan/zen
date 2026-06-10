@@ -1128,6 +1128,8 @@ check_type :: proc(
 
 		// start the function scope
 		push_function_scope(tc)
+
+		// pre-bind the fn name (if it is named) to allow recursion
 		if name, ok := bound_to.?; ok {
 			bind_type(tc.ctx, strings.clone(name.lexeme), apply_substitution(s1, func_type))
 		}
@@ -1213,10 +1215,6 @@ check_type :: proc(
 			beta := binding.type.? or_else fresh(tc)
 
 			if binding.initializer != nil {
-				// allow recursion for anonymous fns
-				if _, ok := binding.initializer.(^FunctionExpr); ok {
-					bind_type(tc.ctx, strings.clone(binding.name.lexeme), beta)
-				}
 				s1 := check_type(tc, binding.initializer, beta) or_return
 
 				s = combine_substitutions(s1, s)

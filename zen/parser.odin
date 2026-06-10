@@ -640,6 +640,13 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		if parser_match(p, .EQUAL) {
 			binding.initializer = parse_expression(p)
 		}
+
+		// to allow named lambdas to recurse when we get to resolving and
+		// typechecking
+		if fn, ok := binding.initializer.(^FunctionExpr); ok {
+			fn.bound_to = binding.name
+		}
+
 		append(&bindings, binding)
 
 		parser_match(p, .COMMA) or_break
