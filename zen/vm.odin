@@ -733,7 +733,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						vm_panic(
 							vm,
 							fmt.tprintf(
-								"Index out of bounds, attempted indexing %d in a %d list.",
+								"Index out of bounds, attempted indexing %d in a size %d list.",
 								int(index),
 								list.items.count,
 							),
@@ -749,7 +749,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						vm_panic(
 							vm,
 							fmt.tprintf(
-								"Index out of bounds, attempted indexing %d in a %d string.",
+								"Index out of bounds, attempted indexing %d in a size %d string.",
 								int(index),
 								zstring.len,
 							),
@@ -1297,7 +1297,6 @@ vm_peek :: #force_inline proc(vm: ^VM, distance: int) -> Value #no_bounds_check 
 }
 
 /* Returns true if provided value is falsey. */
-@(private = "file")
 is_falsey :: #force_inline proc(value: Value) -> bool {
 	return is_nil(value) || (is_bool(value) && !as_bool(value))
 }
