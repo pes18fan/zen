@@ -1562,21 +1562,25 @@ register_builtins :: proc(tc: ^TypeChecker) {
 	bind_type(tc.ctx, "puts", tquant({a}, tapp(.FUNCTION, {a, nil_t})))
 	bind_type(tc.ctx, "gets", tapp(.FUNCTION, {string_t}))
 
+	bind_type(tc.ctx, "panic", tapp(.FUNCTION, {string_t, never_t}))
+
 	b := fresh(tc)
-	bind_type(tc.ctx, "len", tquant({b}, tapp(.FUNCTION, {b, number_t})))
+	bind_type(tc.ctx, "assert", tquant({b}, tapp(.FUNCTION, {b, nil_t})))
 
 	c := fresh(tc)
-	bind_type(tc.ctx, "typeof", tquant({c}, tapp(.FUNCTION, {c, string_t})))
+	bind_type(tc.ctx, "len", tquant({c}, tapp(.FUNCTION, {c, number_t})))
 
 	d := fresh(tc)
-	bind_type(tc.ctx, "str", tquant({d}, tapp(.FUNCTION, {d, string_t})))
+	bind_type(tc.ctx, "typeof", tquant({d}, tapp(.FUNCTION, {d, string_t})))
+
+	e := fresh(tc)
+	bind_type(tc.ctx, "str", tquant({e}, tapp(.FUNCTION, {e, string_t})))
 
 	bind_type(tc.ctx, "parse", tapp(.FUNCTION, {string_t, number_t}))
 
-	e := fresh(tc)
-	bind_type(tc.ctx, "copy", tquant({e}, tapp(.FUNCTION, {e, e})))
+	f := fresh(tc)
+	bind_type(tc.ctx, "copy", tquant({f}, tapp(.FUNCTION, {f, f})))
 
-	bind_type(tc.ctx, "panic", tapp(.FUNCTION, {string_t, never_t}))
 	bind_type(tc.ctx, "dirname", tapp(.FUNCTION, {string_t}))
 	bind_type(tc.ctx, "filename", tapp(.FUNCTION, {string_t}))
 

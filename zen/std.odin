@@ -85,8 +85,9 @@ STD_MODULES := [?]string{"time", "math", "os", "string", "list"}
 @(rodata)
 GLOBAL_NATIVE_FN_NAMES := [?]string {
 	"puts",
-	"panic",
 	"gets",
+	"panic",
+	"assert",
 	"len",
 	"str",
 	"parse",
@@ -102,8 +103,9 @@ GLOBAL_NATIVE_FN_NAMES := [?]string {
 init_natives :: proc(gc: ^GC) {
 	GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
 		puts_native,
-		panic_native,
 		gets_native,
+		panic_native,
+		assert_native,
 		len_native,
 		str_native,
 		parse_native,
@@ -113,7 +115,11 @@ init_natives :: proc(gc: ^GC) {
 		filename_native,
 	}
 
-	GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 1, 0, 1, 1, 1, 1, 1, 0, 0}
+	GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}
+
+	#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_NAMES))
+	#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_ARITIES))
+	#assert(len(GLOBAL_NATIVE_FN_NAMES) == len(GLOBAL_NATIVE_FN_ARITIES))
 
 	for name, idx in GLOBAL_NATIVE_FN_NAMES {
 		define_native(gc, name, GLOBAL_NATIVE_FN_PROCS[idx], GLOBAL_NATIVE_FN_ARITIES[idx])
@@ -205,6 +211,16 @@ panic_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	vm_panic(vm, "%s", as_ostring(args[0]))
 	return nil_val(), false
+}
+
+/* Panic if the provided value is falsey. */
+assert_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if is_falsey(args[0]) {
+		vm_panic(vm, "Runtime assertion failed.")
+		return nil_val(), false
+	}
+
+	return nil_val(), true
 }
 
 /* Read a file and return its data. */
