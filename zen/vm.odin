@@ -275,34 +275,27 @@ numeric_binary_op :: proc(
 		case "*":
 			vm_push(vm, number_val(a * b))
 		case "/":
-			{
-				if b == 0 {
-					vm_panic(vm, "Cannot divide by zero.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-				vm_push(vm, number_val(a / b))
+			if b == 0 {
+				vm_panic(vm, "Cannot divide by zero.")
+				return .INTERPRET_RUNTIME_ERROR
 			}
+			vm_push(vm, number_val(a / b))
 		case "%":
-			{
-				if b == 0 {
-					vm_panic(vm, "Cannot modulo by zero.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				vm_push(vm, number_val(math.mod_f64(a, b)))
+			if b == 0 {
+				vm_panic(vm, "Cannot modulo by zero.")
+				return .INTERPRET_RUNTIME_ERROR
 			}
+			vm_push(vm, number_val(math.mod(a, b)))
 		case:
 			color_red(os.stderr, "bug: ")
 			fmt.panicf("Invalid numeric binary operation '%s'.\n", op)
 		}
 	case bool:
-		{
-			switch op {
-			case ">":
-				vm_push(vm, bool_val(a > b))
-			case "<":
-				vm_push(vm, bool_val(a < b))
-			}
+		switch op {
+		case ">":
+			vm_push(vm, bool_val(a > b))
+		case "<":
+			vm_push(vm, bool_val(a < b))
 		}
 	case:
 		color_red(os.stderr, "bug: ")
@@ -1175,7 +1168,7 @@ interpret :: proc(
 		ctx := untyped_to_typed_context(ucx^)
 	}
 
-	TYPE_CHECK :: true
+	TYPE_CHECK :: false
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		tc_ok: bool
