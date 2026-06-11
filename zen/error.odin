@@ -3,7 +3,6 @@ package zen
 ErrorMessage :: Maybe(string)
 
 // Helper to avoid a billion `if err != nil`s everywhere
-@(require_results)
 try :: proc {
 	try_codegen,
 	try_semantic,
