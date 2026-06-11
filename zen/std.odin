@@ -82,6 +82,9 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 @(rodata)
 STD_MODULES := [?]string{"time", "math", "os", "string", "list"}
 
+
+/* These are the functions available in the global scope. The rest are in their
+corresponding modules. */
 @(rodata)
 GLOBAL_NATIVE_FN_NAMES := [?]string {
 	"puts",
@@ -97,9 +100,6 @@ GLOBAL_NATIVE_FN_NAMES := [?]string {
 	"filename",
 }
 
-
-/* These are the functions available in the global scope. Ten very commonly used
- * functions are available as such. The rest are in their corresponding modules. */
 init_natives :: proc(gc: ^GC) {
 	@(static) GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
 		puts_native,
