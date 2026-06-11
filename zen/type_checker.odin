@@ -1091,7 +1091,7 @@ check_type :: proc(
 
 		// NOTE: this should work for both strings and lists but for now,
 		// subscripting fails with a type error on lists. MAybe fix later when
-		// constraints or union types are added
+		// constraints are added
 		beta := fresh(tc)
 		s1 := check_type(tc, receiver, tapp(.LIST, {beta})) or_return
 		apply_substitution(s1, tc.ctx)
