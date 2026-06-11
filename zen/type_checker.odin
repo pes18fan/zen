@@ -1072,7 +1072,21 @@ check_type :: proc(
 			return combine_substitutions(sn, s1), nil
 		}
 	case ^SubscriptExpr:
-		unimplemented()
+		tc.current_token = e.token
+		receiver := e.receiver
+		index := e.index
+
+		// NOTE: this should work for both strings and lists but for now,
+		// subscripting fails with a type error on lists. MAybe fix later when
+		// constraints or union types are added
+		beta := fresh(tc)
+		s1 := check_type(tc, receiver, tapp(.LIST, {beta})) or_return
+		apply_substitution(s1, tc.ctx)
+		s2 := check_type(tc, index, tapp(.NUMBER)) or_return
+		apply_substitution(s2, tc.ctx)
+		s := combine_substitutions(s2, s1)
+		sn := try_unify(type, beta) or_return
+		return combine_substitutions(sn, s), nil
 	case ^SubscriptSetExpr:
 		unimplemented()
 	case ^SuperExpr:
@@ -1249,7 +1263,7 @@ check_type :: proc(
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	}
 
-	unimplemented()
+	panic("invalid AST node")
 }
 
 TypePrintCtx :: struct {

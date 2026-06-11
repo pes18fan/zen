@@ -318,6 +318,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	unimplemented()
 }
 
+// WIP
 // Takes in the AST, resolves all variables and puts the info in an `UntypedContext`.
 // Also returns whether the operation succeeded, while printing out the error
 // messages as 'resolution errors' in the process.

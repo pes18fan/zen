@@ -101,7 +101,7 @@ GLOBAL_NATIVE_FN_NAMES := [?]string {
 /* These are the functions available in the global scope. Ten very commonly used
  * functions are available as such. The rest are in their corresponding modules. */
 init_natives :: proc(gc: ^GC) {
-	GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
+	@(static) GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
 		puts_native,
 		gets_native,
 		panic_native,
@@ -115,7 +115,7 @@ init_natives :: proc(gc: ^GC) {
 		filename_native,
 	}
 
-	GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}
+	@(static) GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}
 
 	#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_NAMES))
 	#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_ARITIES))
