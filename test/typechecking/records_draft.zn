@@ -1,7 +1,7 @@
 // DRAFT
 // proposed record syntax: subject to change
 record Point(x, y)
-val Vector3 = record(x, y, z)
+val Vector3 = (x, y, z) // non-declaration form
 
 // creating one
 val p = Point(1, 2)     // positional
@@ -18,7 +18,7 @@ val r = p with (y = 3)
 puts(r)     // expect: (x = 1, y = 3)
 
 // in pipelines
-val s =  q
+val s = q
     |> it with (y = 7)
     |> it with (z = 9)
     |> puts()   // expect: (x = 1, y = 7, z = 9)
