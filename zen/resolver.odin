@@ -104,10 +104,11 @@ pop_scope_untyped :: proc(ucx: ^UntypedContext) {
 destroy_untyped_context :: proc(ucx: ^UntypedContext) {
 	u := ucx
 	for u != nil {
+		next := u.enclosing
 		delete(u.bindings)
 		delete(u.scope_boundaries)
 		free(u)
-		u = u.enclosing
+		u = next
 	}
 }
 
@@ -204,8 +205,9 @@ declare_variable :: proc(
 			break // reached bindings from outer scopes within this function
 		}
 		if b.name == name.lexeme {
-			// redefining variables in the global scope IS allowed with some
-			// restrictions
+			// NOTE: redefining variables in the global scope IS allowed with some
+			// restrictions, still thinking if i should restrict it everywhere
+			// or not
 			if !in_global_scope(ucx) {
 				return "A variable with this name in this scope already exists."
 			}
@@ -248,6 +250,8 @@ define_variable :: proc(ucx: ^UntypedContext, name: Token) {
 			return
 		}
 	}
+
+	fmt.panicf("Internal compiler error: there is no variable to define with name %v", name.lexeme)
 }
 
 @(private = "file")
@@ -309,13 +313,107 @@ collect_forward_refs_untyped :: proc(ucx: ^UntypedContext, expr: Expr) {
 	}
 }
 
-// need to ensure parser-like synchronization on errors so that we don't bail
-// out on just one error; will help for nicer error messages
-resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
-	// switch e in expr {
-	//
-	//    }
-	unimplemented()
+// doesn't return immediately on errors as it has parser-like synchronization on
+// errors, so that we don't bail out on just one error; will help for nicer
+// error messages
+resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) {
+	if expr == nil {return}
+
+	switch e in expr {
+	case ^AssignExpr:
+		rs.current_token = e.token
+		name := e.name
+		value := e.value
+
+		resolve_with_resolver(rs, value)
+		if !binding_exists(rs.ucx, name) {
+			resolver_error(rs, fmt.tprintf("Undefined variable %v.", name.lexeme))
+		}
+	case ^BinaryExpr:
+		unimplemented()
+	case ^BlockExpr:
+		unimplemented()
+	case ^BreakExpr:
+		unimplemented()
+	case ^CallExpr:
+		unimplemented()
+	case ^ClassExpr:
+		unimplemented()
+	case ^ContinueExpr:
+		unimplemented()
+	case ^DiscardExpr:
+		unimplemented()
+	case ^ExitExpr:
+		unimplemented()
+	case ^ForExpr:
+		unimplemented()
+	case ^ForInExpr:
+		unimplemented()
+	case ^FunctionExpr:
+		unimplemented()
+	case ^GetExpr:
+		unimplemented()
+	case ^GroupingExpr:
+		unimplemented()
+	case ^IfExpr:
+		unimplemented()
+	case ^ItExpr:
+		unimplemented()
+	case ^ListExpr:
+		unimplemented()
+	case ^LiteralExpr:
+		rs.current_token = e.token
+	case ^LogicalExpr:
+		unimplemented()
+	case ^PrintExpr:
+		unimplemented()
+	case ^PipeExpr:
+		unimplemented()
+	case ^ReturnExpr:
+		unimplemented()
+	case ^SetExpr:
+		unimplemented()
+	case ^SequenceExpr:
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.left)
+		resolve_with_resolver(rs, e.right)
+	case ^SubscriptExpr:
+		unimplemented()
+	case ^SubscriptSetExpr:
+		unimplemented()
+	case ^SuperExpr:
+		unimplemented()
+	case ^SwitchExpr:
+		unimplemented()
+	case ^ThisExpr:
+		unimplemented()
+	case ^UnaryExpr:
+		unimplemented()
+	case ^UseExpr:
+		unimplemented()
+	case ^VarDeclExpr:
+		rs.current_token = e.token
+		is_final := e.is_final
+		bindings := e.bindings
+
+		for binding in bindings {
+			rs.current_token = binding.name
+			name := binding.name
+			initializer := binding.initializer
+
+			if !try(rs, declare_variable(rs.ucx, name, is_final)) {continue}
+			resolve_with_resolver(rs, initializer)
+			define_variable(rs.ucx, name)
+		}
+	case ^VariableExpr:
+		rs.current_token = e.token
+		name := e.name
+		if !binding_exists(rs.ucx, name) {
+			resolver_error(rs, fmt.tprintf("Undefined variable %v.", name.lexeme))
+		}
+	case ^WhileExpr:
+		unimplemented()
+	}
 }
 
 // WIP
@@ -336,6 +434,6 @@ resolve :: proc(expr: Expr) -> (ucx: ^UntypedContext, success: bool) {
 	// Pre-scan for global function forward references
 	collect_forward_refs_untyped(rs.ucx, expr)
 
-	ok := resolve_with_resolver(&rs, expr)
-	return rs.ucx, ok
+	resolve_with_resolver(&rs, expr)
+	return rs.ucx, !rs.had_error
 }
