@@ -204,7 +204,7 @@ declare_variable :: proc(
 		if b.var.scope_depth < ucx.scope_depth {
 			break // reached bindings from outer scopes within this function
 		}
-		if b.name == name.lexeme {
+		if identifiers_equal(synthetic_token(b.name), name) {
 			// NOTE: redefining variables in the global scope IS allowed with some
 			// restrictions, still thinking if i should restrict it everywhere
 			// or not
@@ -245,7 +245,7 @@ define_variable :: proc(ucx: ^UntypedContext, name: Token) {
 	// Find the most recently declared (still uninitialized) binding for this name
 	for i := len(ucx.bindings) - 1; i >= 0; i -= 1 {
 		b := &ucx.bindings[i]
-		if b.name == name.lexeme && !b.var.initialized {
+		if identifiers_equal(synthetic_token(b.name), name) && !b.var.initialized {
 			b.var.initialized = true
 			return
 		}
@@ -275,6 +275,15 @@ binding_exists :: proc(ucx: ^UntypedContext, name: Token) -> bool {
 	return binding_exists(ucx.enclosing, name)
 }
 
+@(require_results)
+assert_binding_exists :: proc(ucx: ^UntypedContext, name: Token) -> ErrorMessage {
+	if !binding_exists(ucx.enclosing, name) {
+		return fmt.tprintf("Undefined variable '%v'.", name.lexeme)
+	}
+
+	return nil
+}
+
 resolver_error :: proc(rs: ^Resolver, message: string) {
 	token := rs.current_token
 	color_red(os.stderr, "compile error ")
@@ -295,7 +304,6 @@ resolver_error :: proc(rs: ^Resolver, message: string) {
 // Pre-scan the top-level AST for global function declarations and hoist them
 // into the outermost scope before the main resolution walk, enabling mutual
 // recursion between top-level functions.
-@(private = "file")
 collect_forward_refs_untyped :: proc(ucx: ^UntypedContext, expr: Expr) {
 	if expr == nil {return}
 
@@ -313,11 +321,9 @@ collect_forward_refs_untyped :: proc(ucx: ^UntypedContext, expr: Expr) {
 	}
 }
 
-// doesn't return immediately on errors as it has parser-like synchronization on
-// errors, so that we don't bail out on just one error; will help for nicer
-// error messages
-resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) {
-	if expr == nil {return}
+@(require_results)
+resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
+	if expr == nil {return true}
 
 	switch e in expr {
 	case ^AssignExpr:
@@ -325,30 +331,104 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) {
 		name := e.name
 		value := e.value
 
-		resolve_with_resolver(rs, value)
-		if !binding_exists(rs.ucx, name) {
-			resolver_error(rs, fmt.tprintf("Undefined variable %v.", name.lexeme))
-		}
+		resolve_with_resolver(rs, value) or_return
+		try(rs, assert_binding_exists(rs.ucx, name)) or_return
 	case ^BinaryExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.left) or_return
+		resolve_with_resolver(rs, e.right) or_return
 	case ^BlockExpr:
-		unimplemented()
+		push_scope_untyped(rs.ucx)
+		resolve_with_resolver(rs, e.expression) or_return
+		pop_scope_untyped(rs.ucx)
 	case ^BreakExpr:
-		unimplemented()
+		rs.current_token = e.token
 	case ^CallExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.callee) or_return
+		for arg in e.arguments {
+			resolve_with_resolver(rs, arg) or_return
+		}
 	case ^ClassExpr:
-		unimplemented()
+		rs.current_token = e.token
+		name := e.name
+		superclass := e.superclass
+		methods := e.methods
+
+		if binding_exists(rs.ucx, name) {
+			resolver_error(rs, "Cannot redeclare a class.")
+			return false
+		}
+
+		try(rs, declare_variable(rs.ucx, name, is_final = false)) or_return
+		define_variable(rs.ucx, name)
+
+		has_superclass := false
+		if superclass_name, ok := superclass.?; ok {
+			has_superclass = true
+			try(rs, assert_binding_exists(rs.ucx, superclass_name)) or_return
+
+			push_scope_untyped(rs.ucx)
+			super := synthetic_token("super")
+			try(rs, declare_variable(rs.ucx, super, is_final = true)) or_return
+			define_variable(rs.ucx, super)
+		}
+
+		for method in methods {
+			rs.current_token = method.token
+			resolve_with_resolver(rs, method) or_return
+		}
+
+		if has_superclass {
+			pop_scope_untyped(rs.ucx)
+		}
 	case ^ContinueExpr:
-		unimplemented()
+		rs.current_token = e.token
 	case ^DiscardExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.expression) or_return
 	case ^ExitExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.code) or_return
 	case ^ForExpr:
-		unimplemented()
+		rs.current_token = e.token
+		push_scope_untyped(rs.ucx)
+		resolve_with_resolver(rs, e.initializer) or_return
+		resolve_with_resolver(rs, e.condition) or_return
+		resolve_with_resolver(rs, e.increment) or_return
+		push_scope_untyped(rs.ucx)
+		resolve_with_resolver(rs, e.body) or_return
+		pop_scope_untyped(rs.ucx)
+		pop_scope_untyped(rs.ucx)
 	case ^ForInExpr:
-		unimplemented()
+		rs.current_token = e.token
+		var_name := e.var_name
+		iterable := e.iterable
+		body := e.body
+
+		push_scope_untyped(rs.ucx)
+		defer pop_scope_untyped(rs.ucx)
+
+		try(
+			rs,
+			declare_variable(rs.ucx, var_name, is_final = true, is_loop_variable = true),
+		) or_return
+		define_variable(rs.ucx, var_name)
+
+		resolve_with_resolver(rs, iterable) or_return
+
+		iter := synthetic_token("__iter")
+		try(rs, declare_variable(rs.ucx, iter, is_final = true, is_loop_variable = true)) or_return
+		define_variable(rs.ucx, iter)
+
+		idx := synthetic_token("__idx")
+		try(rs, declare_variable(rs.ucx, idx, is_final = true, is_loop_variable = true)) or_return
+		define_variable(rs.ucx, idx)
+
+		push_scope_untyped(rs.ucx)
+		defer pop_scope_untyped(rs.ucx)
+
+		resolve_with_resolver(rs, body) or_return
 	case ^FunctionExpr:
 		unimplemented()
 	case ^GetExpr:
@@ -360,7 +440,10 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) {
 	case ^ItExpr:
 		unimplemented()
 	case ^ListExpr:
-		unimplemented()
+		rs.current_token = e.token
+		for elem in e.elements {
+			resolve_with_resolver(rs, elem) or_return
+		}
 	case ^LiteralExpr:
 		rs.current_token = e.token
 	case ^LogicalExpr:
@@ -374,9 +457,11 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) {
 	case ^SetExpr:
 		unimplemented()
 	case ^SequenceExpr:
+		// resolution errors on the left expression are ignored when resolving
+		// a sequence; this is to catch as many errors as possible across expressions
 		rs.current_token = e.token
-		resolve_with_resolver(rs, e.left)
-		resolve_with_resolver(rs, e.right)
+		_ = resolve_with_resolver(rs, e.left)
+		return resolve_with_resolver(rs, e.right)
 	case ^SubscriptExpr:
 		unimplemented()
 	case ^SubscriptSetExpr:
@@ -402,18 +487,18 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) {
 			initializer := binding.initializer
 
 			if !try(rs, declare_variable(rs.ucx, name, is_final)) {continue}
-			resolve_with_resolver(rs, initializer)
+			resolve_with_resolver(rs, initializer) or_return
 			define_variable(rs.ucx, name)
 		}
 	case ^VariableExpr:
 		rs.current_token = e.token
 		name := e.name
-		if !binding_exists(rs.ucx, name) {
-			resolver_error(rs, fmt.tprintf("Undefined variable %v.", name.lexeme))
-		}
+		try(rs, assert_binding_exists(rs.ucx, name)) or_return
 	case ^WhileExpr:
 		unimplemented()
 	}
+
+	return true
 }
 
 // WIP
@@ -434,6 +519,6 @@ resolve :: proc(expr: Expr) -> (ucx: ^UntypedContext, success: bool) {
 	// Pre-scan for global function forward references
 	collect_forward_refs_untyped(rs.ucx, expr)
 
-	resolve_with_resolver(&rs, expr)
+	_ = resolve_with_resolver(&rs, expr)
 	return rs.ucx, !rs.had_error
 }

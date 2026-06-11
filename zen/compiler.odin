@@ -410,7 +410,7 @@ identifiers_equal :: proc(a: Token, b: Token) -> bool {
 
 /* Create a synthetic token i.e. a token that doesn't actually exist in the
  * source code. Used for `super` and `this`, to create a variable out of them. */
-synthetic_token :: proc(text: string) -> Token {
+synthetic_token :: #force_inline proc(text: string) -> Token {
 	return Token{lexeme = text}
 }
 
