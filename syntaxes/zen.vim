@@ -20,7 +20,7 @@ syn keyword zenBoolean true false
 syn keyword zenConstant it nil this super
 
 " Built-in Functions
-syn keyword zenBuiltin puts gets len typeof str parse copy dirname filename
+syn keyword zenBuiltin puts gets assert panic len typeof str parse copy dirname filename
 
 " Strings (Matches "..." and handles escaped quotes \")
 syn region zenString start=/"/ skip=/\\./ end=/"/
