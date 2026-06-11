@@ -1033,8 +1033,6 @@ check_type :: proc(
 		apply_substitution(s2, tc.ctx)
 		sn := try_unify(type, tapp(.BOOL)) or_return
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
-	case ^ItExpr:
-		unimplemented()
 	case ^ListExpr:
 		tc.current_token = e.token
 		if len(e.elements) == 0 {
@@ -1051,8 +1049,23 @@ check_type :: proc(
 		}
 		sn := try_unify(type, tapp(.LIST, {apply_substitution(s, elem)})) or_return
 		return combine_substitutions(sn, s), nil
+	case ^ItExpr:
+		tc.current_token = e.token
+		return try_unify(type, tc.pipeline_type)
 	case ^PipeExpr:
-		unimplemented()
+		tc.current_token = e.token
+		left := e.left
+		right := e.right
+
+		s1, t1 := infer_type(tc, left) or_return
+		apply_substitution(s1, tc.ctx)
+		tc.pipeline_type = t1
+		s2, t2 := infer_type(tc, right) or_return
+		apply_substitution(s2, tc.ctx)
+		tc.pipeline_type = t2
+		s := combine_substitutions(s2, s1)
+		sn := try_unify(type, t2) or_return
+		return combine_substitutions(sn, s), nil
 	case ^PrintExpr:
 		tc.current_token = e.token
 		s1, t1 := infer_type(tc, e.expr) or_return

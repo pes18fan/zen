@@ -26,7 +26,6 @@ Codegen :: struct {
 	globals:          ^Table, // Hash table storing global variables.
 	gc:               ^GC,
 	prev_mark_roots:  RootSource,
-	pipeline_active:  bool,
 	had_error:        bool,
 }
 
@@ -1417,11 +1416,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			compile_expression(cg, get_expr.receiver) or_return
 			name := try2(cg, identifier_constant(cg, get_expr.property)) or_return
 
-			if cg.pipeline_active {
-				emit_opcode(cg, .OP_GET_IT)
-				arg_count += 1
-			}
-
 			for arg in e.arguments {
 				compile_expression(cg, arg) or_return
 			}
@@ -1431,12 +1425,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		} else {
 			// Compile the callee.
 			compile_expression(cg, callee) or_return
-
-			// If in a pipeline, fetch `it` as the first argument.
-			if cg.pipeline_active {
-				emit_opcode(cg, .OP_GET_IT)
-				arg_count += 1
-			}
 
 			for arg in arguments {
 				compile_expression(cg, arg) or_return
@@ -1577,10 +1565,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
 		emit_opcode(cg, .OP_SET_IT)
-		old_pipeline := cg.pipeline_active
-		cg.pipeline_active = true
 		compile_expression(cg, e.right) or_return
-		cg.pipeline_active = old_pipeline
 	case ^PrintExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expr) or_return
@@ -1793,7 +1778,6 @@ codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, succ
 		globals         = globals,
 		gc              = gc,
 		prev_mark_roots = gc.mark_roots_arg,
-		pipeline_active = false,
 		had_error       = false,
 	}
 	gc.mark_roots_arg = &cg

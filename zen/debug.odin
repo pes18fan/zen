@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:os"
 
 /* Print debug info for a simple instruction. */
 @(private = "file")
@@ -310,6 +311,9 @@ Prints a header for each chunk, then loops through the bytecode,
 disassembling each instruction one by one.
 */
 disassemble :: proc(c: ^Chunk, name: string) {
+	// prevent -vet from complaining; `os` is used for debug prints
+	_ = os.stdout
+
 	fmt.eprintf("== %s ==\n", name)
 
 	for i := 0; i < len(c.code); {
@@ -318,26 +322,20 @@ disassemble :: proc(c: ^Chunk, name: string) {
 }
 
 /* Some debug print functions to avoid printing debug info in prod code */
-dbg_print :: proc(args: ..any) {
-	when ODIN_DEBUG {
+when ODIN_DEBUG {
+	dbg_print :: proc(args: ..any) {
 		fmt.eprint(..args)
 	}
-}
 
-dbg_println :: proc(args: ..any) {
-	when ODIN_DEBUG {
+	dbg_println :: proc(args: ..any) {
 		fmt.eprintln(..args)
 	}
-}
 
-dbg_printf :: proc(format: string, args: ..any) {
-	when ODIN_DEBUG {
+	dbg_printf :: proc(format: string, args: ..any) {
 		fmt.eprintf(format, ..args)
 	}
-}
 
-dbg_printfln :: proc(format: string, args: ..any) {
-	when ODIN_DEBUG {
+	dbg_printfln :: proc(format: string, args: ..any) {
 		fmt.eprintfln(format, ..args)
 	}
 }
