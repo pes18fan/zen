@@ -1,4 +1,3 @@
 func bad(): String {
-    42
+    42  // ERR: Expected an expression of type String, got Number.
 }
-bad() // ERR: Expected an expression of type String, got Number
