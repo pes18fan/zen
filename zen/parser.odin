@@ -416,7 +416,7 @@ parse_if_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(SwitchExpr)
 	expr.token = parser_previous(p)
-	cases := make([dynamic]ExprSwitchCase)
+	cases := make([dynamic]ExprSwitchCase, 0)
 	has_else_clause := false
 
 	if parser_match(p, .LSQUIRLY) {
@@ -509,7 +509,7 @@ parse_class_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr.token = parser_previous(p)
 	expr.name = parser_consume(p, .IDENT, "Expect class name.")
 	expr.public = false
-	methods := make([dynamic]^FunctionExpr)
+	methods := make([dynamic]^FunctionExpr, 0)
 
 	if parser_match(p, .LESS) {
 		expr.superclass = parser_consume(p, .IDENT, "Expect superclass name.")
@@ -625,7 +625,7 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(VarDeclExpr)
 	expr.token = parser_previous(p)
 	expr.is_final = expr.token.type == .VAL
-	bindings := make([dynamic]VarBinding)
+	bindings := make([dynamic]VarBinding, 0)
 
 	for {
 		binding: VarBinding
@@ -675,7 +675,7 @@ parse_grouping :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_list :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	list := new(ListExpr)
 	list.token = parser_previous(p)
-	elements := make([dynamic]Expr)
+	elements := make([dynamic]Expr, 0)
 	if !parser_check(p, .RSQUARE) {
 		for {
 			append(&elements, parse_expression(p))
@@ -882,7 +882,7 @@ parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		expr := new(VarDeclExpr)
 		expr.token = parser_previous(p)
 		expr.is_final = true // func decls are NOT reassignable
-		bindings := make([dynamic]VarBinding)
+		bindings := make([dynamic]VarBinding, 0)
 
 		func_binding: VarBinding
 		func_binding.name = parser_consume(p, .IDENT, "Expect function name.")
@@ -897,7 +897,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 	lambda := new(FunctionExpr)
 	lambda.token = parser_previous(p)
 	lambda.bound_to = bound_to
-	params := make([dynamic]FunctionParam)
+	params := make([dynamic]FunctionParam, 0)
 
 	// TODO: improve this error message
 	parser_consume(
@@ -990,7 +990,24 @@ parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	pipe.token = operator
 	pipe.left = left
 	pipe.operator = operator
+
+	// insert `it` into the first arg of the call
+	if call, ok := right.(^CallExpr); ok {
+		new_args := make([dynamic]Expr)
+		if len(call.arguments) != 0 {copy(new_args[:], call.arguments)}
+		inserted_it := new(ItExpr)
+		inserted_it.token = call.token
+
+		append(&new_args, inserted_it)
+		for arg in call.arguments {
+			append(&new_args, arg)
+		}
+
+		delete(call.arguments)
+		call.arguments = new_args[:]
+	}
 	pipe.right = right
+
 	return pipe
 }
 
@@ -1025,7 +1042,7 @@ parse_call :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	call := new(CallExpr)
 	call.token = parser_previous(p) // The '(' token
 	call.callee = left
-	arguments := make([dynamic]Expr)
+	arguments := make([dynamic]Expr, 0)
 
 	if !parser_check(p, .RPAREN) {
 		for {
