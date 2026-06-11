@@ -555,6 +555,8 @@ for you to use.
     if the string is not a valid number.
 - `copy(x)`: Return a copy of `x`.
 - `panic(s)`: Crash the program with a message `s`.
+- `assert(x)`: Crash the program if the expression `x` is falsey, otherwise do
+    nothing.
 - `dirname()`: Return the directory containing the running program, or an empty 
     string if running a REPL.
 - `filename()`: Return the name of the running program, or an empty string if 
