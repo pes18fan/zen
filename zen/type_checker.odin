@@ -89,7 +89,7 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 		return "Record"
 	}
 
-	fmt.panicf("Internal compiler error: invalid type constructor %v", c)
+	fmt.panicf("invalid type constructor %v", c)
 }
 
 fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
@@ -127,7 +127,7 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionAp
 		unimplemented()
 	}
 
-	fmt.panicf("Internal compiler error: invalid type constructor %v", constructor)
+	fmt.panicf("invalid type constructor %v", constructor)
 }
 
 // not necessary for the type checker as it just uses an arena; but the
@@ -241,7 +241,7 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	}
 
 	// panic cuz variable resolving is supposed to be done beforehand
-	fmt.panicf("Internal compiler error: Couldn't resolve variable '%v' in typechecker", name)
+	fmt.panicf("Couldn't resolve variable '%v' in typechecker", name)
 }
 
 bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
@@ -886,7 +886,7 @@ check_type :: proc(
 			sn := try_unify(type, tapp(.BOOL)) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case:
-			fmt.panicf("Internal compiler error: Invalid binary operator '%s'.", e.operator.lexeme)
+			fmt.panicf("Invalid binary operator '%s'.", e.operator.lexeme)
 		}
 	case ^BlockExpr:
 		tc.current_token = e.token
@@ -1230,7 +1230,7 @@ check_type :: proc(
 			sn := try_unify(type, tapp(.BOOL)) or_return
 			return combine_substitutions(sn, s1), nil
 		case:
-			fmt.panicf("Internal compiler error: Unknown unary operator '%s'", e.operator.lexeme)
+			fmt.panicf("Unknown unary operator '%s'", e.operator.lexeme)
 		}
 
 	case ^UseExpr:
@@ -1365,7 +1365,7 @@ type_string_inner :: proc(ctx: ^TypePrintCtx, type: Type) -> string {
 		return "!"
 	}
 
-	panic("Internal compiler error: Invalid type")
+	panic("Invalid type")
 }
 
 type_string_with_ctx :: proc(ctx: ^TypePrintCtx, scheme: TypeScheme) -> string {
@@ -1396,7 +1396,7 @@ type_string_with_ctx :: proc(ctx: ^TypePrintCtx, scheme: TypeScheme) -> string {
 		return fmt.tprintf("forall %s. %s", strings.to_string(bound_names), body)
 	}
 
-	panic("Internal compiler error: invalid typescheme")
+	panic("invalid typescheme")
 }
 
 subst_string :: proc(subst: Substitution, $debugging: bool) -> string {
@@ -1463,10 +1463,7 @@ bind_type_to_module :: proc(
 	type: TypeScheme,
 ) {
 	if module.constructor != .RECORD {
-		fmt.panicf(
-			"Internal compiler error: %v is not a record and thus not a module type",
-			module,
-		)
+		fmt.panicf("%v is not a record and thus not a module type", module)
 	}
 
 	unimplemented()
@@ -1474,7 +1471,7 @@ bind_type_to_module :: proc(
 
 register_builtin_module :: proc(tc: ^TypeChecker, module: string) {
 	if !slice.contains(STD_MODULES[:], module) {
-		fmt.panicf("Internal compiler error: Invalid builtin module %v", module)
+		fmt.panicf("Invalid builtin module %v", module)
 	}
 
 	string_t := tapp(.STRING)
@@ -1638,4 +1635,45 @@ typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 	register_builtins(&tc)
 
 	return typecheck_without_arena(&tc, expr)
+}
+
+typecheck_full :: proc(vm: ^VM, expr: Expr) -> bool {
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintln("-- typechecker begin")
+		}
+	}
+
+	// Use persistent type checker for REPL
+	if config.repl {
+		if !vm.type_arena_init {
+			err := vmem.arena_init_growing(&vm.type_arena)
+			ensure(err == nil)
+			vm.type_arena_init = true
+		}
+
+		context.allocator = vmem.arena_allocator(&vm.type_arena)
+
+		if vm.type_checker == nil {
+			tc := new(TypeChecker)
+			tc^ = TypeChecker {
+				typeid_map = make_typeid_map(),
+			}
+			push_function_scope(tc)
+			register_builtins(tc)
+			vm.type_checker = tc
+		}
+
+		typecheck_without_arena(vm.type_checker, expr) or_return
+	} else {
+		typecheck(expr) or_return
+	}
+
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintln("\n-- typechecker end")
+		}
+	}
+
+	return true
 }

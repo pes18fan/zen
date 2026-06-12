@@ -83,6 +83,10 @@ VM :: struct {
 	type_checker:     ^TypeChecker,
 	type_arena:       vmem.Arena,
 	type_arena_init:  bool,
+
+	/* Persistent resolver state for the REPL. */
+	resolver_init:    bool,
+	resolver_globals: map[string]^UntypedVariable,
 }
 
 /* The result of the interpreting. */
@@ -189,6 +193,8 @@ init_VM :: proc() -> VM {
 		type_checker     = nil,
 		type_arena       = {},
 		type_arena_init  = false,
+		resolver_init    = false,
+		resolver_globals = nil,
 	}
 
 	return vm
@@ -200,6 +206,11 @@ free_VM :: proc(vm: ^VM) {
 
 	if vm.type_arena_init {
 		vmem.arena_destroy(&vm.type_arena)
+	}
+
+	if vm.resolver_init {
+		for _, &v in vm.resolver_globals {free(v)}
+		delete(vm.resolver_globals)
 	}
 
 	// don't free explicitly, let gc do it
@@ -1162,7 +1173,7 @@ interpret :: proc(
 
 	RESOLVE :: true
 	when RESOLVE {
-		rs_ok := resolve(expr)
+		rs_ok := resolve_full(vm, expr)
 		if !rs_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
@@ -1171,47 +1182,7 @@ interpret :: proc(
 	TYPE_CHECK :: false
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
-		tc_ok: bool
-
-		when ODIN_DEBUG {
-			if config.log_type {
-				fmt.eprintln("-- typechecker begin")
-			}
-		}
-
-		// Use persistent type checker for REPL
-		if config.repl {
-			if !vm.type_arena_init {
-				err := vmem.arena_init_growing(&vm.type_arena)
-				ensure(err == nil)
-				vm.type_arena_init = true
-			}
-
-			prev_alloc := context.allocator
-			context.allocator = vmem.arena_allocator(&vm.type_arena)
-
-			if vm.type_checker == nil {
-				tc := new(TypeChecker)
-				tc^ = TypeChecker {
-					typeid_map = make_typeid_map(),
-				}
-				push_function_scope(tc)
-				register_builtins(tc)
-				vm.type_checker = tc
-			}
-
-			_, tc_ok = typecheck_without_arena(vm.type_checker, expr)
-			context.allocator = prev_alloc
-		} else {
-			_, tc_ok = typecheck(expr)
-		}
-
-		when ODIN_DEBUG {
-			if config.log_type {
-				fmt.eprintln("\n-- typechecker end")
-			}
-		}
-
+		tc_ok := typecheck_full(vm, expr)
 		if !tc_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
