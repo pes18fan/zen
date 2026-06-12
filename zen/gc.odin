@@ -203,6 +203,9 @@ mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
 	for upvalue := vm.open_upvalues; upvalue != nil; upvalue = upvalue.next_upvalue {
 		mark_object(gc, (^Obj)(upvalue))
 	}
+
+	/* Mark the compile-time variable names used for the REPL. */
+	mark_table(gc, &vm.compiler_globals)
 }
 
 /* Start the root marking step of the GC. */
