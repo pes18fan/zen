@@ -589,15 +589,9 @@ resolve :: proc(
 		}
 	}
 
-	// don't free globals, it is returned
-	// defer {
-	// 	for _, v in rs.globals {
-	// 		free(v)
-	// 	}
-	// 	delete(rs.globals)
-	// }
 	push_function_scope_untyped(&rs)
 	defer pop_function_scope_untyped(&rs)
+	// don't free globals, it is returned
 
 	collect_forward_references(&rs, expr) or_return
 	resolve_with_resolver(&rs, expr) or_return
