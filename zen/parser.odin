@@ -7,7 +7,7 @@ import "core:strings"
 
 // AST Node Definitions
 
-Expr :: union {
+Expr :: union #shared_nil {
 	^AssignExpr,
 	^BinaryExpr,
 	^BlockExpr,
