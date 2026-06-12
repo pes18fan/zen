@@ -455,8 +455,16 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 
 		for binding in bindings {
 			try(rs, declare_variable(rs, binding.name.lexeme, is_final)) or_return
+			is_fn := false
+			// allow recursion
+			if _, ok := binding.initializer.(^FunctionExpr); ok {
+				is_fn = true
+				define_variable(rs, binding.name.lexeme)
+			}
 			resolve_with_resolver(rs, binding.initializer) or_return
-			define_variable(rs, binding.name.lexeme)
+			if !is_fn {
+				define_variable(rs, binding.name.lexeme)
+			}
 		}
 	case ^WhileExpr:
 		rs.current_token = e.token
