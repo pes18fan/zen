@@ -1160,11 +1160,11 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	RESOLVE :: true
+	RESOLVE :: false
 	when RESOLVE {
 		// NOTE: repl case yet to be handled
 		ucx, rs_ok := resolve(expr)
-		defer destroy_untyped_context(ucx) // just directly cleanup for now
+		defer destroy_untyped_context(ucx)
 		if !rs_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}

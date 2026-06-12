@@ -100,29 +100,35 @@ GLOBAL_NATIVE_FN_NAMES := [?]string {
 	"filename",
 }
 
+@(rodata)
+GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
+	puts_native,
+	gets_native,
+	panic_native,
+	assert_native,
+	len_native,
+	str_native,
+	parse_native,
+	typeof_native,
+	copy_native,
+	dirname_native,
+	filename_native,
+}
+
+@(rodata)
+GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}
+
+#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_NAMES))
+#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_ARITIES))
+#assert(len(GLOBAL_NATIVE_FN_NAMES) == len(GLOBAL_NATIVE_FN_ARITIES))
+
 init_natives :: proc(gc: ^GC) {
-	@(static) GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
-		puts_native,
-		gets_native,
-		panic_native,
-		assert_native,
-		len_native,
-		str_native,
-		parse_native,
-		typeof_native,
-		copy_native,
-		dirname_native,
-		filename_native,
-	}
-
-	@(static) GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}
-
-	#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_NAMES))
-	#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_ARITIES))
-	#assert(len(GLOBAL_NATIVE_FN_NAMES) == len(GLOBAL_NATIVE_FN_ARITIES))
-
-	for name, idx in GLOBAL_NATIVE_FN_NAMES {
-		define_native(gc, name, GLOBAL_NATIVE_FN_PROCS[idx], GLOBAL_NATIVE_FN_ARITIES[idx])
+	for v in soa_zip(
+		GLOBAL_NATIVE_FN_NAMES[:],
+		GLOBAL_NATIVE_FN_PROCS[:],
+		GLOBAL_NATIVE_FN_ARITIES[:],
+	) {
+		define_native(gc, v._0, v._1, v._2)
 	}
 }
 
