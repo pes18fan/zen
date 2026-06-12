@@ -7,13 +7,13 @@ import "core:slice"
 import "core:strings"
 
 TypeChecker :: struct {
-	ctx:           ^TypeContext,
-	typevar_count: int,
-	current_token: Token,
-	return_type:   Type,
-	pipeline_type: Type,
-	typeid_map:    map[string]Type,
-	had_error:     bool,
+	ctx:              ^TypeContext,
+	resolved_globals: map[string]^UntypedVariable,
+	typevar_count:    int,
+	current_token:    Token,
+	return_type:      Type,
+	pipeline_type:    Type,
+	had_error:        bool,
 }
 
 TypedBinding :: struct {
@@ -34,7 +34,8 @@ Variable :: struct {
 }
 
 make_variable :: proc(ctx: ^TypeContext, scheme: TypeScheme) -> Variable {
-	// NOTE: currently most the fields from `Variable` are unused here
+	// NOTE: currently most fields here that come from `UntypedVariable` are
+	// unused here
 	return Variable{scope_depth = ctx.scope_depth, scheme = scheme}
 }
 
@@ -240,7 +241,19 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 		ctx = ctx.enclosing
 	}
 
-	// panic cuz variable resolving is supposed to be done beforehand
+	// if the variable doesn't exist in the context, there is a chance it is
+	// in the global context resolved previously by the resolver; see if its
+	// there
+	if _, exists := tc.resolved_globals[name]; exists {
+		alpha := fresh(tc)
+
+		// NOTE: technically the type is in the global context, but for now we're
+		// just keeping it in whichever context it is required in
+		bind_type(tc.ctx, strings.clone(name), alpha)
+		return alpha
+	}
+
+	// nothing found at all
 	fmt.panicf("Couldn't resolve variable '%v' in typechecker", name)
 }
 
@@ -1360,9 +1373,9 @@ type_string_inner :: proc(ctx: ^TypePrintCtx, type: Type) -> string {
 			return strings.to_string(sb)
 		}
 	case TypeAny:
-		return "any"
+		return "Any"
 	case TypeNever:
-		return "!"
+		return "Never"
 	}
 
 	panic("Invalid type")
@@ -1434,26 +1447,6 @@ ctx_string :: proc(ctx: ^TypeContext, $debugging: bool) -> string {
 	fmt.sbprint(&sb, "}")
 
 	return fmt.tprint(strings.to_string(sb))
-}
-
-annotation_to_type :: proc(tc: ^TypeChecker, annotation: string) -> (Type, ErrorMessage) {
-	if annotation in tc.typeid_map {
-		return tc.typeid_map[annotation], nil
-	}
-
-	return {}, fmt.tprintf("Invalid type %s.", annotation)
-}
-
-make_typeid_map :: proc() -> map[string]Type {
-	// only including nullary types for now
-	typeid_map := make(map[string]Type)
-	typeid_map["Nil"] = tapp(.NIL)
-	typeid_map["Bool"] = tapp(.BOOL)
-	typeid_map["Number"] = tapp(.NUMBER)
-	typeid_map["String"] = tapp(.STRING)
-	typeid_map["!"] = type_never
-	typeid_map["Any"] = type_any
-	return typeid_map
 }
 
 bind_type_to_module :: proc(
@@ -1615,7 +1608,13 @@ typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, su
 	return ty, true
 }
 
-typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
+typecheck :: proc(
+	expr: Expr,
+	resolved_globals: map[string]^UntypedVariable,
+) -> (
+	type: Type,
+	success: bool,
+) {
 	// create separate arena to allocate everything for typechecker
 	arena: vmem.Arena
 	arena_err := vmem.arena_init_growing(&arena)
@@ -1626,18 +1625,24 @@ typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 	context.allocator = arena_alloc
 
 	tc := TypeChecker {
-		ctx           = nil,
-		typevar_count = 0,
-		current_token = {},
-		had_error     = false,
-		typeid_map    = make_typeid_map(),
+		ctx              = nil,
+		resolved_globals = resolved_globals,
+		typevar_count    = 0,
+		current_token    = {},
+		had_error        = false,
 	}
+	push_function_scope(&tc)
+	defer pop_function_scope(&tc)
 	register_builtins(&tc)
 
 	return typecheck_without_arena(&tc, expr)
 }
 
-typecheck_full :: proc(vm: ^VM, expr: Expr) -> bool {
+typecheck_full :: proc(
+	vm: ^VM,
+	expr: Expr,
+	resolved_globals: map[string]^UntypedVariable,
+) -> bool {
 	when ODIN_DEBUG {
 		if config.log_type {
 			fmt.eprintln("-- typechecker begin")
@@ -1657,7 +1662,11 @@ typecheck_full :: proc(vm: ^VM, expr: Expr) -> bool {
 		if vm.type_checker == nil {
 			tc := new(TypeChecker)
 			tc^ = TypeChecker {
-				typeid_map = make_typeid_map(),
+				ctx              = nil,
+				resolved_globals = resolved_globals,
+				typevar_count    = 0,
+				current_token    = {},
+				had_error        = false,
 			}
 			push_function_scope(tc)
 			register_builtins(tc)
@@ -1666,7 +1675,8 @@ typecheck_full :: proc(vm: ^VM, expr: Expr) -> bool {
 
 		typecheck_without_arena(vm.type_checker, expr) or_return
 	} else {
-		typecheck(expr) or_return
+		defer delete_global_resolutions(resolved_globals)
+		typecheck(expr, resolved_globals) or_return
 	}
 
 	when ODIN_DEBUG {
