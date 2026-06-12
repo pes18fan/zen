@@ -224,11 +224,15 @@ define_variable :: proc(rs: ^Resolver, name: string) {
 		return
 	}
 
-	var, _ := resolve_local(rs.function_scope, name)
-	if var == nil {
+	v, ok := rs.function_scope.variables[name]
+	if !ok {
 		fmt.panicf("no variable with name %v exists in the function scope", name)
 	}
-	var.initialized = true
+	actual := v
+	for actual.shadower != nil {
+		actual = actual.shadower
+	}
+	actual.initialized = true
 }
 
 resolver_error :: proc(rs: ^Resolver, message: string) {
@@ -248,22 +252,32 @@ resolver_error :: proc(rs: ^Resolver, message: string) {
 	rs.had_error = true
 }
 
+@(require_results)
 resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	if expr == nil {return true}
 
 	switch e in expr {
 	case ^AssignExpr:
 		rs.current_token = e.token
-		resolve_with_resolver(rs, e.value)
+		resolve_with_resolver(rs, e.value) or_return
 		try(rs, assert_variable_exists(rs, e.name.lexeme)) or_return
 	case ^BinaryExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.left) or_return
+		resolve_with_resolver(rs, e.right) or_return
 	case ^BlockExpr:
-		unimplemented()
+		rs.current_token = e.token
+		push_block_scope_untyped(rs)
+		defer pop_block_scope_untyped(rs)
+		resolve_with_resolver(rs, e.expression) or_return
 	case ^BreakExpr:
-		unimplemented()
+		rs.current_token = e.token
 	case ^CallExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.callee) or_return
+		for arg in e.arguments {
+			resolve_with_resolver(rs, arg) or_return
+		}
 	case ^ContinueExpr:
 		unimplemented()
 	case ^ClassExpr:
@@ -275,15 +289,38 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^GetExpr:
 		unimplemented()
 	case ^GroupingExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.expression) or_return
 	case ^FunctionExpr:
-		unimplemented()
+		rs.current_token = e.token
+		push_function_scope_untyped(rs)
+		defer pop_function_scope_untyped(rs)
+		for param in e.params {
+			try(rs, declare_variable(rs, param.token.lexeme, false)) or_return
+			define_variable(rs, param.token.lexeme)
+		}
+		resolve_with_resolver(rs, e.body) or_return
 	case ^ForExpr:
-		unimplemented()
+		rs.current_token = e.token
+		push_block_scope_untyped(rs)
+		defer pop_block_scope_untyped(rs)
+		resolve_with_resolver(rs, e.initializer) or_return
+		resolve_with_resolver(rs, e.condition) or_return
+		resolve_with_resolver(rs, e.increment) or_return
+		resolve_with_resolver(rs, e.body) or_return
 	case ^ForInExpr:
-		unimplemented()
+		rs.current_token = e.token
+		push_block_scope_untyped(rs)
+		defer pop_block_scope_untyped(rs)
+		try(rs, declare_variable(rs, e.var_name.lexeme, true, is_loop_variable = true)) or_return
+		define_variable(rs, e.var_name.lexeme)
+		resolve_with_resolver(rs, e.iterable) or_return
+		resolve_with_resolver(rs, e.body) or_return
 	case ^IfExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.condition) or_return
+		resolve_with_resolver(rs, e.then_branch) or_return
+		resolve_with_resolver(rs, e.else_branch) or_return
 	case ^ItExpr:
 		unimplemented()
 	case ^ListExpr:
@@ -291,13 +328,17 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^LiteralExpr:
 		rs.current_token = e.token
 	case ^LogicalExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.left) or_return
+		resolve_with_resolver(rs, e.right) or_return
 	case ^PipeExpr:
 		unimplemented()
 	case ^PrintExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.expr) or_return
 	case ^ReturnExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.value) or_return
 	case ^SubscriptExpr:
 		unimplemented()
 	case ^SubscriptSetExpr:
@@ -315,7 +356,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^ThisExpr:
 		unimplemented()
 	case ^UnaryExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.right) or_return
 	case ^UseExpr:
 		unimplemented()
 	case ^VariableExpr:
@@ -328,11 +370,15 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 
 		for binding in bindings {
 			try(rs, declare_variable(rs, binding.name.lexeme, is_final)) or_return
-			resolve_with_resolver(rs, binding.initializer)
+			resolve_with_resolver(rs, binding.initializer) or_return
 			define_variable(rs, binding.name.lexeme)
 		}
 	case ^WhileExpr:
-		unimplemented()
+		rs.current_token = e.token
+		push_block_scope_untyped(rs)
+		defer pop_block_scope_untyped(rs)
+		resolve_with_resolver(rs, e.condition) or_return
+		resolve_with_resolver(rs, e.body) or_return
 	}
 
 	return true
@@ -381,6 +427,21 @@ resolve :: proc(expr: Expr) -> bool {
 		current_token  = {},
 		had_error      = false,
 	}
+
+	for fn_name in GLOBAL_NATIVE_FN_NAMES {
+		native_var := new(UntypedVariable)
+		native_var^ = {
+			shadower         = nil,
+			is_final         = true,
+			is_loop_variable = false,
+			is_captured      = false,
+			initialized      = true,
+			scope_depth      = 0,
+			local_index      = 0,
+		}
+		rs.globals[fn_name] = native_var
+	}
+
 	defer {
 		for _, v in rs.globals {
 			free(v)
