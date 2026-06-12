@@ -35,13 +35,13 @@ awful hacky designs. Some points:
 
 Resolver :: struct {
 	globals:        map[string]^UntypedVariable,
-	function_scope: ^FunctionScope,
+	function_scope: ^UntypedContext,
 	current_token:  Token,
 	class_depth:    int,
 }
 
-FunctionScope :: struct {
-	enclosing:                  ^FunctionScope,
+UntypedContext :: struct {
+	enclosing:                  ^UntypedContext,
 	variables:                  map[string]^UntypedVariable,
 	scope_depth:                int,
 	local_count_for_each_block: [dynamic]int,
@@ -58,7 +58,7 @@ UntypedVariable :: struct #all_or_none {
 }
 
 @(require_results)
-resolve_local :: proc(fs: ^FunctionScope, name: string) -> (^UntypedVariable, ErrorMessage) {
+resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^UntypedVariable, ErrorMessage) {
 	var, ok := fs.variables[name]
 	if !ok {
 		return nil, nil
@@ -78,7 +78,7 @@ resolve_local :: proc(fs: ^FunctionScope, name: string) -> (^UntypedVariable, Er
 
 @(require_results)
 resolve_upvalue :: proc(
-	fs: ^FunctionScope,
+	fs: ^UntypedContext,
 	name: string,
 ) -> (
 	v: ^UntypedVariable,
@@ -177,6 +177,8 @@ declare_variable :: proc(
 			}
 		}
 
+		old := rs.globals[name]
+		free(old)
 		new_var := new(UntypedVariable)
 		new_var^ = {
 			shadower         = nil,
@@ -187,7 +189,9 @@ declare_variable :: proc(
 			scope_depth      = rs.function_scope.scope_depth,
 			local_index      = 0,
 		}
-		rs.globals[name] = new_var
+		// do NOT remove the fmt.tprint, idk why but the REPL won't work without
+		// explicitly allocating the key
+		rs.globals[fmt.tprint(name)] = new_var
 		return nil
 	}
 
@@ -212,7 +216,7 @@ declare_variable :: proc(
 	if exists {
 		var.shadower = new_var
 	} else {
-		rs.function_scope.variables[name] = new_var
+		rs.function_scope.variables[fmt.tprint(name)] = new_var
 	}
 
 	return nil
@@ -478,7 +482,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 }
 
 push_function_scope_untyped :: proc(rs: ^Resolver) {
-	fs := new(FunctionScope)
+	fs := new(UntypedContext)
 	fs.enclosing = rs.function_scope
 	fs.scope_depth = 0
 	fs.local_count_for_each_block = make([dynamic]int)
@@ -554,37 +558,87 @@ collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 // Takes in the AST, resolves all variables.
 // Also returns whether the operation succeeded, while printing out the error
 // messages as 'resolution errors' in the process.
-resolve :: proc(expr: Expr) -> bool {
+resolve :: proc(
+	expr: Expr,
+	existing_globals: map[string]^UntypedVariable = nil,
+	setup_native_fns: bool = true,
+) -> (
+	globals: map[string]^UntypedVariable,
+	success: bool,
+) {
 	rs := Resolver {
-		globals        = make(map[string]^UntypedVariable),
+		globals        = existing_globals if existing_globals != nil else make(map[string]^UntypedVariable),
 		function_scope = nil,
 		current_token  = {},
 		class_depth    = 0,
 	}
 
-	for fn_name in GLOBAL_NATIVE_FN_NAMES {
-		native_var := new(UntypedVariable)
-		native_var^ = {
-			shadower         = nil,
-			is_final         = true,
-			is_loop_variable = false,
-			is_captured      = false,
-			initialized      = true,
-			scope_depth      = 0,
-			local_index      = 0,
+	if setup_native_fns {
+		for fn_name in GLOBAL_NATIVE_FN_NAMES {
+			native_var := new(UntypedVariable)
+			native_var^ = {
+				shadower         = nil,
+				is_final         = true,
+				is_loop_variable = false,
+				is_captured      = false,
+				initialized      = true,
+				scope_depth      = 0,
+				local_index      = 0,
+			}
+			rs.globals[fn_name] = native_var
 		}
-		rs.globals[fn_name] = native_var
 	}
 
-	defer {
-		for _, v in rs.globals {
-			free(v)
-		}
-		delete(rs.globals)
-	}
+	// don't free globals, it is returned
+	// defer {
+	// 	for _, v in rs.globals {
+	// 		free(v)
+	// 	}
+	// 	delete(rs.globals)
+	// }
 	push_function_scope_untyped(&rs)
 	defer pop_function_scope_untyped(&rs)
 
 	collect_forward_references(&rs, expr) or_return
-	return resolve_with_resolver(&rs, expr)
+	resolve_with_resolver(&rs, expr) or_return
+	return rs.globals, true
+}
+
+resolve_full :: proc(vm: ^VM, expr: Expr) -> bool {
+	if config.repl && !vm.resolver_init {
+		vm.resolver_globals = make(map[string]^UntypedVariable)
+		vm.resolver_init = true
+		for fn_name in GLOBAL_NATIVE_FN_NAMES {
+			native_var := new(UntypedVariable)
+			native_var^ = {
+				shadower         = nil,
+				is_final         = true,
+				is_loop_variable = false,
+				is_captured      = false,
+				initialized      = true,
+				scope_depth      = 0,
+				local_index      = 0,
+			}
+			vm.resolver_globals[fn_name] = native_var
+		}
+	}
+
+	out, rs_ok := resolve(
+		expr,
+		existing_globals = vm.resolver_globals if config.repl else nil,
+		setup_native_fns = false if config.repl else true,
+	)
+	if !rs_ok {
+		return false
+	}
+
+	// merge new globals back, resolver added to the map we passed in
+	// for non-REPL, free the output after
+	if !config.repl {
+		for _, &v in out {free(v)}
+		delete(out)
+	}
+	// for REPL, vm.resolver_globals IS out (same map passed in and returned)
+
+	return true
 }
