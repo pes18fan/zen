@@ -35,6 +35,7 @@ Resolver :: struct {
 	function_scope: ^FunctionScope,
 	current_token:  Token,
 	had_error:      bool,
+	class_depth:    int,
 }
 
 FunctionScope :: struct {
@@ -279,15 +280,35 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			resolve_with_resolver(rs, arg) or_return
 		}
 	case ^ContinueExpr:
-		unimplemented()
+		rs.current_token = e.token
 	case ^ClassExpr:
-		unimplemented()
+		rs.current_token = e.token
+		try(rs, declare_variable(rs, e.name.lexeme, true)) or_return
+		define_variable(rs, e.name.lexeme)
+		rs.class_depth += 1
+		defer rs.class_depth -= 1
+		has_super := false
+		if _, ok := e.superclass.?; ok {
+			has_super = true
+			push_block_scope_untyped(rs)
+			try(rs, declare_variable(rs, "super", true)) or_return
+			define_variable(rs, "super")
+		}
+		for method in e.methods {
+			resolve_with_resolver(rs, method) or_return
+		}
+		if has_super {
+			pop_block_scope_untyped(rs)
+		}
 	case ^DiscardExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.expression) or_return
 	case ^ExitExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.code) or_return
 	case ^GetExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.receiver) or_return
 	case ^GroupingExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.expression) or_return
@@ -295,6 +316,10 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		rs.current_token = e.token
 		push_function_scope_untyped(rs)
 		defer pop_function_scope_untyped(rs)
+		if rs.class_depth > 0 {
+			try(rs, declare_variable(rs, "this", true)) or_return
+			define_variable(rs, "this")
+		}
 		for param in e.params {
 			try(rs, declare_variable(rs, param.token.lexeme, false)) or_return
 			define_variable(rs, param.token.lexeme)
@@ -322,9 +347,12 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.then_branch) or_return
 		resolve_with_resolver(rs, e.else_branch) or_return
 	case ^ItExpr:
-		unimplemented()
+		rs.current_token = e.token
 	case ^ListExpr:
-		unimplemented()
+		rs.current_token = e.token
+		for element in e.elements {
+			resolve_with_resolver(rs, element) or_return
+		}
 	case ^LiteralExpr:
 		rs.current_token = e.token
 	case ^LogicalExpr:
@@ -332,7 +360,9 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.left) or_return
 		resolve_with_resolver(rs, e.right) or_return
 	case ^PipeExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.left) or_return
+		resolve_with_resolver(rs, e.right) or_return
 	case ^PrintExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.expr) or_return
@@ -340,26 +370,44 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.value) or_return
 	case ^SubscriptExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.receiver) or_return
+		resolve_with_resolver(rs, e.index) or_return
 	case ^SubscriptSetExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.receiver) or_return
+		resolve_with_resolver(rs, e.index) or_return
+		resolve_with_resolver(rs, e.value) or_return
 	case ^SequenceExpr:
 		rs.current_token = e.token
 		_ = resolve_with_resolver(rs, e.left)
 		return resolve_with_resolver(rs, e.right)
 	case ^SetExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.receiver) or_return
+		resolve_with_resolver(rs, e.value) or_return
 	case ^SuperExpr:
-		unimplemented()
+		rs.current_token = e.token
+		try(rs, assert_variable_exists(rs, "super")) or_return
+		for arg in e.method_args {
+			resolve_with_resolver(rs, arg) or_return
+		}
 	case ^SwitchExpr:
-		unimplemented()
+		rs.current_token = e.token
+		resolve_with_resolver(rs, e.condition) or_return
+		for c in e.cases {
+			resolve_with_resolver(rs, c.condition) or_return
+			resolve_with_resolver(rs, c.body) or_return
+		}
+		resolve_with_resolver(rs, e.else_branch) or_return
 	case ^ThisExpr:
-		unimplemented()
+		rs.current_token = e.token
+		try(rs, assert_variable_exists(rs, "this")) or_return
 	case ^UnaryExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.right) or_return
 	case ^UseExpr:
-		unimplemented()
+		rs.current_token = e.token
 	case ^VariableExpr:
 		rs.current_token = e.token
 		try(rs, assert_variable_exists(rs, e.name.lexeme)) or_return
@@ -426,6 +474,7 @@ resolve :: proc(expr: Expr) -> bool {
 		function_scope = nil,
 		current_token  = {},
 		had_error      = false,
+		class_depth    = 0,
 	}
 
 	for fn_name in GLOBAL_NATIVE_FN_NAMES {
