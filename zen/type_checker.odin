@@ -1635,8 +1635,6 @@ typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
 		had_error     = false,
 		typeid_map    = make_typeid_map(),
 	}
-	push_function_scope(&tc)
-	defer pop_function_scope(&tc)
 	register_builtins(&tc)
 
 	return typecheck_without_arena(&tc, expr)
