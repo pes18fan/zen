@@ -104,6 +104,7 @@ def create_debug_build():
         subprocess.run(
             f"{OC} build {TARGET} -out:bin/dbg/{DBG_OUT} {DEBUG_FLAGS}".split(), check=True
         )
+        print("Debug build compiled!")
     except ProcError as e:
         print(f"Error while creating debug build: {e}", file=sys.stderr)
         exit(1)
@@ -118,6 +119,7 @@ def create_release_build():
         subprocess.run(
             f"{OC} build {TARGET} -out:bin/rel/{OUT} {RELEASE_FLAGS}".split(), check=True
         )
+        print("Release build compiled!")
     except ProcError as e:
         print(f"Error while creating release build: {e}", file=sys.stderr)
         exit(1)
@@ -134,6 +136,7 @@ def create_chaotic_build():
                 TARGET} -out:bin/chaotic/{OUT} {RELEASE_FLAGS} -define:CHAOTIC=true".split(),
             check=True,
         )
+        print("Chaotic build compiled!")
     except ProcError as e:
         print(f"Error when creating chaotic build: {e}", file=sys.stderr)
         exit(1)
