@@ -2,6 +2,9 @@ package zen
 
 import "core:fmt"
 import "core:os"
+import "core:path/filepath"
+import "core:slice"
+import "core:strings"
 
 /*
 TODO: Variable resolution / symbol table creation. Needs very careful
@@ -34,7 +37,6 @@ Resolver :: struct {
 	globals:        map[string]^UntypedVariable,
 	function_scope: ^FunctionScope,
 	current_token:  Token,
-	had_error:      bool,
 	class_depth:    int,
 }
 
@@ -186,6 +188,7 @@ declare_variable :: proc(
 			local_index      = 0,
 		}
 		rs.globals[name] = new_var
+		return nil
 	}
 
 	var, exists := rs.function_scope.variables[name]
@@ -250,7 +253,6 @@ resolver_error :: proc(rs: ^Resolver, message: string) {
 
 	fmt.eprintfln(": %s", message)
 	fmt.eprintfln("  on [line %d]", token.line)
-	rs.had_error = true
 }
 
 @(require_results)
@@ -380,8 +382,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.value) or_return
 	case ^SequenceExpr:
 		rs.current_token = e.token
-		_ = resolve_with_resolver(rs, e.left)
-		return resolve_with_resolver(rs, e.right)
+		resolve_with_resolver(rs, e.left) or_return
+		resolve_with_resolver(rs, e.right) or_return
 	case ^SetExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.receiver) or_return
@@ -408,6 +410,41 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.right) or_return
 	case ^UseExpr:
 		rs.current_token = e.token
+		path_str := e.path.lexeme
+		path := strings.trim(path_str[1:len(path_str) - 1], " ")
+		abs_path, join_err := filepath.join([]string{config.__dirname, path}, context.allocator)
+		if join_err != nil {
+			resolver_error(
+				rs,
+				fmt.tprintf("Error when declaring module: %s", os.error_string(join_err)),
+			)
+			return false
+		}
+		defer delete(abs_path)
+		mod_name: string
+		if slice.contains(STD_MODULES[:], path) {
+			mod_name = path
+		} else if os.exists(abs_path) {
+			mod_name = filepath.short_stem(path)
+		} else {
+			resolver_error(rs, fmt.tprintf("Module '%s' not found.", abs_path))
+			return false
+		}
+		if _, exists := rs.globals[mod_name]; exists {
+			resolver_error(rs, fmt.tprintf("Module '%s' is already defined.", mod_name))
+			return false
+		}
+		new_var := new(UntypedVariable)
+		new_var^ = {
+			shadower         = nil,
+			is_final         = true,
+			is_loop_variable = false,
+			is_captured      = false,
+			initialized      = true,
+			scope_depth      = 0,
+			local_index      = 0,
+		}
+		rs.globals[mod_name] = new_var
 	case ^VariableExpr:
 		rs.current_token = e.token
 		try(rs, assert_variable_exists(rs, e.name.lexeme)) or_return
@@ -461,6 +498,17 @@ push_block_scope_untyped :: proc(rs: ^Resolver) {
 
 pop_block_scope_untyped :: proc(rs: ^Resolver) {
 	assert(rs.function_scope.scope_depth > 0, "cannot have less than zero block scopes")
+	depth := rs.function_scope.scope_depth
+	to_delete: [dynamic]string
+	defer delete(to_delete)
+	for name, var in rs.function_scope.variables {
+		if var.scope_depth == depth {
+			append(&to_delete, name)
+		}
+	}
+	for name in to_delete {
+		delete_key(&rs.function_scope.variables, name)
+	}
 	rs.function_scope.scope_depth -= 1
 }
 
@@ -473,7 +521,6 @@ resolve :: proc(expr: Expr) -> bool {
 		globals        = make(map[string]^UntypedVariable),
 		function_scope = nil,
 		current_token  = {},
-		had_error      = false,
 		class_depth    = 0,
 	}
 
