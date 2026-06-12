@@ -205,12 +205,12 @@ free_VM :: proc(vm: ^VM) {
 	free_table(&vm.compiler_globals)
 
 	if vm.type_arena_init {
+		pop_function_scope(vm.type_checker)
 		vmem.arena_destroy(&vm.type_arena)
 	}
 
 	if vm.resolver_init {
-		for _, &v in vm.resolver_globals {free(v)}
-		delete(vm.resolver_globals)
+		delete_global_resolutions(vm.resolver_globals)
 	}
 
 	// don't free explicitly, let gc do it
@@ -1173,16 +1173,20 @@ interpret :: proc(
 
 	RESOLVE :: true
 	when RESOLVE {
-		rs_ok := resolve_full(vm, expr)
+		reso, rs_ok := resolve_full(vm, expr)
 		if !rs_ok {
 			return .INTERPRET_COMPILE_ERROR
+		}
+
+		when !TYPE_CHECK {
+			delete_global_resolutions(reso)
 		}
 	}
 
 	TYPE_CHECK :: false
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
-		tc_ok := typecheck_full(vm, expr)
+		tc_ok := typecheck_full(vm, expr, reso)
 		if !tc_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}

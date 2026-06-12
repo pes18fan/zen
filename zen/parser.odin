@@ -579,6 +579,8 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 			type = tapp(.LIST, {inner_type})
 		case "Any":
 			type = type_any
+		case "Never":
+			type = type_never
 		case:
 			parser_error(p, parser_previous(p), "Invalid type annotation.")
 			return {}
@@ -611,10 +613,6 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 
 		func_type := tapp(.FUNCTION, all_args)
 		return func_type
-	} else if parser_check(p, .BANG) {
-		// the never type
-		parser_advance(p)
-		return type_never
 	}
 
 	parser_error(p, parser_peek(p), "Expect type annotation.")
@@ -1106,7 +1104,6 @@ rules: [TokenType]ParseRule = {
 	.RSQUIRLY      = {nil, nil, .NONE},
 	.LSQUARE       = {parse_list, parse_subscript, .CALL},
 	.RSQUARE       = {nil, nil, .NONE},
-	.BANG          = {nil, nil, .NONE},
 	.COMMA         = {nil, nil, .NONE},
 	.COLON         = {nil, nil, .NONE},
 	.DOT           = {nil, parse_dot, .CALL},

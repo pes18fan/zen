@@ -598,7 +598,20 @@ resolve :: proc(
 	return rs.globals, true
 }
 
-resolve_full :: proc(vm: ^VM, expr: Expr) -> bool {
+delete_global_resolutions :: proc(reso: map[string]^UntypedVariable) {
+	for _, &var in reso {
+		// make sure to handle shadowing
+		v := var
+		for v != nil {
+			next := v.shadower
+			free(v)
+			v = next
+		}
+	}
+	delete(reso)
+}
+
+resolve_full :: proc(vm: ^VM, expr: Expr) -> (map[string]^UntypedVariable, bool) {
 	if config.repl && !vm.resolver_init {
 		vm.resolver_globals = make(map[string]^UntypedVariable)
 		vm.resolver_init = true
@@ -623,16 +636,11 @@ resolve_full :: proc(vm: ^VM, expr: Expr) -> bool {
 		setup_native_fns = false if config.repl else true,
 	)
 	if !rs_ok {
-		return false
+		if !config.repl {
+			delete_global_resolutions(out)
+		}
+		return nil, false
 	}
 
-	// merge new globals back, resolver added to the map we passed in
-	// for non-REPL, free the output after
-	if !config.repl {
-		for _, &v in out {free(v)}
-		delete(out)
-	}
-	// for REPL, vm.resolver_globals IS out (same map passed in and returned)
-
-	return true
+	return out, true
 }
