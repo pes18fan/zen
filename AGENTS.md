@@ -1,6 +1,6 @@
 # AGENTS.md — zen
 
-A dynamically typed language interpreter, written in **Odin** (not Rust, C, or Go). Source: `zen/*.odin`. Entrypoint: `zen/main.odin`.
+A dynamically typed language interpreter, written in **Odin**. Source: `zen/*.odin`. Entrypoint: `zen/main.odin`.
 
 ## Prerequisites
 
