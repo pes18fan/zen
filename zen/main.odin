@@ -423,7 +423,7 @@ interpret_result_exit_code :: proc(result: InterpretResult) -> int {
 	}
 }
 
-assertion_failure :: proc(prefix, message: string, loc := #caller_location) -> ! {
+internal_compiler_error :: proc(prefix, message: string, loc := #caller_location) -> ! {
 	color_red(os.stderr, "Internal compiler error!")
 	fmt.eprintln()
 	fmt.eprint(prefix)
@@ -433,15 +433,14 @@ assertion_failure :: proc(prefix, message: string, loc := #caller_location) -> !
 	fmt.eprintln()
 	fmt.eprintfln("    in procedure %v", loc.procedure)
 	fmt.eprintfln("    at position %v:%v in file %v", loc.line, loc.column, loc.file_path)
-	fmt.eprintln(
-		"\nPlease report this error by opening an issue on https://github.com/pes18fan/zen",
-	)
+	fmt.eprintln()
+	fmt.eprintln("Please report this error by opening an issue on https://github.com/pes18fan/zen")
 	os.exit(1)
 }
 
 /* The entry point for the compiler. */
 main :: proc() {
-	context.assertion_failure_proc = assertion_failure
+	context.assertion_failure_proc = internal_compiler_error
 
 	status: int
 	defer os.exit(status)
