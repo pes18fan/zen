@@ -507,9 +507,39 @@ pop_block_scope_untyped :: proc(rs: ^Resolver) {
 		}
 	}
 	for name in to_delete {
+		if var, exists := rs.function_scope.variables[name]; exists {
+			free(var)
+		}
 		delete_key(&rs.function_scope.variables, name)
 	}
 	rs.function_scope.scope_depth -= 1
+}
+
+@(require_results)
+collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
+	if expr == nil {return true}
+
+	#partial switch e in expr {
+	case ^VarDeclExpr:
+		rs.current_token = e.token
+		is_final := e.is_final
+
+		for binding in e.bindings {
+			// only hoist functions
+			if _, ok := binding.initializer.(^FunctionExpr); !ok {continue}
+			name := binding.name
+
+			// ONLY declare the variable; it is defined in the main resolver pass
+			try(rs, declare_variable(rs, name.lexeme, is_final)) or_return
+		}
+	case ^SequenceExpr:
+		rs.current_token = e.token
+		collect_forward_references(rs, e.left) or_return
+		collect_forward_references(rs, e.right) or_return
+	// other cases don't matter
+	}
+
+	return true
 }
 
 // WIP
@@ -547,5 +577,6 @@ resolve :: proc(expr: Expr) -> bool {
 	push_function_scope_untyped(&rs)
 	defer pop_function_scope_untyped(&rs)
 
+	collect_forward_references(&rs, expr) or_return
 	return resolve_with_resolver(&rs, expr)
 }
