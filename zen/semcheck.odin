@@ -80,7 +80,7 @@ end_semantic_scope :: proc(sm: ^Semantic) {
 }
 
 @(require_results)
-in_global_scope :: proc(sm: ^Semantic) -> bool {
+semantic_in_global_scope :: proc(sm: ^Semantic) -> bool {
 	return sm.current_compiler.func_type == .SCRIPT && sm.current_compiler.scope_depth == 0
 }
 
@@ -370,7 +370,7 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		semcheck_expr(sm, e.right) or_return
 	case ^UseExpr:
 		sm.current_token = e.token
-		if !in_global_scope(sm) {
+		if !semantic_in_global_scope(sm) {
 			semantic_error(sm, "Can only declare modules at the top level.")
 			return false
 		}

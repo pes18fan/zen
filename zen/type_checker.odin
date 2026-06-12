@@ -1456,16 +1456,6 @@ make_typeid_map :: proc() -> map[string]Type {
 	return typeid_map
 }
 
-typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bool) {
-	_, ty, err := infer_type(tc, expr)
-	if err != nil {
-		typecheck_error(tc, err.?)
-		return {}, false
-	}
-
-	return ty, true
-}
-
 bind_type_to_module :: proc(
 	ctx: ^TypeContext,
 	module: TypeFunctionApplication,
@@ -1616,6 +1606,16 @@ register_builtins :: proc(tc: ^TypeChecker) {
 			fmt.eprintln("-- finished registering native function signatures\n")
 		}
 	}
+}
+
+typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bool) {
+	_, ty, err := infer_type(tc, expr)
+	if err != nil {
+		typecheck_error(tc, err.?)
+		return {}, false
+	}
+
+	return ty, true
 }
 
 typecheck :: proc(expr: Expr) -> (type: Type, success: bool) {
