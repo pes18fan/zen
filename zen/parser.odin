@@ -368,12 +368,14 @@ parse_precedence :: proc(p: ^Parser, precedence: Precedence) -> Expr {
 // Parse an expression, treating newlines and semicolons as expression-separating infix operators.
 parse_expression_top :: proc(p: ^Parser) -> Expr {
 	fst := parse_expression(p)
-	if !parser_match(p, .NEWLINE, .SEMI) {
+	if parser_is_at_end(p) || parser_check(p, .RSQUIRLY) {
 		return fst
 	}
 
 	if p.panic_mode {
 		parser_synchronize(p)
+	} else {
+		parser_consume_any(p, "Expect newline or semicolon after expression.", .NEWLINE, .SEMI)
 	}
 
 	seq := new(SequenceExpr)
@@ -1244,11 +1246,17 @@ parser_consume :: proc(p: ^Parser, type: TokenType, message: string) -> Token {
 	return parser_peek(p)
 }
 
+parser_consume_any :: proc(p: ^Parser, message: string, types: ..TokenType) -> Token {
+	if parser_check_any(p, ..types) {return parser_advance(p)}
+	parser_error(p, parser_peek(p), message)
+	return parser_peek(p)
+}
+
 parser_synchronize :: proc(p: ^Parser) {
 	p.panic_mode = false
 
 	for !parser_is_at_end(p) {
-		if parser_previous(p).type == .NEWLINE {return}
+		if parser_previous(p).type == .NEWLINE || parser_previous(p).type == .SEMI {return}
 
 		#partial switch parser_peek(p).type {
 		case .BREAK,
