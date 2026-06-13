@@ -279,7 +279,9 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.value) or_return
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
-		rs.resolutions[e] = new_clone(var^)
+		resolved := new_clone(var^)
+		resolved.shadower = nil
+		rs.resolutions[e] = resolved
 	case ^BinaryExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.left) or_return
@@ -407,7 +409,9 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^SuperExpr:
 		rs.current_token = e.token
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, "super")) or_return
-		rs.resolutions[e] = new_clone(var^)
+		resolved := new_clone(var^)
+		resolved.shadower = nil
+		rs.resolutions[e] = resolved
 		for arg in e.method_args {
 			resolve_with_resolver(rs, arg) or_return
 		}
@@ -422,7 +426,9 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^ThisExpr:
 		rs.current_token = e.token
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, "this")) or_return
-		rs.resolutions[e] = new_clone(var^)
+		resolved := new_clone(var^)
+		resolved.shadower = nil
+		rs.resolutions[e] = resolved
 	case ^UnaryExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.right) or_return
@@ -468,7 +474,9 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^VariableExpr:
 		rs.current_token = e.token
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
-		rs.resolutions[e] = new_clone(var^)
+		resolved := new_clone(var^)
+		resolved.shadower = nil
+		rs.resolutions[e] = resolved
 	case ^VarDeclExpr:
 		rs.current_token = e.token
 		is_final := e.is_final
