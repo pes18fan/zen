@@ -7,14 +7,17 @@ import "core:slice"
 import "core:strings"
 
 TypeChecker :: struct {
-	ctx:              ^TypeContext,
-	resolved_globals: map[string]^UntypedVariable,
-	typevar_count:    int,
-	current_token:    Token,
-	return_type:      Type,
-	pipeline_type:    Type,
-	had_error:        bool,
+	ctx:           ^TypeContext,
+	resolutions:   ResolutionMap,
+	typemap:       TypeMap,
+	typevar_count: int,
+	current_token: Token,
+	return_type:   Type,
+	pipeline_type: Type,
+	had_error:     bool,
 }
+
+TypeMap :: map[string]^Variable
 
 TypedBinding :: struct {
 	name: string,
@@ -216,9 +219,8 @@ TypeQuantified :: struct {
 
 Substitution :: map[TypeVariable]Type
 
-// Resolve a name - walks the scope chain exactly like resolve_local/upvalue
 @(require_results)
-resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
+resolve_type :: proc(tc: ^TypeChecker, name: string, node: ResolvingNode) -> TypeScheme {
 	ctx := tc.ctx
 	for ctx != nil {
 		for i := len(ctx.bindings) - 1; i >= 0; i -= 1 {
@@ -244,7 +246,7 @@ resolve_type :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	// if the variable doesn't exist in the context, there is a chance it is
 	// in the global context resolved previously by the resolver; see if its
 	// there
-	if _, exists := tc.resolved_globals[name]; exists {
+	if _, exists := tc.resolutions[node]; exists {
 		alpha := fresh(tc)
 
 		// NOTE: technically the type is in the global context, but for now we're
@@ -884,7 +886,7 @@ check_type :: proc(
 		tc.current_token = e.token
 		s1, t1 := infer_type(tc, e.value) or_return
 		apply_substitution(s1, tc.ctx)
-		found := resolve_type(tc, e.name.lexeme)
+		found := resolve_type(tc, e.name.lexeme, e)
 		ty := instantiate(tc, found)
 		sn := try_unify(ty, t1, "assigned value") or_return
 		apply_substitution(sn, tc.ctx)
@@ -1199,7 +1201,7 @@ check_type :: proc(
 		}
 	case ^VariableExpr:
 		tc.current_token = e.token
-		found := resolve_type(tc, e.name.lexeme) // find typescheme in the context
+		found := resolve_type(tc, e.name.lexeme, e) // find typescheme in the context (or resolution map)
 		found_t := instantiate(tc, found) // instantiate the found scheme
 		return try_unify(type, found_t, expected_expression_name) // unify typevar with the found type
 	case ^FunctionExpr:
@@ -1685,13 +1687,7 @@ typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, su
 	return ty, true
 }
 
-typecheck :: proc(
-	expr: Expr,
-	resolved_globals: map[string]^UntypedVariable,
-) -> (
-	type: Type,
-	success: bool,
-) {
+typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (type: Type, success: bool) {
 	// create separate arena to allocate everything for typechecker
 	arena: vmem.Arena
 	arena_err := vmem.arena_init_growing(&arena)
@@ -1702,11 +1698,11 @@ typecheck :: proc(
 	context.allocator = arena_alloc
 
 	tc := TypeChecker {
-		ctx              = nil,
-		resolved_globals = resolved_globals,
-		typevar_count    = 0,
-		current_token    = {},
-		had_error        = false,
+		ctx           = nil,
+		resolutions   = resolutions,
+		typevar_count = 0,
+		current_token = {},
+		had_error     = false,
 	}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
@@ -1715,11 +1711,7 @@ typecheck :: proc(
 	return typecheck_without_arena(&tc, expr)
 }
 
-typecheck_full :: proc(
-	vm: ^VM,
-	expr: Expr,
-	resolved_globals: map[string]^UntypedVariable,
-) -> bool {
+typecheck_full :: proc(vm: ^VM, expr: Expr, resolutions: ResolutionMap) -> bool {
 	when ODIN_DEBUG {
 		if config.log_type {
 			fmt.eprintln("-- typechecker begin")
@@ -1739,11 +1731,11 @@ typecheck_full :: proc(
 		if vm.type_checker == nil {
 			tc := new(TypeChecker)
 			tc^ = TypeChecker {
-				ctx              = nil,
-				resolved_globals = resolved_globals,
-				typevar_count    = 0,
-				current_token    = {},
-				had_error        = false,
+				ctx           = nil,
+				resolutions   = resolutions,
+				typevar_count = 0,
+				current_token = {},
+				had_error     = false,
 			}
 			push_function_scope(tc)
 			register_builtins(tc)
@@ -1752,8 +1744,7 @@ typecheck_full :: proc(
 
 		typecheck_without_arena(vm.type_checker, expr) or_return
 	} else {
-		defer delete_global_resolutions(resolved_globals)
-		typecheck(expr, resolved_globals) or_return
+		typecheck(expr, resolutions) or_return
 	}
 
 	when ODIN_DEBUG {

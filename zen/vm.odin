@@ -210,7 +210,7 @@ free_VM :: proc(vm: ^VM) {
 	}
 
 	if vm.resolver_init {
-		delete_global_resolutions(vm.resolver_globals)
+		delete_resolved_globals(vm.resolver_globals)
 	}
 
 	// don't free explicitly, let gc do it
@@ -1182,15 +1182,16 @@ interpret :: proc(
 		// deleted after the typechecking is done
 		when !TYPE_CHECK {
 			if !config.repl {
-				delete_global_resolutions(reso)
+				delete_resolution_map(reso)
 			}
 		}
 	}
 
-	TYPE_CHECK :: false
+	TYPE_CHECK :: true
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		tc_ok := typecheck_full(vm, expr, reso)
+		defer delete_resolution_map(reso)
 		if !tc_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}
