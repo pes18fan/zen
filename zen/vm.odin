@@ -1179,9 +1179,15 @@ interpret :: proc(
 	// this is temporary; the resolution map should only be
 	// deleted after the typechecking is done
 	when !TYPE_CHECK {
-		if !config.repl {
-			delete_resolution_map(reso)
-		}
+		delete_resolution_map(reso)
+	}
+
+	/* Time the resolver. */
+	if config.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("Resolver: %v\n", time.stopwatch_duration(sw))
+		time.stopwatch_reset(&sw)
+		time.stopwatch_start(&sw)
 	}
 
 	TYPE_CHECK :: #config(TYPE_CHECK, false)
