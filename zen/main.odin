@@ -372,6 +372,9 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 			buf: [1024]byte
 			n, err := os.read(os.stdin, buf[:])
 			if err != nil {
+				if err == .EOF {
+					return 0
+				}
 				fmt.eprintfln("Failed to read from stdin: %s", os.error_string(err))
 			}
 
