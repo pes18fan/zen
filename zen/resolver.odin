@@ -34,7 +34,8 @@ awful hacky designs. Some points:
 */
 
 Resolver :: struct {
-	globals:        map[string]^UntypedVariable,
+	resolutions:    ResolutionMap,
+	globals:        ^map[string]^UntypedVariable,
 	function_scope: ^UntypedContext,
 	current_token:  Token,
 	class_depth:    int,
@@ -49,6 +50,11 @@ UntypedContext :: struct {
 
 UntypedVariable :: struct #all_or_none {
 	shadower:         ^UntypedVariable,
+	name:             string,
+	kind:             enum {
+		LOCAL,
+		GLOBAL,
+	},
 	is_final:         bool,
 	is_loop_variable: bool, // not used here but important for codegen
 	is_captured:      bool,
@@ -56,6 +62,15 @@ UntypedVariable :: struct #all_or_none {
 	scope_depth:      int,
 	local_index:      int,
 }
+
+ResolvingNode :: union #no_nil {
+	^AssignExpr,
+	^SuperExpr,
+	^ThisExpr,
+	^VariableExpr,
+}
+
+ResolutionMap :: map[ResolvingNode]^UntypedVariable
 
 @(require_results)
 resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^UntypedVariable, ErrorMessage) {
@@ -106,47 +121,38 @@ resolve_upvalue :: proc(
 	return nil, nil
 }
 
-variable_exists :: proc(rs: ^Resolver, name: string) -> bool {
+@(require_results)
+resolve_variable :: proc(rs: ^Resolver, name: string) -> (^UntypedVariable, bool) {
 	var, _ := resolve_local(rs.function_scope, name)
 	up, _ := resolve_upvalue(rs.function_scope, name)
 	if var != nil {
-		return true
+		return var, true
 	} else if up != nil {
-		return true
+		return up, true
 	} else {
-		_, ok := rs.globals[name]
+		global, ok := rs.globals^[name]
 		if ok {
-			return true
+			return global, true
 		}
 
-		return false
-	}
-}
-
-resolve_variable :: proc(rs: ^Resolver, name: string) -> ^UntypedVariable {
-	var, _ := resolve_local(rs.function_scope, name)
-	up, _ := resolve_upvalue(rs.function_scope, name)
-	if var != nil {
-		return var
-	} else if up != nil {
-		return up
-	} else {
-		global, ok := rs.globals[name]
-		if ok {
-			return global
-		}
-
-		return nil
+		return nil, false
 	}
 }
 
 @(require_results)
-assert_variable_exists :: proc(rs: ^Resolver, name: string) -> ErrorMessage {
-	if !variable_exists(rs, name) {
-		return fmt.tprintf("Undefined variable '%v'.", name)
+assert_variable_exists_and_resolve_it :: proc(
+	rs: ^Resolver,
+	name: string,
+) -> (
+	^UntypedVariable,
+	ErrorMessage,
+) {
+	var, ok := resolve_variable(rs, name)
+	if !ok {
+		return nil, fmt.tprintf("Undefined variable '%v'.", name)
 	}
 
-	return nil
+	return var, nil
 }
 
 in_global_scope :: proc(rs: ^Resolver) -> bool {
@@ -162,7 +168,7 @@ declare_variable :: proc(
 ) -> ErrorMessage {
 	// TODO: handle later
 	if in_global_scope(rs) {
-		var, exists := rs.globals[name]
+		var, exists := rs.globals^[name]
 		if exists {
 			if !var.initialized {
 				return nil
@@ -177,11 +183,13 @@ declare_variable :: proc(
 			}
 		}
 
-		old := rs.globals[name]
+		old := rs.globals^[name]
 		free(old)
 		new_var := new(UntypedVariable)
 		new_var^ = {
 			shadower         = nil,
+			name             = fmt.tprint(name),
+			kind             = .GLOBAL,
 			is_final         = is_final,
 			is_loop_variable = is_loop_variable,
 			is_captured      = false,
@@ -191,7 +199,8 @@ declare_variable :: proc(
 		}
 		// do NOT remove the fmt.tprint, idk why but the REPL won't work without
 		// explicitly allocating the key
-		rs.globals[fmt.tprint(name)] = new_var
+		key := fmt.tprint(name)
+		rs.globals^[key] = new_var
 		return nil
 	}
 
@@ -203,6 +212,8 @@ declare_variable :: proc(
 	new_var := new(UntypedVariable)
 	new_var^ = {
 		shadower         = nil,
+		name             = fmt.tprint(name),
+		kind             = .LOCAL,
 		is_final         = is_final,
 		is_loop_variable = is_loop_variable,
 		is_captured      = false,
@@ -224,7 +235,7 @@ declare_variable :: proc(
 
 define_variable :: proc(rs: ^Resolver, name: string) {
 	if in_global_scope(rs) {
-		var, ok := rs.globals[name]
+		var, ok := rs.globals^[name]
 		if !ok {
 			fmt.panicf("no global variable with name %v exists", name)
 		}
@@ -267,7 +278,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^AssignExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.value) or_return
-		try(rs, assert_variable_exists(rs, e.name.lexeme)) or_return
+		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
+		rs.resolutions[e] = new_clone(var^)
 	case ^BinaryExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.left) or_return
@@ -394,7 +406,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.value) or_return
 	case ^SuperExpr:
 		rs.current_token = e.token
-		try(rs, assert_variable_exists(rs, "super")) or_return
+		var := try2(rs, assert_variable_exists_and_resolve_it(rs, "super")) or_return
+		rs.resolutions[e] = new_clone(var^)
 		for arg in e.method_args {
 			resolve_with_resolver(rs, arg) or_return
 		}
@@ -408,7 +421,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.else_branch) or_return
 	case ^ThisExpr:
 		rs.current_token = e.token
-		try(rs, assert_variable_exists(rs, "this")) or_return
+		var := try2(rs, assert_variable_exists_and_resolve_it(rs, "this")) or_return
+		rs.resolutions[e] = new_clone(var^)
 	case ^UnaryExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.right) or_return
@@ -434,13 +448,15 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			resolver_error(rs, fmt.tprintf("Module '%s' not found.", abs_path))
 			return false
 		}
-		if _, exists := rs.globals[mod_name]; exists {
+		if _, exists := rs.globals^[mod_name]; exists {
 			resolver_error(rs, fmt.tprintf("Module '%s' is already defined.", mod_name))
 			return false
 		}
 		new_var := new(UntypedVariable)
 		new_var^ = {
 			shadower         = nil,
+			name             = fmt.tprint(mod_name),
+			kind             = .GLOBAL,
 			is_final         = true,
 			is_loop_variable = false,
 			is_captured      = false,
@@ -448,10 +464,11 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			scope_depth      = 0,
 			local_index      = 0,
 		}
-		rs.globals[mod_name] = new_var
+		rs.globals^[fmt.tprint(mod_name)] = new_var
 	case ^VariableExpr:
 		rs.current_token = e.token
-		try(rs, assert_variable_exists(rs, e.name.lexeme)) or_return
+		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
+		rs.resolutions[e] = new_clone(var^)
 	case ^VarDeclExpr:
 		rs.current_token = e.token
 		is_final := e.is_final
@@ -470,6 +487,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 				define_variable(rs, binding.name.lexeme)
 			}
 		}
+
 	case ^WhileExpr:
 		rs.current_token = e.token
 		push_block_scope_untyped(rs)
@@ -494,18 +512,21 @@ push_function_scope_untyped :: proc(rs: ^Resolver) {
 pop_function_scope_untyped :: proc(rs: ^Resolver) {
 	fs := rs.function_scope
 	enc := fs.enclosing
-	for _, &v in fs.variables {
-		cur := v
-		for cur != nil {
-			next := cur.shadower
-			free(cur)
-			cur = next
+
+	for _, &var in fs.variables {
+		// make sure to handle shadowing
+		v := var
+		for v != nil {
+			next := v.shadower
+			free(v)
+			v = next
 		}
 	}
 	delete(fs.variables)
 	delete(fs.local_count_for_each_block)
 	free(fs)
 	rs.function_scope = enc
+
 }
 
 push_block_scope_untyped :: proc(rs: ^Resolver) {
@@ -570,14 +591,20 @@ collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 // messages as 'resolution errors' in the process.
 resolve :: proc(
 	expr: Expr,
-	existing_globals: map[string]^UntypedVariable = nil,
+	existing_globals: ^map[string]^UntypedVariable = nil,
 	setup_native_fns: bool = true,
 ) -> (
-	globals: map[string]^UntypedVariable,
+	resolutions: ResolutionMap,
 	success: bool,
 ) {
+	globals := existing_globals
+	new_globals: map[string]^UntypedVariable
+	if globals == nil {
+		new_globals = make(map[string]^UntypedVariable)
+		globals = &new_globals
+	}
 	rs := Resolver {
-		globals        = existing_globals if existing_globals != nil else make(map[string]^UntypedVariable),
+		globals        = globals,
 		function_scope = nil,
 		current_token  = {},
 		class_depth    = 0,
@@ -588,6 +615,8 @@ resolve :: proc(
 			native_var := new(UntypedVariable)
 			native_var^ = {
 				shadower         = nil,
+				name             = fmt.tprint(fn_name),
+				kind             = .GLOBAL,
 				is_final         = true,
 				is_loop_variable = false,
 				is_captured      = false,
@@ -595,24 +624,26 @@ resolve :: proc(
 				scope_depth      = 0,
 				local_index      = 0,
 			}
-			rs.globals[fn_name] = native_var
+			globals^[fn_name] = native_var
 		}
 	}
 
 	push_function_scope_untyped(&rs)
 	defer pop_function_scope_untyped(&rs)
-	// don't free globals, it is returned
+	defer if !config.repl {
+		delete_resolved_globals(globals^)
+	}
 
 	if !collect_forward_references(&rs, expr) {
-		return rs.globals, false
+		return rs.resolutions, false
 	}
 	if !resolve_with_resolver(&rs, expr) {
-		return rs.globals, false
+		return rs.resolutions, false
 	}
-	return rs.globals, true
+	return rs.resolutions, true
 }
 
-delete_global_resolutions :: proc(reso: map[string]^UntypedVariable) {
+delete_resolution_map :: proc(reso: ResolutionMap) {
 	for _, &var in reso {
 		// make sure to handle shadowing
 		v := var
@@ -625,7 +656,19 @@ delete_global_resolutions :: proc(reso: map[string]^UntypedVariable) {
 	delete(reso)
 }
 
-resolve_full :: proc(vm: ^VM, expr: Expr) -> (map[string]^UntypedVariable, bool) {
+delete_resolved_globals :: proc(globals: map[string]^UntypedVariable) {
+	for _, &var in globals {
+		v := var
+		for v != nil {
+			next := v.shadower
+			free(v)
+			v = next
+		}
+	}
+	delete(globals)
+}
+
+resolve_full :: proc(vm: ^VM, expr: Expr) -> (ResolutionMap, bool) {
 	if config.repl && !vm.resolver_init {
 		vm.resolver_globals = make(map[string]^UntypedVariable)
 		vm.resolver_init = true
@@ -633,6 +676,8 @@ resolve_full :: proc(vm: ^VM, expr: Expr) -> (map[string]^UntypedVariable, bool)
 			native_var := new(UntypedVariable)
 			native_var^ = {
 				shadower         = nil,
+				name             = fmt.tprint(fn_name),
+				kind             = .GLOBAL,
 				is_final         = true,
 				is_loop_variable = false,
 				is_captured      = false,
@@ -646,13 +691,11 @@ resolve_full :: proc(vm: ^VM, expr: Expr) -> (map[string]^UntypedVariable, bool)
 
 	out, rs_ok := resolve(
 		expr,
-		existing_globals = vm.resolver_globals if config.repl else nil,
+		existing_globals = &vm.resolver_globals if config.repl else nil,
 		setup_native_fns = false if config.repl else true,
 	)
 	if !rs_ok {
-		if !config.repl {
-			delete_global_resolutions(out)
-		}
+		delete_resolution_map(out)
 		return nil, false
 	}
 

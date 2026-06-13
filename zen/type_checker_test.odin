@@ -302,11 +302,11 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 	bind_type(tc.ctx, "y", TypeFunctionApplication{constructor = .BOOL})
 
 	// if any of the resolve_types panic we failed
-	_ = resolve_type(&tc, "x")
-	_ = resolve_type(&tc, "y")
+	_ = resolve_type(&tc, "x", {})
+	_ = resolve_type(&tc, "y", {})
 
 	pop_scope(tc.ctx)
-	_ = resolve_type(&tc, "x")
+	_ = resolve_type(&tc, "x", {})
 }
 
 // do generalization and instantiation work correctly?
