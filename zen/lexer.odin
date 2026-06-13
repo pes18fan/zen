@@ -238,6 +238,7 @@ set_separators :: proc(tokens: []Token) -> []Token {
 				     .IT:
 					#partial switch tokens[idx + 1].type {
 					case .IN,
+					     .ELSE,
 					     .OR,
 					     .AND,
 					     .DOT,
