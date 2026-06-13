@@ -1392,7 +1392,12 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.value)
 		free(e)
 	case ^SuperExpr:
-		if e.method_args != nil {delete(e.method_args)}
+		if e.method_args != nil {
+			for arg in e.method_args {
+				free_expr(arg)
+			}
+			delete(e.method_args)
+		}
 		free(e)
 	case ^SwitchExpr:
 		free_expr(e.condition)

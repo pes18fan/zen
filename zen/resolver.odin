@@ -495,7 +495,12 @@ pop_function_scope_untyped :: proc(rs: ^Resolver) {
 	fs := rs.function_scope
 	enc := fs.enclosing
 	for _, &v in fs.variables {
-		free(v)
+		cur := v
+		for cur != nil {
+			next := cur.shadower
+			free(cur)
+			cur = next
+		}
 	}
 	delete(fs.variables)
 	delete(fs.local_count_for_each_block)
@@ -520,7 +525,12 @@ pop_block_scope_untyped :: proc(rs: ^Resolver) {
 	}
 	for name in to_delete {
 		if var, exists := rs.function_scope.variables[name]; exists {
-			free(var)
+			cur := var
+			for cur != nil {
+				next := cur.shadower
+				free(cur)
+				cur = next
+			}
 		}
 		delete_key(&rs.function_scope.variables, name)
 	}
@@ -593,8 +603,12 @@ resolve :: proc(
 	defer pop_function_scope_untyped(&rs)
 	// don't free globals, it is returned
 
-	collect_forward_references(&rs, expr) or_return
-	resolve_with_resolver(&rs, expr) or_return
+	if !collect_forward_references(&rs, expr) {
+		return rs.globals, false
+	}
+	if !resolve_with_resolver(&rs, expr) {
+		return rs.globals, false
+	}
 	return rs.globals, true
 }
 
