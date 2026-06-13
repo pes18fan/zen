@@ -1,1 +1,1 @@
-var n: Number = "nope" // ERR: Expected an expression of type Number, got String
+var n: Number = "nope" // ERR: Expected variable initializer to be of type Number, got String.

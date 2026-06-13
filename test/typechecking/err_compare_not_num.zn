@@ -1,2 +1,2 @@
 true < false
-// ERR: Expected an expression of type Number, got Bool
+// ERR: Expected left operand to '<' to be of type Number, got Bool.

@@ -1,1 +1,1 @@
-var bad = [1, "two"] // ERR: Expected an expression of type Number, got String
+var bad = [1, "two"] // ERR: Expected list element to be of type Number, got String.

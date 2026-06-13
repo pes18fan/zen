@@ -1,19 +1,20 @@
 # AGENTS.md — zen
 
-A dynamically typed language interpreter, written in **Odin**. Source: `zen/*.odin`. Entrypoint: `zen/main.odin`.
+A dynamically typed language interpreter in **Odin** with an in-progress Hindley-Milner typechecker (`typechecker` branch).
 
 ## Prerequisites
 
-- [Odin](https://odin-lang.org) compiler (must be on `PATH`)
-- Python 3 (for `x.py` build script, test runner, benchmarks)
-- C compiler + `ar` (isocline is auto-downloaded and compiled by `x.py`)
+- **Odin** compiler on `PATH` (checked by `x.py` via `odin version`)
+- Python 3 (for `x.py`, test runner, benchmarks)
+- C compiler + `ar` (isocline auto-downloaded & compiled by `x.py`; git clone into `isocline/`)
 
 ## Build commands (all via `./x.py`)
 
 | Command | Result |
 |---|---|
-| `./x.py dbg` | Debug build → `bin/dbg/dzen` |
-| `./x.py rel` | Release build → `bin/rel/zen` |
+| `./x.py dbg` | Debug build → `bin/dbg/dzen` (flags: `-vet -debug`) |
+| `./x.py rel` | Release build → `bin/rel/zen` (flags: `-vet -o:aggressive`) |
+| `./x.py chaotic` | Release build with `-define:CHAOTIC=true` |
 | `./x.py clean` | Removes `bin/` |
 | `./x.py doc` | Generates `doc/docs.txt` via `odin doc` |
 | `./x.py run --args "file.zn"` | Runs a file with debug build |
@@ -30,32 +31,33 @@ A dynamically typed language interpreter, written in **Odin**. Source: `zen/*.od
 ./x.py bench             # benchmarks (release build)
 ```
 
-- **Unit tests**: `odin test zen` — standard Odin `@(test)` procs in `*_test.odin` files.
-- **E2E tests**: `test/run_tests.py` — runs `.zn` files via `bin/test/zen`. Compare expected output with `// expect:` comment lines. Expect an error with `// ERR:`. Mark as draft (skipped) with `// DRAFT`.
+- **Unit tests**: `odin test zen` — `@(test)` procs in `*_test.odin`.
+- **E2E tests**: `test/run_tests.py` — runs `.zn` files via `bin/test/zen`. Compare output with `// expect:` comments, expect error with `// ERR:`, skip with `// DRAFT` (case-sensitive).
 - **Typechecking tests**: `test/run_tests.py -d typechecking/` — same format.
-- **Benchmarks**: `test/run_benchmarks.py` — runs `.zn` files via `bin/rel/zen`, expects last stdout line to be a time in ms.
+- **Benchmarks**: `test/run_benchmarks.py` — runs `.zn` via `bin/rel/zen`, expects last stdout line as time in ms.
 
 ## Project structure
 
-```
-zen/           — compiler/interpreter source (Odin package)
-core/          — builtin.zn (LSP type stub, not compiled)
-test/          — e2e tests in __tests__/, typechecking tests, benchmarks
-examples/      — example .zn programs
-syntaxes/      — VSCode/Sublime/vim syntax highlighting
-etc/           — man page template
-doc/           — generated docs
-x.py           — build/test/bench entrypoint
-DOCUMENTATION.md — language reference (651 lines)
-```
+| Path | Purpose |
+|---|---|
+| `zen/*.odin` | Compiler/interpreter source (~12.9k LoD) |
+| `core/builtin.zn` | LSP type stubs (not compiled) |
+| `test/__tests__/` | E2E test `.zn` files |
+| `test/typechecking/` | Typechecker test `.zn` files |
+| `test/benchmark/` | Benchmark `.zn` files |
+| `examples/` | Example `.zn` programs |
+| `syntaxes/` | VSCode/Sublime/vim syntax highlighting |
+| `DOCUMENTATION.md` | Language reference (651 lines) |
 
-## Important quirks
+## Key quirks
 
-- **Debug-only flags**: `--dump-tokens`, `--dump-ast`, `-D` (disassemble), `-T` (trace), `-L` (log GC), `-S` (stress GC) are **only available in debug builds**. Release builds ignore them and print "Unknown option".
-- **Memory leak detection**: Debug builds use Odin's `mem.Tracking_Allocator`. Use `--strict` on `x.py test` or `run_tests.py` to fail on leaks.
-- **E2E test interpreter**: always uses `bin/test/zen` (a copy of the debug build). Rebuild with `--recompile` to update it.
-- **Benchmark interpreter**: uses `bin/rel/zen`. Rebuild with `--recompile` or `./x.py rel` first.
-- **Chaotic build**: `./x.py chaotic` — release build with `-define:CHAOTIC=true` for experimental features.
-- **`// DRAFT`**: Tests with this marker are completely skipped by both e2e and benchmark runners.
-- **No CI/CD**: No `.github/`, no pre-commit hooks, no task runners.
-- **No package manager**: No `Cargo.toml`, `package.json` (except VSCode extension in `syntaxes/vscode/`). Just Odin + Python.
+- **Debug-only flags**: `--dump-tokens`, `--dump-ast`, `-D` (disassemble), `-T` (trace), `-L` (log GC), `-S` (stress GC) are only in debug builds. Release builds print "Unknown option".
+- **CLI**: Short flags bundle (e.g. `-tD` for time + disassemble). Run `zen -h` to see all.
+- **Exit codes**: 65 (lex/parse/compile error), 70 (runtime error), 74 (read error), 0 (ok).
+- **NaN boxing**: `NAN_BOXING :: true` in `value.odin` — values are `u64` using quiet-NaN mantissa bits.
+- **Memory leaks**: Debug builds use `mem.Tracking_Allocator`. Pass `--strict` to fail on leaks.
+- **Test runner**: Run through `x.py` instead of `run_tests.py` directly (`run_tests.py` hardcodes paths).
+- **E2E interpreter**: `bin/test/zen` (a copy of debug build). Rebuild with `--recompile`.
+- **Benchmark interpreter**: `bin/rel/zen`. Rebuild with `--recompile` or `./x.py rel`.
+- **`// DRAFT`**: Tests with this marker are skipped by both e2e and benchmark runners.
+- **`typechecker` branch**: Active development; separates typechecking tests from main e2e suite temporarily.
