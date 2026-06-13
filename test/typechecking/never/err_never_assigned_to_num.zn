@@ -1,0 +1,1 @@
+var a: Never = 1    // ERR: Expected a diverging expression of type Never, got Number.
