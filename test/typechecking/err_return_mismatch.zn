@@ -1,4 +1,4 @@
 func f() {
     return 42
-    "hello" // ERR: Expected an expression of type Number, got String
+    "hello" // ERR: Expected block to be of type Number, got String.
 }

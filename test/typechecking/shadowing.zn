@@ -3,5 +3,5 @@
     {
         var a = 'a' // shadowed, so works!
     }
-    a = 'a' // ERR: Expected an expression of type Number, got String.
+    a = 'a' // ERR: Expected assigned value to be of type Number, got String.
 }
