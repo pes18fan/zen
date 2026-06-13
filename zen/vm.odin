@@ -1171,23 +1171,20 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	RESOLVE :: true
-	when RESOLVE {
-		reso, rs_ok := resolve_full(vm, expr)
-		if !rs_ok {
-			return .INTERPRET_COMPILE_ERROR
-		}
+	reso, rs_ok := resolve_full(vm, expr)
+	if !rs_ok {
+		return .INTERPRET_COMPILE_ERROR
+	}
 
-		// this is temporary; the resolution map should only be
-		// deleted after the typechecking is done
-		when !TYPE_CHECK {
-			if !config.repl {
-				delete_resolution_map(reso)
-			}
+	// this is temporary; the resolution map should only be
+	// deleted after the typechecking is done
+	when !TYPE_CHECK {
+		if !config.repl {
+			delete_resolution_map(reso)
 		}
 	}
 
-	TYPE_CHECK :: true
+	TYPE_CHECK :: #config(TYPE_CHECK, false)
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		tc_ok := typecheck_full(vm, expr, reso)
