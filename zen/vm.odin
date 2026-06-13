@@ -1178,12 +1178,16 @@ interpret :: proc(
 			return .INTERPRET_COMPILE_ERROR
 		}
 
+		// this is temporary; the resolution map should only be
+		// deleted after the typechecking is done
 		when !TYPE_CHECK {
-			delete_global_resolutions(reso)
+			if !config.repl {
+				delete_global_resolutions(reso)
+			}
 		}
 	}
 
-	TYPE_CHECK :: true
+	TYPE_CHECK :: false
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		tc_ok := typecheck_full(vm, expr, reso)
