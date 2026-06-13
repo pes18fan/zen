@@ -633,7 +633,14 @@ UnificationError :: enum {
 // done to provide nicer error messages as just applying unify() makes it
 // unclear which is the expected type
 // NOTE: try_unify() is directional and NOT commutative, unlike unify() which is
-try_unify :: proc(expected: Type, checking: Type) -> (Substitution, ErrorMessage) {
+try_unify :: proc(
+	expected: Type,
+	checking: Type,
+	expected_expression_name: string,
+) -> (
+	Substitution,
+	ErrorMessage,
+) {
 	// this needs to be done at this level because `Never` should ideally unify with
 	// anything unless it is an expected type
 	if is_type_never(expected) && !is_type_never(checking) && !is_type_variable(checking) {
@@ -655,7 +662,8 @@ try_unify :: proc(expected: Type, checking: Type) -> (Substitution, ErrorMessage
 			)
 		case .MISMATCH:
 			return nil, fmt.tprintf(
-				"Expected an expression of type %v, got %v.",
+				"Expected %v to be of type %v, got %v.",
+				expected_expression_name if expected_expression_name != "" else "expression",
 				type_string(expected, false),
 				type_string(checking, false),
 			)
@@ -842,7 +850,7 @@ infer_type :: proc(
 	err: ErrorMessage,
 ) {
 	alpha := fresh(tc)
-	s := check_type(tc, expr, alpha) or_return
+	s := check_type(tc, expr, alpha, "") or_return
 	res := apply_substitution(s, alpha)
 
 	when ODIN_DEBUG {
@@ -866,6 +874,7 @@ check_type :: proc(
 	tc: ^TypeChecker,
 	expr: Expr,
 	type: Type,
+	expected_expression_name: string,
 ) -> (
 	subst: Substitution,
 	err: ErrorMessage,
@@ -877,45 +886,66 @@ check_type :: proc(
 		apply_substitution(s1, tc.ctx)
 		found := resolve_type(tc, e.name.lexeme)
 		ty := instantiate(tc, found)
-		sn := try_unify(ty, t1) or_return
+		sn := try_unify(ty, t1, "assigned value") or_return
 		apply_substitution(sn, tc.ctx)
-		sn2 := try_unify(type, apply_substitution(sn, ty)) or_return
+		sn2 := try_unify(type, apply_substitution(sn, ty), "assignment") or_return
 		return combine_substitutions(sn2, combine_substitutions(sn, s1)), nil
 	case ^BinaryExpr:
 		tc.current_token = e.token
+		operator := e.operator
 
-		#partial switch e.operator.type {
+		#partial switch operator.type {
 		case .PLUS, .MINUS, .STAR, .SLASH, .PERCENT:
 			num := tapp(.NUMBER)
-			s1 := check_type(tc, e.left, num) or_return
+			s1 := check_type(
+				tc,
+				e.left,
+				num,
+				fmt.tprintf("left operand to '%v'", operator.lexeme),
+			) or_return
 			apply_substitution(s1, tc.ctx)
-			s2 := check_type(tc, e.right, num) or_return
+			s2 := check_type(
+				tc,
+				e.right,
+				num,
+				fmt.tprintf("right operand to '%v'", operator.lexeme),
+			) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := try_unify(type, num) or_return
+			sn := try_unify(type, num, expected_expression_name) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .DOT_DOT:
 			str := tapp(.STRING)
-			s1 := check_type(tc, e.left, str) or_return
+			s1 := check_type(tc, e.left, str, "left operand to '..'") or_return
 			apply_substitution(s1, tc.ctx)
-			s2 := check_type(tc, e.right, str) or_return
+			s2 := check_type(tc, e.right, str, "right operand to '..'") or_return
 			apply_substitution(s2, tc.ctx)
-			sn := try_unify(type, str) or_return
+			sn := try_unify(type, str, expected_expression_name) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL:
 			bool_ := tapp(.BOOL)
 			num := tapp(.NUMBER)
-			s1 := check_type(tc, e.left, num) or_return
+			s1 := check_type(
+				tc,
+				e.left,
+				num,
+				fmt.tprintf("left operand to '%v'", operator.lexeme),
+			) or_return
 			apply_substitution(s1, tc.ctx)
-			s2 := check_type(tc, e.right, num) or_return
+			s2 := check_type(
+				tc,
+				e.right,
+				num,
+				fmt.tprintf("right operand to '%v'", operator.lexeme),
+			) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := try_unify(type, bool_) or_return
+			sn := try_unify(type, bool_, expected_expression_name) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case .EQUAL_EQUAL, .BANG_EQUAL:
 			s1, _ := infer_type(tc, e.left) or_return
 			apply_substitution(s1, tc.ctx)
 			s2, _ := infer_type(tc, e.right) or_return
 			apply_substitution(s2, tc.ctx)
-			sn := try_unify(type, tapp(.BOOL)) or_return
+			sn := try_unify(type, tapp(.BOOL), expected_expression_name) or_return
 			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 		case:
 			fmt.panicf("Invalid binary operator '%s'.", e.operator.lexeme)
@@ -925,15 +955,15 @@ check_type :: proc(
 		push_scope(tc.ctx)
 		s := make(Substitution)
 		if e.expression != nil {
-			s = check_type(tc, e.expression, type) or_return // infer body with expected type
+			s = check_type(tc, e.expression, type, "block") or_return // infer body with expected type
 		} else {
-			s = try_unify(type, tapp(.NIL)) or_return // infer body with expected type
+			s = try_unify(type, tapp(.NIL), expected_expression_name) or_return // infer body with expected type
 		}
 		pop_scope(tc.ctx)
 		return s, nil
 	case ^BreakExpr:
 		tc.current_token = e.token
-		return try_unify(type, type_never)
+		return try_unify(type, type_never, expected_expression_name)
 	case ^CallExpr:
 		tc.current_token = e.token
 		callee := e.callee
@@ -962,7 +992,7 @@ check_type :: proc(
 			apply_substitution(s1, tc.ctx)
 			s = combine_substitutions(s1, s)
 		} else {
-			s1 := check_type(tc, callee, func_type) or_return
+			s1 := check_type(tc, callee, func_type, "called function") or_return
 			apply_substitution(s1, tc.ctx)
 			s = combine_substitutions(s1, s)
 		}
@@ -970,25 +1000,27 @@ check_type :: proc(
 		// typecheck each argument
 		for arg, idx in arguments {
 			expected := apply_substitution(s, arg_types[idx])
-			s1 := check_type(tc, arg, expected) or_return
+			s1 := check_type(tc, arg, expected, "argument") or_return
 			apply_substitution(s1, tc.ctx)
 			s = combine_substitutions(s1, s)
 		}
-		sn := try_unify(type, apply_substitution(s, ret_type)) or_return
+		sn := try_unify(type, apply_substitution(s, ret_type), expected_expression_name) or_return
 		return combine_substitutions(sn, s), nil
 	case ^ClassExpr:
 		unimplemented()
 	case ^ContinueExpr:
 		tc.current_token = e.token
-		return try_unify(type, type_never)
+		return try_unify(type, type_never, expected_expression_name)
 	case ^DiscardExpr:
 		tc.current_token = e.token
 		s1, _ := infer_type(tc, e.expression) or_return // infer inner and discard it
-		sn := try_unify(type, tapp(.NIL)) or_return
+		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
 		return combine_substitutions(sn, s1), nil
 	case ^ExitExpr:
 		tc.current_token = e.token
-		return try_unify(type, type_never)
+		s1 := check_type(tc, e.code, tapp(.NUMBER), "exit code") or_return
+		sn := try_unify(type, type_never, expected_expression_name) or_return
+		return combine_substitutions(sn, s1), nil
 	case ^ForExpr:
 		tc.current_token = e.token
 
@@ -1012,23 +1044,22 @@ check_type :: proc(
 			s = combine_substitutions(s_inc, s)
 		}
 
-		s_body := check_type(tc, e.body.expression, fresh(tc)) or_return
+		s_body, _ := infer_type(tc, e.body.expression) or_return
 		apply_substitution(s_body, tc.ctx)
 		s = combine_substitutions(s_body, s)
 		pop_scope(tc.ctx)
-		sn := try_unify(type, tapp(.NIL)) or_return
+		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
 		return combine_substitutions(sn, s), nil
 	case ^ForInExpr:
 		tc.current_token = e.token
 		push_scope(tc.ctx)
 		bind_type(tc.ctx, strings.clone(e.var_name.lexeme), fresh(tc)) // fresh typevar for for-in loop variable
-		s_iter := check_type(tc, e.iterable, fresh(tc)) or_return // should probably be replaced by a `string | list` union in future
+		s_iter, _ := infer_type(tc, e.iterable) or_return // should probably be replaced by a `string | list` union in future
 		apply_substitution(s_iter, tc.ctx)
-		beta := fresh(tc)
-		s_body := check_type(tc, e.body.expression, beta) or_return
+		s_body, _ := infer_type(tc, e.body.expression) or_return
 		apply_substitution(s_body, tc.ctx)
 		pop_scope(tc.ctx)
-		sn := try_unify(type, tapp(.NIL)) or_return
+		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
 		return combine_substitutions(sn, combine_substitutions(s_body, s_iter)), nil
 	case ^IfExpr:
 		tc.current_token = e.token
@@ -1040,14 +1071,22 @@ check_type :: proc(
 
 		if e.else_branch != nil {
 			// both branches must return same type
-			s3 := check_type(tc, e.else_branch.expression, then_type) or_return
+			s3 := check_type(tc, e.else_branch.expression, then_type, "else branch") or_return
 			apply_substitution(s3, tc.ctx)
 			s = combine_substitutions(s3, s)
-			s4 := try_unify(type, apply_substitution(s, then_type)) or_return
+			s4 := try_unify(
+				type,
+				apply_substitution(s, then_type),
+				expected_expression_name,
+			) or_return
 			s = combine_substitutions(s4, s)
 		} else {
 			// evaluate to nil if no else branch
-			sn := try_unify(apply_substitution(s, type), tapp(.NIL)) or_return
+			sn := try_unify(
+				apply_substitution(s, type),
+				tapp(.NIL),
+				expected_expression_name,
+			) or_return
 			s = combine_substitutions(sn, s)
 		}
 
@@ -1058,34 +1097,38 @@ check_type :: proc(
 		unimplemented()
 	case ^GroupingExpr:
 		tc.current_token = e.token
-		return check_type(tc, e.expression, type)
+		return check_type(tc, e.expression, type, "grouping expression")
 	case ^LogicalExpr:
 		tc.current_token = e.token
 		s1, _ := infer_type(tc, e.left) or_return
 		apply_substitution(s1, tc.ctx)
 		s2, _ := infer_type(tc, e.right) or_return
 		apply_substitution(s2, tc.ctx)
-		sn := try_unify(type, tapp(.BOOL)) or_return
+		sn := try_unify(type, tapp(.BOOL), expected_expression_name) or_return
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	case ^ListExpr:
 		tc.current_token = e.token
 		if len(e.elements) == 0 {
-			s := try_unify(type, tapp(.LIST, {fresh(tc)})) or_return
+			s := try_unify(type, tapp(.LIST, {fresh(tc)}), expected_expression_name) or_return
 			return s, nil
 		}
 
 		elem := fresh(tc)
 		s := make(Substitution)
 		for element in e.elements {
-			s1 := check_type(tc, element, apply_substitution(s, elem)) or_return
+			s1 := check_type(tc, element, apply_substitution(s, elem), "list element") or_return
 			s = combine_substitutions(s1, s)
 			apply_substitution(s, tc.ctx)
 		}
-		sn := try_unify(type, tapp(.LIST, {apply_substitution(s, elem)})) or_return
+		sn := try_unify(
+			type,
+			tapp(.LIST, {apply_substitution(s, elem)}),
+			expected_expression_name,
+		) or_return
 		return combine_substitutions(sn, s), nil
 	case ^ItExpr:
 		tc.current_token = e.token
-		return try_unify(type, tc.pipeline_type)
+		return try_unify(type, tc.pipeline_type, expected_expression_name)
 	case ^PipeExpr:
 		tc.current_token = e.token
 		left := e.left
@@ -1098,24 +1141,24 @@ check_type :: proc(
 		apply_substitution(s2, tc.ctx)
 		tc.pipeline_type = t2
 		s := combine_substitutions(s2, s1)
-		sn := try_unify(type, t2) or_return
+		sn := try_unify(type, t2, expected_expression_name) or_return
 		return combine_substitutions(sn, s), nil
 	case ^PrintExpr:
 		tc.current_token = e.token
 		s1, t1 := infer_type(tc, e.expr) or_return
-		sn := try_unify(type, t1) or_return // print returns what it printed
+		sn := try_unify(type, t1, expected_expression_name) or_return // print returns what it printed
 		return combine_substitutions(sn, s1), nil
 	case ^ReturnExpr:
 		tc.current_token = e.token
 		if e.value != nil {
-			s1 := check_type(tc, e.value, tc.return_type) or_return
+			s1 := check_type(tc, e.value, tc.return_type, "return value") or_return
 			apply_substitution(s1, tc.ctx)
-			sn := try_unify(type, type_never) or_return // return expression itself has type `!`
+			sn := try_unify(type, type_never, expected_expression_name) or_return // return expression itself has type `!`
 			return combine_substitutions(sn, s1), nil
 		} else {
-			s1 := try_unify(tc.return_type, tapp(.NIL)) or_return
+			s1 := try_unify(tc.return_type, tapp(.NIL), expected_expression_name) or_return
 			apply_substitution(s1, tc.ctx)
-			sn := try_unify(type, type_never) or_return
+			sn := try_unify(type, type_never, expected_expression_name) or_return
 			return combine_substitutions(sn, s1), nil
 		}
 	case ^SubscriptExpr:
@@ -1124,15 +1167,15 @@ check_type :: proc(
 		index := e.index
 
 		// NOTE: this should work for both strings and lists but for now,
-		// subscripting fails with a type error on lists. MAybe fix later when
+		// subscripting fails with a type error on strings. MAybe fix later when
 		// constraints are added
 		beta := fresh(tc)
-		s1 := check_type(tc, receiver, tapp(.LIST, {beta})) or_return
+		s1 := check_type(tc, receiver, tapp(.LIST, {beta}), "subscripted expression") or_return
 		apply_substitution(s1, tc.ctx)
-		s2 := check_type(tc, index, tapp(.NUMBER)) or_return
+		s2 := check_type(tc, index, tapp(.NUMBER), "subscript index") or_return
 		apply_substitution(s2, tc.ctx)
 		s := combine_substitutions(s2, s1)
-		sn := try_unify(type, beta) or_return
+		sn := try_unify(type, beta, expected_expression_name) or_return
 		return combine_substitutions(sn, s), nil
 	case ^SubscriptSetExpr:
 		unimplemented()
@@ -1146,19 +1189,19 @@ check_type :: proc(
 		// just unify with the matching literal constructor
 		switch l in e.value {
 		case f64:
-			return try_unify(type, tapp(.NUMBER))
+			return try_unify(type, tapp(.NUMBER), expected_expression_name)
 		case string:
-			return try_unify(type, tapp(.STRING))
+			return try_unify(type, tapp(.STRING), expected_expression_name)
 		case bool:
-			return try_unify(type, tapp(.BOOL))
+			return try_unify(type, tapp(.BOOL), expected_expression_name)
 		case:
-			return try_unify(type, tapp(.NIL))
+			return try_unify(type, tapp(.NIL), expected_expression_name)
 		}
 	case ^VariableExpr:
 		tc.current_token = e.token
 		found := resolve_type(tc, e.name.lexeme) // find typescheme in the context
 		found_t := instantiate(tc, found) // instantiate the found scheme
-		return try_unify(type, found_t) // unify typevar with the found type
+		return try_unify(type, found_t, expected_expression_name) // unify typevar with the found type
 	case ^FunctionExpr:
 		tc.current_token = e.token
 		bound_to := e.bound_to
@@ -1184,7 +1227,7 @@ check_type :: proc(
 		func_type := tapp(.FUNCTION, all_args)
 
 		// unify with expected type first
-		s1 := try_unify(type, func_type) or_return
+		s1 := try_unify(type, func_type, expected_expression_name) or_return
 		apply_substitution(s1, tc.ctx)
 
 		// start the function scope
@@ -1208,22 +1251,26 @@ check_type :: proc(
 		tc.return_type = apply_substitution(s1, ret_type)
 		defer tc.return_type = old_ret
 
-		s2 := check_type(tc, body, apply_substitution(s1, ret_type)) or_return
+		s2 := check_type(tc, body, apply_substitution(s1, ret_type), "function body") or_return
 		apply_substitution(s2, tc.ctx)
 		pop_function_scope(tc)
 
 		return combine_substitutions(s2, s1), nil
 	case ^SequenceExpr:
 		tc.current_token = e.token
-		beta := fresh(tc)
-		s1 := check_type(tc, e.left, beta) or_return // infer left with fresh var
+		s1, _ := infer_type(tc, e.left) or_return // infer left with fresh var
 		apply_substitution(s1, tc.ctx)
 		if e.right == nil {
 			// seq evaluates to nil if there is no right side
-			sn := try_unify(type, tapp(.NIL)) or_return
+			sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
 			return combine_substitutions(sn, s1), nil
 		}
-		s2 := check_type(tc, e.right, apply_substitution(s1, type)) or_return // infer right with expected type
+		s2 := check_type(
+			tc,
+			e.right,
+			apply_substitution(s1, type),
+			expected_expression_name,
+		) or_return // infer right with expected type
 		apply_substitution(s2, tc.ctx)
 		return combine_substitutions(s2, s1), nil
 	case ^SwitchExpr:
@@ -1241,14 +1288,24 @@ check_type :: proc(
 
 		apply_substitution(s, tc.ctx)
 		for c in e.cases {
-			s1 := check_type(tc, c.condition, apply_substitution(s, cond_type)) or_return
+			s1 := check_type(
+				tc,
+				c.condition,
+				apply_substitution(s, cond_type),
+				"switch condition",
+			) or_return
 			s = combine_substitutions(s1, s)
 			apply_substitution(s, tc.ctx)
-			s2 := check_type(tc, c.body, apply_substitution(s, type)) or_return
+			s2 := check_type(tc, c.body, apply_substitution(s, type), "switch result") or_return
 			s = combine_substitutions(s2, s)
 			apply_substitution(s, tc.ctx)
 		}
-		s_else := check_type(tc, e.else_branch, apply_substitution(s, type)) or_return
+		s_else := check_type(
+			tc,
+			e.else_branch,
+			apply_substitution(s, type),
+			"else branch",
+		) or_return
 		s = combine_substitutions(s_else, s)
 		return s, nil
 	case ^UnaryExpr:
@@ -1256,12 +1313,12 @@ check_type :: proc(
 
 		#partial switch e.operator.type {
 		case .MINUS:
-			s1 := check_type(tc, e.right, tapp(.NUMBER)) or_return
-			sn := try_unify(type, tapp(.NUMBER)) or_return
+			s1 := check_type(tc, e.right, tapp(.NUMBER), "operand to '-'") or_return
+			sn := try_unify(type, tapp(.NUMBER), expected_expression_name) or_return
 			return combine_substitutions(sn, s1), nil
 		case .NOT:
 			s1, _ := infer_type(tc, e.right) or_return
-			sn := try_unify(type, tapp(.BOOL)) or_return
+			sn := try_unify(type, tapp(.BOOL), expected_expression_name) or_return
 			return combine_substitutions(sn, s1), nil
 		case:
 			fmt.panicf("Unknown unary operator '%s'", e.operator.lexeme)
@@ -1276,7 +1333,7 @@ check_type :: proc(
 			beta := binding.type.? or_else fresh(tc)
 
 			if binding.initializer != nil {
-				s1 := check_type(tc, binding.initializer, beta) or_return
+				s1 := check_type(tc, binding.initializer, beta, "variable initializer") or_return
 
 				s = combine_substitutions(s1, s)
 				apply_substitution(s, tc.ctx)
@@ -1295,18 +1352,17 @@ check_type :: proc(
 				bind_type(tc.ctx, strings.clone(binding.name.lexeme), beta)
 			}
 		}
-		sn := try_unify(type, tapp(.NIL)) or_return // VarDeclExpr itself evaluates to nil
+		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return // VarDeclExpr itself evaluates to nil
 		return combine_substitutions(sn, s), nil
 	case ^WhileExpr:
 		tc.current_token = e.token
 		push_scope(tc.ctx)
 		s1, _ := infer_type(tc, e.condition) or_return
 		apply_substitution(s1, tc.ctx)
-		beta := fresh(tc)
-		s2 := check_type(tc, e.body.expression, beta) or_return
+		s2, _ := infer_type(tc, e.body.expression) or_return
 		apply_substitution(s2, tc.ctx)
 		pop_scope(tc.ctx)
-		sn := try_unify(type, tapp(.NIL)) or_return
+		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
 		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
 	}
 
