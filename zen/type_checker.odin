@@ -632,7 +632,18 @@ UnificationError :: enum {
 // tries to unify an expected type with another given one
 // done to provide nicer error messages as just applying unify() makes it
 // unclear which is the expected type
+// NOTE: try_unify() is directional and NOT commutative, unlike unify() which is
 try_unify :: proc(expected: Type, checking: Type) -> (Substitution, ErrorMessage) {
+	// this needs to be done at this level because `Never` should ideally unify with
+	// anything unless it is an expected type
+	if is_type_never(expected) && !is_type_never(checking) && !is_type_variable(checking) {
+		return nil, fmt.tprintf(
+			"Expected a diverging expression of type %v, got %v.",
+			type_string(expected, false),
+			type_string(checking, false),
+		)
+	}
+
 	subst, err := unify(expected, checking)
 	if err != nil {
 		switch err {
@@ -662,7 +673,11 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		// other type into any. What TypeScript does. Unsound, but it works.
 		when ODIN_DEBUG {
 			if config.log_type {
-				fmt.eprintfln("-- unify any with %v trivially", type_string(b, true))
+				fmt.eprintfln(
+					"-- unify %v with %v trivially",
+					type_string(a, true),
+					type_string(b, true),
+				)
 			}
 		}
 
@@ -686,7 +701,11 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		// type into never itself.
 		when ODIN_DEBUG {
 			if config.log_type {
-				fmt.eprintfln("-- unify ! with %v trivially", type_string(b, true))
+				fmt.eprintfln(
+					"-- unify %v with %v trivially",
+					type_string(a, true),
+					type_string(b, true),
+				)
 			}
 		}
 
@@ -931,7 +950,8 @@ check_type :: proc(
 
 		all_args := make([]Type, len(arg_types) + 1)
 		if len(arg_types) != 0 {copy(all_args, arg_types)}
-		all_args[len(arg_types)] = type
+		ret_type := fresh(tc)
+		all_args[len(arg_types)] = ret_type
 		func_type := tapp(.FUNCTION, all_args)
 
 		// handle method calls vs regular ones
@@ -954,7 +974,8 @@ check_type :: proc(
 			apply_substitution(s1, tc.ctx)
 			s = combine_substitutions(s1, s)
 		}
-		return s, nil
+		sn := try_unify(type, apply_substitution(s, ret_type)) or_return
+		return combine_substitutions(sn, s), nil
 	case ^ClassExpr:
 		unimplemented()
 	case ^ContinueExpr:

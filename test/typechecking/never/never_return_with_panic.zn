@@ -1,0 +1,2 @@
+func(): Never => panic("bye")
+puts("ok")      // expect: ok

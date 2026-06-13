@@ -1183,7 +1183,7 @@ interpret :: proc(
 		}
 	}
 
-	TYPE_CHECK :: false
+	TYPE_CHECK :: true
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		tc_ok := typecheck_full(vm, expr, reso)
