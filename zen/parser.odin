@@ -324,6 +324,7 @@ Parser :: struct #all_or_none {
 	panic_mode:   bool,
 	prev_was_eof: bool,
 	source_dir:   string,
+	current_file: string,
 	files_parsed: map[string]struct{},
 	module_cache: map[string]Expr,
 }
@@ -336,6 +337,7 @@ init_parser :: proc(tokens: []Token) -> Parser {
 		panic_mode = false,
 		prev_was_eof = false,
 		source_dir = config.__dirname,
+		current_file = config.__path,
 		files_parsed = make(map[string]struct{}),
 		module_cache = make(map[string]Expr),
 	}
@@ -576,6 +578,7 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		context.allocator,
 	)
 	if join_err != nil {
+		free_expr(expr)
 		parser_error(
 			p,
 			parser_previous(p),
@@ -594,6 +597,7 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 	// does the file even exist?
 	if !os.exists(abs_path) {
+		free_expr(expr)
 		parser_error(p, parser_previous(p), fmt.tprintf("Module '%s' not found.", relative_path))
 		return nil
 	}
@@ -610,6 +614,7 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 	// detect cycles
 	if abs_path in p.files_parsed {
+		free_expr(expr)
 		parser_error(
 			p,
 			parser_previous(p),
@@ -621,6 +626,7 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	// now read the file
 	source, read_err := os.read_entire_file(abs_path, context.allocator)
 	if read_err != nil {
+		free_expr(expr)
 		parser_error(
 			p,
 			parser_previous(p),
@@ -632,6 +638,7 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 	tokens, lx_ok := lex(string(source))
 	if !lx_ok {
+		free_expr(expr)
 		parser_error(p, parser_previous(p), "Lexer error occured when parsing module '%v'.")
 		return nil
 	}
@@ -641,6 +648,7 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		tokens       = tokens,
 		current      = 0,
 		source_dir   = filepath.dir(abs_path),
+		current_file = relative_path,
 		files_parsed = p.files_parsed,
 		module_cache = p.module_cache,
 		panic_mode   = false,
@@ -652,6 +660,8 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 	mod_ast, ps_ok := parse_with_parser(&child)
 	if !ps_ok {
+		free_expr(expr)
+		free_expr(mod_ast)
 		p.had_error = true
 		return nil
 	}
@@ -1304,6 +1314,7 @@ parser_error :: proc(p: ^Parser, token: Token, message: string) {
 
 	fmt.eprintfln(": %s", message)
 	fmt.eprintfln("  on [line %d]", token.line)
+	fmt.eprintfln("  in [file %v]", p.current_file)
 	p.had_error = true
 }
 
