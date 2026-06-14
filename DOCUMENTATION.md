@@ -192,14 +192,20 @@ for var i = 0; i < 10; i = i + 1 {
 ```
 
 Additionally, zen also provides the more modern `for in` loops. They can be
-used to loop over either a list or a string element-by-element.
+used to loop over a list element-by-element.
 
 ```
 for i in [1, 2, 3] {
     puts(i)
 }
+```
 
-for x in "hello" {
+You can also iterate over strings by converting them into lists:
+
+```
+use "string"
+
+for x in string.chars("hello") {
     puts(x)
 }
 ```
@@ -336,11 +342,6 @@ var list = [1, 2, 3]
 list[0] = 4
 puts(list)  //=> [4, 2, 3]
 ```
-
-> [!NOTE]
-> You can also use the subscripting syntax on strings to get a character at the
-> provided index. However, subscript assignment is not allowed for strings
-> as they are immutable.
 
 Lists work well with pipelines as well!
 
@@ -605,6 +606,9 @@ for you to use.
 - `slice(s, start, end)`: Get a subscring of the string `s` between the indices
     `start` and `end` (exclusive). Panics if the indices are out of bounds or
     if they're not valid integers.
+- `index(s, k)`: Get the `k`th character (UTF-8 codepoint) of the string `s`.
+- `chars(s)`: Turn the string `s` into a list consisting of strings, each
+    being one character (UTF-8 codepoint) of the string.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
