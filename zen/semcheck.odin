@@ -2,6 +2,7 @@ package zen
 
 import "core:fmt"
 import "core:os"
+import "core:path/filepath"
 
 SemanticCompiler :: struct {
 	enclosing:   ^SemanticCompiler, // The enclosing function.
@@ -14,7 +15,8 @@ SemanticCompiler :: struct {
 /* Main state for the semantic analysis pass. Holds the current scope,
 class context, pipeline state and some other necessary items.
 One Semantic instance is created per call to `semcheck`. */
-Semantic :: struct {
+Semantic :: struct #all_or_none {
+	current_file:     string,
 	current_compiler: ^SemanticCompiler,
 	current_class:    ^ClassCompiler,
 	current_token:    Token,
@@ -39,10 +41,17 @@ end_semantic_compiler :: proc(sm: ^Semantic) {
 	sm.current_compiler = sm.current_compiler.enclosing
 }
 
-init_semantic :: proc() -> Semantic {
+init_semantic :: proc(current_file: string = "") -> Semantic {
+	file := current_file
+	if current_file == "" {
+		file = filepath.base(config.__path)
+	}
+
 	return Semantic {
+		current_file = file,
 		current_compiler = nil,
 		current_class = nil,
+		current_token = {},
 		had_error = false,
 		pipeline_active = false,
 	}
@@ -62,6 +71,7 @@ semantic_error :: proc(sm: ^Semantic, message: string) {
 
 	fmt.eprintfln(": %s", message)
 	fmt.eprintfln("  on [line %d]", token.line)
+	fmt.eprintfln("  in [file %v]", sm.current_file)
 	sm.had_error = true
 }
 
@@ -374,6 +384,16 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			semantic_error(sm, "Can only declare modules at the top level.")
 			return false
 		}
+
+		if ast, ok := e.ast.?; ok {
+			mod_sm := init_semantic(filepath.base(e.fullpath))
+
+			// allocate on the heap, we need this for codegen
+			mod_script_compiler: SemanticCompiler
+			init_semantic_compiler(&mod_sm, &mod_script_compiler, .SCRIPT)
+
+			semcheck_expr(&mod_sm, ast) or_return
+		}
 	case ^VariableExpr: // nothing to check
 	case ^VarDeclExpr:
 		sm.current_token = e.token
@@ -419,7 +439,6 @@ semcheck :: proc(expr: Expr) -> (success: bool) {
 	// allocate on the heap, we need this for codegen
 	script_compiler: SemanticCompiler
 	init_semantic_compiler(&sm, &script_compiler, .SCRIPT)
-	// Don't end the compiler as it exists for the entire script scope.
 
 	ok := semcheck_expr(&sm, expr)
 	if !ok {
