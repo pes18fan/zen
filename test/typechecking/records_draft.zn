@@ -4,6 +4,8 @@ type Point = (x, y)
 type Vector3 = (x: Int, y: Int, z: Int) // explicit type annotations
 
 // creating one
+// i am going all in on records; they are usable both positionally and in a
+// named manner, so there will be no tuples
 val p = Point(1, 2)     // positional
 val q = Vector3(x = 1, y = 2, z = 3)    // named
 

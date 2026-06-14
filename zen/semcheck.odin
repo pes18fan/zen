@@ -427,3 +427,28 @@ semcheck :: proc(expr: Expr) -> (success: bool) {
 	}
 	return true
 }
+
+// Temporary, tiny pass right after parsing done to detect if the program
+// uses any OOP features. If it does, the typechecker is disabled.
+// This function will only exist for the time period between the creation of
+// the typechecker and the removal of OOP.
+// TODO: handle the case of modules importing classes which are then invoked
+// via `GetExpr`
+@(require_results)
+program_uses_classes :: proc(expr: Expr) -> bool {
+	if expr == nil {return false}
+
+	#partial switch e in expr {
+	case ^ClassExpr, ^ThisExpr, ^SuperExpr:
+		return true
+	case ^BlockExpr:
+		return program_uses_classes(e.expression)
+	case ^GroupingExpr:
+		return program_uses_classes(e.expression)
+	case ^SequenceExpr:
+		return program_uses_classes(e.left) || program_uses_classes(e.right)
+	// other cases don't matter
+	}
+
+	return false
+}
