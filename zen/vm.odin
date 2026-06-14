@@ -1116,11 +1116,6 @@ interpret :: proc(
 		}
 	}
 
-	// TODO: remove this after classes and OOP are removed from zen
-	when TYPE_CHECK {
-		uses_classes := program_uses_classes(expr)
-	}
-
 	sm_ok := semcheck(expr)
 	if !sm_ok {
 		return .INTERPRET_COMPILE_ERROR
@@ -1137,6 +1132,11 @@ interpret :: proc(
 	reso, rs_ok := resolve_full(vm, expr)
 	if !rs_ok {
 		return .INTERPRET_COMPILE_ERROR
+	}
+
+	// TODO: remove this after classes and OOP are removed from zen
+	when TYPE_CHECK {
+		dont_typecheck := should_not_typecheck(expr, reso)
 	}
 
 	// this is temporary; the resolution map should only be
@@ -1157,7 +1157,7 @@ interpret :: proc(
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		// do not run typechecker if OOP features are used
-		if !uses_classes {
+		if !dont_typecheck {
 			tm, tc_ok := typecheck_full(vm, expr, reso)
 			defer delete_resolution_map(reso)
 			defer delete_typemap(tm)

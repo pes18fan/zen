@@ -433,92 +433,98 @@ semcheck :: proc(expr: Expr) -> (success: bool) {
 // This function will only exist for the time period between the creation of
 // the typechecker and the removal of OOP.
 @(require_results)
-program_uses_classes :: proc(expr: Expr) -> bool {
+should_not_typecheck :: proc(expr: Expr, reso: ResolutionMap) -> bool {
 	if expr == nil {return false}
 
 	switch e in expr {
 	case ^ClassExpr, ^ThisExpr, ^SuperExpr:
 		return true
 	case ^SetExpr:
-		// you cannot do a SetExpr when the receiver is a module, so if a
-		// SetExpr is used it is almost certainly because a class is being used
+		// a SetExpr on a module is an invalid operation, so we deliberately avoid
+		// typechecking the thing
 		return true
 	case ^AssignExpr:
-		return program_uses_classes(e.value)
+		return should_not_typecheck(e.value, reso)
 	case ^BinaryExpr:
-		return program_uses_classes(e.left) || program_uses_classes(e.right)
+		return should_not_typecheck(e.left, reso) || should_not_typecheck(e.right, reso)
 	case ^BlockExpr:
-		return program_uses_classes(e.expression)
+		return should_not_typecheck(e.expression, reso)
 	case ^BreakExpr: // nothing
 	case ^CallExpr:
 		for arg in e.arguments {
-			if program_uses_classes(arg) {
+			if should_not_typecheck(arg, reso) {
 				return true
 			}
 		}
-
-		return program_uses_classes(e.callee)
+		return should_not_typecheck(e.callee, reso)
 	case ^ContinueExpr: // nothing
 	case ^DiscardExpr:
-		return program_uses_classes(e.expression)
+		return should_not_typecheck(e.expression, reso)
 	case ^ExitExpr:
-		return program_uses_classes(e.code)
+		return should_not_typecheck(e.code, reso)
 	case ^ForExpr:
 		return(
-			program_uses_classes(e.initializer) ||
-			program_uses_classes(e.condition) ||
-			program_uses_classes(e.increment) ||
-			program_uses_classes(e.body) \
+			should_not_typecheck(e.initializer, reso) ||
+			should_not_typecheck(e.condition, reso) ||
+			should_not_typecheck(e.increment, reso) ||
+			should_not_typecheck(e.body, reso) \
 		)
 	case ^ForInExpr:
-		return program_uses_classes(e.iterable) || program_uses_classes(e.body)
+		return should_not_typecheck(e.iterable, reso) || should_not_typecheck(e.body, reso)
 	case ^FunctionExpr:
-		return program_uses_classes(e.body)
+		return should_not_typecheck(e.body, reso)
 	case ^GetExpr:
-		return program_uses_classes(e.receiver)
+		receiver := e.receiver
+		if v, ok := receiver.(^VariableExpr); ok {
+			r := reso[v]
+			if !r.is_module {return true}
+		} else {
+			return true
+		}
 	case ^IfExpr:
 		return(
-			program_uses_classes(e.condition) ||
-			program_uses_classes(e.then_branch) ||
-			program_uses_classes(e.else_branch) \
+			should_not_typecheck(e.condition, reso) ||
+			should_not_typecheck(e.then_branch, reso) ||
+			should_not_typecheck(e.else_branch, reso) \
 		)
 	case ^ItExpr: // nothing
 	case ^ListExpr:
 		for elem in e.elements {
-			if program_uses_classes(elem) {return true}
+			if should_not_typecheck(elem, reso) {return true}
 		}
 	case ^LiteralExpr: // nothing
 	case ^LogicalExpr:
-		return program_uses_classes(e.left) || program_uses_classes(e.right)
+		return should_not_typecheck(e.left, reso) || should_not_typecheck(e.right, reso)
 	case ^PipeExpr:
-		return program_uses_classes(e.left) || program_uses_classes(e.right)
+		return should_not_typecheck(e.left, reso) || should_not_typecheck(e.right, reso)
 	case ^PrintExpr:
-		return program_uses_classes(e.expr)
+		return should_not_typecheck(e.expr, reso)
 	case ^ReturnExpr:
-		return program_uses_classes(e.value)
+		return should_not_typecheck(e.value, reso)
 	case ^SubscriptExpr:
-		return program_uses_classes(e.receiver) || program_uses_classes(e.index)
+		return should_not_typecheck(e.receiver, reso) || should_not_typecheck(e.index, reso)
 	case ^SubscriptSetExpr:
 		return(
-			program_uses_classes(e.receiver) ||
-			program_uses_classes(e.index) ||
-			program_uses_classes(e.value) \
+			should_not_typecheck(e.receiver, reso) ||
+			should_not_typecheck(e.index, reso) ||
+			should_not_typecheck(e.value, reso) \
 		)
 	case ^SwitchExpr:
-		if program_uses_classes(e.condition) {return true}
+		if should_not_typecheck(e.condition, reso) {return true}
 		for c in e.cases {
-			if program_uses_classes(c.condition) || program_uses_classes(c.body) {return true}
+			if should_not_typecheck(c.condition, reso) ||
+			   should_not_typecheck(c.body, reso) {return true}
 		}
-		return program_uses_classes(e.else_branch)
+		return should_not_typecheck(e.else_branch, reso)
 	case ^UnaryExpr:
-		return program_uses_classes(e.right)
+		return should_not_typecheck(e.right, reso)
 	case ^VariableExpr: // nothing
 	case ^VarDeclExpr:
 		for binding in e.bindings {
-			if program_uses_classes(binding.initializer) {return true}
+			if should_not_typecheck(binding.initializer, reso) {return true}
 		}
 	case ^WhileExpr:
-		return program_uses_classes(e.condition) || program_uses_classes(e.body)
+		return should_not_typecheck(e.condition, reso) || should_not_typecheck(e.body, reso)
 	// this is to handle the case of modules importing classes which are then
 	// invoked via `GetExpr`. An imported user module obviously may not use
 	// classes at all; but we simply cannot know that right now
@@ -527,9 +533,9 @@ program_uses_classes :: proc(expr: Expr) -> bool {
 			return true
 		}
 	case ^GroupingExpr:
-		return program_uses_classes(e.expression)
+		return should_not_typecheck(e.expression, reso)
 	case ^SequenceExpr:
-		return program_uses_classes(e.left) || program_uses_classes(e.right)
+		return should_not_typecheck(e.left, reso) || should_not_typecheck(e.right, reso)
 	// other cases don't matter
 	}
 
