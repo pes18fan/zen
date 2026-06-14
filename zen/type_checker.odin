@@ -1168,7 +1168,7 @@ check_type :: proc(
 		loop_var := fresh(tc)
 		bind_type(tc.ctx, strings.clone(e.var_name.lexeme), loop_var) // fresh typevar for for-in loop variable
 		any_list := tapp(.LIST, {loop_var})
-		s_iter := check_type(tc, e.iterable, any_list) or_return // for-in only works for lists
+		s_iter := check_type(tc, e.iterable, any_list, "iterable") or_return // for-in only works for lists
 		apply_substitution(s_iter, tc.ctx)
 		s_body, _ := infer_type(tc, e.body.expression) or_return
 		apply_substitution(s_body, tc.ctx)
@@ -1217,9 +1217,9 @@ check_type :: proc(
 		s := make(Substitution)
 		// handle the module case
 		if v, ok := receiver.(^VariableExpr); ok {
-			t, is_module := resolve_type_with_module_info(tc, v.name.lexeme, v)
+			_, is_module := resolve_type_with_module_info(tc, v.name.lexeme, v)
 			if !is_module {
-				return nil, fmt.tprintf("Expect module after '.', got %v.", type_string(t, false))
+				fmt.panicf("encountered property access on non-module variable receiver")
 			}
 
 			up := strings.to_upper(v.name.lexeme)
@@ -1750,19 +1750,6 @@ ctx_string :: proc(ctx: ^TypeContext, $debugging: bool) -> string {
 	fmt.sbprint(&sb, "}")
 
 	return fmt.tprint(strings.to_string(sb))
-}
-
-bind_type_to_module :: proc(
-	ctx: ^TypeContext,
-	module: TypeFunctionApplication,
-	name: string,
-	type: TypeScheme,
-) {
-	if module.constructor != .RECORD {
-		fmt.panicf("%v is not a record and thus not a module type", module)
-	}
-
-	unimplemented()
 }
 
 get_module_function_signature :: proc(
