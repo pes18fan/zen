@@ -8,6 +8,7 @@ import "core:path/filepath"
 import "core:strconv"
 import "core:strings"
 import "core:time"
+import "core:unicode/utf8"
 
 BuiltinModule :: enum {
 	TIME,
@@ -85,6 +86,8 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 			append(&module_functions, ModuleFunction{"chomp", chomp_native, 1})
 			append(&module_functions, ModuleFunction{"replace", replace_native, 3})
 			append(&module_functions, ModuleFunction{"slice", slice_native, 3})
+			append(&module_functions, ModuleFunction{"index", index_native, 2})
+			append(&module_functions, ModuleFunction{"chars", chars_native, 1})
 			append(&module_functions, ModuleFunction{"upcase", upcase_native, 1})
 			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
 			append(&module_functions, ModuleFunction{"reverse", reverse_native, 1})
@@ -525,7 +528,7 @@ slice_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
 		vm_panic(
 			vm,
-			"First argument to substr() must be a string, got %v instead.",
+			"First argument to slice() must be a string, got %v instead.",
 			type_of_value(args[0]),
 		)
 		return nil_val(), false
@@ -544,7 +547,7 @@ slice_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	start := as_number(args[1])
 	end := as_number(args[2])
 	if !is_integer(start) || !is_integer(end) {
-		vm_panic(vm, "Second and third arguments to slice() must both be integers.")
+		vm_panic(vm, "Second and third arguments to slice() must both be non-negative integers.")
 		return nil_val(), false
 	}
 
@@ -555,6 +558,71 @@ slice_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	return obj_val(copy_string(vm.gc, sub)), true
+}
+
+// Provided an index `k` and a string `s`, get the `k`th UTF-8 codepoint in `s`.
+index_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(
+			vm,
+			"First argument to index() must be a string, got %v instead.",
+			type_of_value(args[0]),
+		)
+		return nil_val(), false
+	}
+
+	if !is_number(args[1]) {
+		vm_panic(
+			vm,
+			"Second argument to index() must be a numbers, got %v instead.",
+			type_of_value(args[1]),
+		)
+		return nil_val(), false
+	}
+
+	index := as_number(args[1])
+	if !is_integer(index) || index < 0 {
+		vm_panic(vm, "Second argument to index() be a non-negative integer.")
+		return nil_val(), false
+	}
+
+	runes := utf8.string_to_runes(as_string(args[0]).chars)
+	defer delete(runes)
+
+	if int(index) >= len(runes) {
+		vm_panic(
+			vm,
+			"Index out of bounds in index(), tried indexing %v in a length %v string.",
+			int(index),
+			len(runes),
+		)
+		return nil_val(), false
+	}
+	char := runes[int(index)]
+	res := utf8.runes_to_string([]rune{char})
+	return obj_val(take_string(vm.gc, res)), true
+}
+
+// Turn a string into a list of its constituent UTF-8 codepoints.
+chars_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(
+			vm,
+			"Argument to chars() must be a string, got %v instead.",
+			type_of_value(args[0]),
+		)
+		return nil_val(), false
+	}
+
+	list := new_list(vm.gc)
+
+	for r in as_string(args[0]).chars {
+		res := utf8.runes_to_string([]rune{r})
+		str := take_string(vm.gc, res)
+		vm_push(vm, obj_val(str))
+		write_value_array(&list.items, vm_pop(vm))
+	}
+	return obj_val(list), true
 }
 
 

@@ -10,7 +10,6 @@ import "core:reflect"
 import "core:slice"
 import "core:strings"
 import "core:time"
-import "core:unicode/utf8"
 
 FRAMES_MAX :: 96
 
@@ -716,60 +715,38 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				b := vm_pop(vm)
 				a := vm_pop(vm)
 
-				if !is_list(a) && !is_string(a) {
-					vm_panic(vm, "Can only subscript lists and strings.")
+				if !is_list(a) {
+					vm_panic(vm, "Can only subscript lists.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				if !is_number(b) {
-					vm_panic(vm, "List index must be a positive integer.")
+					vm_panic(vm, "List index must be a number.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				index := as_number(b)
 
-				if math.floor(index) != index || index < 0 {
+				if !is_integer(index) || index < 0 {
 					vm_panic(vm, "List index must be a non-negative integer.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
-				if is_list(a) {
-					list := as_list(a)
+				list := as_list(a)
 
-					if int(index) >= list.items.count {
-						vm_panic(
-							vm,
-							fmt.tprintf(
-								"Index out of bounds, attempted indexing %d in a size %d list.",
-								int(index),
-								list.items.count,
-							),
-						)
-						return .INTERPRET_RUNTIME_ERROR
-					}
-
-					vm_push(vm, list.items.values[int(index)])
-				} else {
-					zstring := as_string(a)
-
-					if int(index) >= zstring.len {
-						vm_panic(
-							vm,
-							fmt.tprintf(
-								"Index out of bounds, attempted indexing %d in a size %d string.",
-								int(index),
-								zstring.len,
-							),
-						)
-						return .INTERPRET_RUNTIME_ERROR
-					}
-
-					runes := utf8.string_to_runes(zstring.chars)
-					defer delete(runes)
-					char := runes[int(index)]
-					res := utf8.runes_to_string([]rune{char})
-					vm_push(vm, obj_val(take_string(vm.gc, res)))
+				if int(index) >= list.items.count {
+					vm_panic(
+						vm,
+						fmt.tprintf(
+							"Index out of bounds, attempted indexing %d in a size %d list.",
+							int(index),
+							list.items.count,
+						),
+					)
+					return .INTERPRET_RUNTIME_ERROR
 				}
+
+				vm_push(vm, list.items.values[int(index)])
 			}
 		case .OP_SUBSCRIPT_SET:
 			{
@@ -1042,27 +1019,8 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					} else {
 						vm_push(vm, bool_val(false))
 					}
-				} else if is_string(iterable) {
-					str := as_string(iterable)
-
-					if int(idx) < len(str.chars) {
-						runes := utf8.string_to_runes(str.chars)
-						defer delete(runes)
-						char := runes[int(idx)]
-						res := utf8.runes_to_string([]rune{char})
-
-						vm_push(vm, obj_val(take_string(vm.gc, res)))
-						vm_push(vm, number_val(idx + 1))
-						vm_push(vm, bool_val(true))
-					} else {
-						vm_push(vm, bool_val(false))
-					}
 				} else {
-					vm_panic(
-						vm,
-						"Can only iterate over lists and strings, not %v.",
-						type_of_value(iterable),
-					)
+					vm_panic(vm, "Can only iterate over lists, not %v.", type_of_value(iterable))
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}

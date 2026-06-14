@@ -1164,8 +1164,11 @@ check_type :: proc(
 	case ^ForInExpr:
 		tc.current_token = e.token
 		push_scope(tc.ctx)
-		bind_type(tc.ctx, strings.clone(e.var_name.lexeme), fresh(tc)) // fresh typevar for for-in loop variable
-		s_iter, _ := infer_type(tc, e.iterable) or_return // should probably be replaced by a `string | list` union in future
+
+		loop_var := fresh(tc)
+		bind_type(tc.ctx, strings.clone(e.var_name.lexeme), loop_var) // fresh typevar for for-in loop variable
+		any_list := tapp(.LIST, {loop_var})
+		s_iter := check_type(tc, e.iterable, any_list) or_return // for-in only works for lists
 		apply_substitution(s_iter, tc.ctx)
 		s_body, _ := infer_type(tc, e.body.expression) or_return
 		apply_substitution(s_body, tc.ctx)
@@ -1207,7 +1210,7 @@ check_type :: proc(
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^GetExpr:
-		tc.current_token = e.token
+		tc.current_token = e.property
 		receiver := e.receiver
 		property := e.property
 
@@ -1331,22 +1334,42 @@ check_type :: proc(
 		receiver := e.receiver
 		index := e.index
 
-		// NOTE: this should work for both strings and lists but for now,
-		// subscripting fails with a type error on strings. MAybe fix later when
-		// constraints are added
+		// can only subscript lists
 		beta := fresh(tc)
 		s1 := check_type(tc, receiver, tapp(.LIST, {beta}), "subscripted expression") or_return
 		apply_substitution(s1, tc.ctx)
 		s2 := check_type(tc, index, tapp(.NUMBER), "subscript index") or_return
 		apply_substitution(s2, tc.ctx)
 		s := combine_substitutions(s2, s1)
-		sn := try_unify(type, beta, expected_expression_name) or_return
+		sn := try_unify(type, apply_substitution(s, beta), expected_expression_name) or_return
 
 		s = combine_substitutions(sn, s)
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^SubscriptSetExpr:
-		unimplemented()
+		tc.current_token = e.token
+		receiver := e.receiver
+		index := e.index
+		value := e.value
+
+		beta := fresh(tc)
+		s1 := check_type(tc, receiver, tapp(.LIST, {beta}), "subscripted expression") or_return
+		apply_substitution(s1, tc.ctx)
+		s2 := check_type(tc, index, tapp(.NUMBER), "subscript index") or_return
+		apply_substitution(s2, tc.ctx)
+		s3 := check_type(
+			tc,
+			value,
+			apply_substitution(s2, apply_substitution(s1, beta)),
+			"assigned expression",
+		) or_return
+		apply_substitution(s3, tc.ctx)
+		s := combine_substitutions(s3, combine_substitutions(s2, s1))
+		sn := try_unify(type, apply_substitution(s, beta), expected_expression_name) or_return
+
+		s = combine_substitutions(sn, s)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^SuperExpr:
 		unimplemented()
 	case ^ThisExpr:
@@ -1789,9 +1812,9 @@ get_module_function_signature :: proc(
 	case .OS:
 		switch fn_name {
 		case "read":
-			return tapp(.FUNCTION, {string_t}), nil
+			return tapp(.FUNCTION, {string_t, string_t}), nil
 		case "write":
-			return tapp(.FUNCTION, {string_t, string_t, string_t}), nil
+			return tapp(.FUNCTION, {string_t, string_t, string_t, string_t}), nil
 		case "args":
 			return tapp(.FUNCTION, {tapp(.LIST, {string_t})}), nil
 		}
@@ -1799,7 +1822,7 @@ get_module_function_signature :: proc(
 		switch fn_name {
 		case "push":
 			a := fresh(tc)
-			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), tapp(.LIST, {a})})), nil
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), a, tapp(.LIST, {a})})), nil
 		case "pop":
 			a := fresh(tc)
 			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), a})), nil
@@ -1820,6 +1843,10 @@ get_module_function_signature :: proc(
 			return tapp(.FUNCTION, {string_t, string_t, string_t, string_t}), nil
 		case "slice":
 			return tapp(.FUNCTION, {string_t, number_t, number_t, string_t}), nil
+		case "index":
+			return tapp(.FUNCTION, {string_t, number_t, string_t}), nil
+		case "chars":
+			return tapp(.FUNCTION, {string_t, tapp(.LIST, {string_t})}), nil
 		case "upcase":
 			return tapp(.FUNCTION, {string_t, string_t}), nil
 		case "downcase":
@@ -1827,9 +1854,9 @@ get_module_function_signature :: proc(
 		case "reverse":
 			return tapp(.FUNCTION, {string_t, string_t}), nil
 		case "asciichar":
-			return tapp(.FUNCTION, {string_t, number_t}), nil
-		case "asciinum":
 			return tapp(.FUNCTION, {number_t, string_t}), nil
+		case "asciinum":
+			return tapp(.FUNCTION, {string_t, number_t}), nil
 		}
 	}
 
