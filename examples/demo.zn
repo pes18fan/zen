@@ -77,12 +77,14 @@ for x in [1, 2, 3] {
     puts(x)
 } //=> 1 2 3
 
-for c in "hello" {
+for c in string.chars("hello") {
     puts(c)
 } //=> h e l l o
 
 // Lists.
 val l = [97, 69, 420]
+puts(l[0])  //=> 97
+l[1] = 71   //=> 71
 
 list.push(l, 27)
 puts(list.pop(l)) //=> 27
