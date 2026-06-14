@@ -3,10 +3,10 @@ func fizz_buzz(n) {
     val buzz = n % 5 == 0
 
     switch {
-        fizz and buzz => return "fizzbuzz"
-        fizz          => return "fizz"
-        buzz          => return "buzz"
-        else          => return str(n)
+        fizz and buzz => "fizzbuzz"
+        fizz          => "fizz"
+        buzz          => "buzz"
+        else          => str(n)
     }
 }
 
