@@ -432,17 +432,100 @@ semcheck :: proc(expr: Expr) -> (success: bool) {
 // uses any OOP features. If it does, the typechecker is disabled.
 // This function will only exist for the time period between the creation of
 // the typechecker and the removal of OOP.
-// TODO: handle the case of modules importing classes which are then invoked
-// via `GetExpr`
 @(require_results)
 program_uses_classes :: proc(expr: Expr) -> bool {
 	if expr == nil {return false}
 
-	#partial switch e in expr {
+	switch e in expr {
 	case ^ClassExpr, ^ThisExpr, ^SuperExpr:
 		return true
+	case ^SetExpr:
+		// you cannot do a SetExpr when the receiver is a module, so if a
+		// SetExpr is used it is almost certainly because a class is being used
+		return true
+	case ^AssignExpr:
+		return program_uses_classes(e.value)
+	case ^BinaryExpr:
+		return program_uses_classes(e.left) || program_uses_classes(e.right)
 	case ^BlockExpr:
 		return program_uses_classes(e.expression)
+	case ^BreakExpr: // nothing
+	case ^CallExpr:
+		for arg in e.arguments {
+			if program_uses_classes(arg) {
+				return true
+			}
+		}
+
+		return program_uses_classes(e.callee)
+	case ^ContinueExpr: // nothing
+	case ^DiscardExpr:
+		return program_uses_classes(e.expression)
+	case ^ExitExpr:
+		return program_uses_classes(e.code)
+	case ^ForExpr:
+		return(
+			program_uses_classes(e.initializer) ||
+			program_uses_classes(e.condition) ||
+			program_uses_classes(e.increment) ||
+			program_uses_classes(e.body) \
+		)
+	case ^ForInExpr:
+		return program_uses_classes(e.iterable) || program_uses_classes(e.body)
+	case ^FunctionExpr:
+		return program_uses_classes(e.body)
+	case ^GetExpr:
+		return program_uses_classes(e.receiver)
+	case ^IfExpr:
+		return(
+			program_uses_classes(e.condition) ||
+			program_uses_classes(e.then_branch) ||
+			program_uses_classes(e.else_branch) \
+		)
+	case ^ItExpr: // nothing
+	case ^ListExpr:
+		for elem in e.elements {
+			if program_uses_classes(elem) {return true}
+		}
+	case ^LiteralExpr: // nothing
+	case ^LogicalExpr:
+		return program_uses_classes(e.left) || program_uses_classes(e.right)
+	case ^PipeExpr:
+		return program_uses_classes(e.left) || program_uses_classes(e.right)
+	case ^PrintExpr:
+		return program_uses_classes(e.expr)
+	case ^ReturnExpr:
+		return program_uses_classes(e.value)
+	case ^SubscriptExpr:
+		return program_uses_classes(e.receiver) || program_uses_classes(e.index)
+	case ^SubscriptSetExpr:
+		return(
+			program_uses_classes(e.receiver) ||
+			program_uses_classes(e.index) ||
+			program_uses_classes(e.value) \
+		)
+	case ^SwitchExpr:
+		if program_uses_classes(e.condition) {return true}
+		for c in e.cases {
+			if program_uses_classes(c.condition) || program_uses_classes(c.body) {return true}
+		}
+		return program_uses_classes(e.else_branch)
+	case ^UnaryExpr:
+		return program_uses_classes(e.right)
+	case ^VariableExpr: // nothing
+	case ^VarDeclExpr:
+		for binding in e.bindings {
+			if program_uses_classes(binding.initializer) {return true}
+		}
+	case ^WhileExpr:
+		return program_uses_classes(e.condition) || program_uses_classes(e.body)
+	// this is to handle the case of modules importing classes which are then
+	// invoked via `GetExpr`. An imported user module obviously may not use
+	// classes at all; but we simply cannot know that right now
+	case ^UseExpr:
+		if e.type == .USER {
+			return true
+		}
 	case ^GroupingExpr:
 		return program_uses_classes(e.expression)
 	case ^SequenceExpr:
