@@ -322,20 +322,26 @@ disassemble :: proc(c: ^Chunk, name: string) {
 }
 
 /* Some debug print functions to avoid printing debug info in prod code */
-when ODIN_DEBUG {
-	dbg_print :: proc(args: ..any) {
-		fmt.eprint(..args)
-	}
+@(disabled = !ODIN_DEBUG)
+dbg_print :: proc(args: ..any) {
+	color_yellow(os.stderr, "DEBUG ")
+	fmt.eprint(..args)
+}
 
-	dbg_println :: proc(args: ..any) {
-		fmt.eprintln(..args)
-	}
+@(disabled = !ODIN_DEBUG)
+dbg_println :: proc(args: ..any) {
+	color_yellow(os.stderr, "DEBUG ")
+	fmt.eprintln(..args)
+}
 
-	dbg_printf :: proc(format: string, args: ..any) {
-		fmt.eprintf(format, ..args)
-	}
+@(disabled = !ODIN_DEBUG)
+dbg_printf :: proc(format: string, args: ..any) {
+	color_yellow(os.stderr, "DEBUG ")
+	fmt.eprintf(format, ..args)
+}
 
-	dbg_printfln :: proc(format: string, args: ..any) {
-		fmt.eprintfln(format, ..args)
-	}
+@(disabled = !ODIN_DEBUG)
+dbg_printfln :: proc(format: string, args: ..any) {
+	color_yellow(os.stderr, "DEBUG ")
+	fmt.eprintfln(format, ..args)
 }

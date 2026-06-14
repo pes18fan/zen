@@ -2,8 +2,6 @@ package zen
 
 import "core:fmt"
 import "core:os"
-import "core:path/filepath"
-import "core:slice"
 import "core:strings"
 
 /* Maximum limit for a eight bit unsigned integer. */
@@ -896,44 +894,16 @@ compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
 
 @(require_results)
 compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
-	path_str := e.path.lexeme
+	name := e.name
+	fullpath := e.fullpath
+	type := e.type
 
-	mod_type: ModuleType
-
-	path := strings.trim(path_str[1:len(path_str) - 1], " ")
-	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
-	if err != nil {
-		codegen_error(cg, fmt.tprintf("Error when declaring module: %s", os.error_string(err)))
-		return false
-	}
-	defer delete(abs_path)
-
-	builtin_found := slice.contains(STD_MODULES[:], path)
-	if builtin_found {
-		mod_type = .BUILTIN
-	} else {
-		user_found := os.exists(abs_path)
-		if !user_found {
-			codegen_error(cg, fmt.tprintf("Module '%s' not found.", abs_path))
-			return false
-		}
-		mod_type = .USER
-	}
-
-	mod_name: string
-	switch mod_type {
-	case .BUILTIN:
-		mod_name = path
-	case .USER:
-		mod_name = filepath.short_stem(path)
-	}
-	name_constant := try2(cg, string_constant(cg, mod_name)) or_return
-
-	switch mod_type {
+	name_constant := try2(cg, string_constant(cg, name)) or_return
+	switch type {
 	case .BUILTIN:
 		emit_op_with_constant(cg, .OP_MODULE_BUILTIN, .OP_MODULE_BUILTIN_LONG, name_constant)
 	case .USER:
-		path_constant := try2(cg, string_constant(cg, abs_path)) or_return
+		path_constant := try2(cg, string_constant(cg, fullpath)) or_return
 
 		if path_constant <= U8_MAX {
 			emit_opcode(cg, .OP_MODULE_USER)
@@ -951,7 +921,7 @@ compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
 	}
 	define_variable(cg, name_constant)
 
-	table_set(cg.globals, copy_string(cg.gc, mod_name), bool_val(true))
+	table_set(cg.globals, copy_string(cg.gc, name), bool_val(true))
 	emit_opcode(cg, .OP_NIL)
 	return true
 }

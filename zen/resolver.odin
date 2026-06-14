@@ -2,9 +2,6 @@ package zen
 
 import "core:fmt"
 import "core:os"
-import "core:path/filepath"
-import "core:slice"
-import "core:strings"
 
 /*
 TODO: Variable resolution / symbol table creation. Needs very careful
@@ -434,34 +431,15 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.right) or_return
 	case ^UseExpr:
 		rs.current_token = e.token
-		path_str := e.path.lexeme
-		path := strings.trim(path_str[1:len(path_str) - 1], " ")
-		abs_path, join_err := filepath.join([]string{config.__dirname, path}, context.allocator)
-		if join_err != nil {
-			resolver_error(
-				rs,
-				fmt.tprintf("Error when declaring module: %s", os.error_string(join_err)),
-			)
-			return false
-		}
-		defer delete(abs_path)
-		mod_name: string
-		if slice.contains(STD_MODULES[:], path) {
-			mod_name = path
-		} else if os.exists(abs_path) {
-			mod_name = filepath.short_stem(path)
-		} else {
-			resolver_error(rs, fmt.tprintf("Module '%s' not found.", abs_path))
-			return false
-		}
-		if _, exists := rs.globals^[mod_name]; exists {
-			resolver_error(rs, fmt.tprintf("Module '%s' is already defined.", mod_name))
+		name := e.name
+		if _, exists := rs.globals^[name]; exists {
+			resolver_error(rs, fmt.tprintf("Module '%s' is already defined.", name))
 			return false
 		}
 		new_var := new(UntypedVariable)
 		new_var^ = {
 			shadower         = nil,
-			name             = fmt.tprint(mod_name),
+			name             = fmt.tprint(name),
 			kind             = .GLOBAL,
 			is_final         = true,
 			is_loop_variable = false,
@@ -470,7 +448,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			scope_depth      = 0,
 			local_index      = 0,
 		}
-		rs.globals^[fmt.tprint(mod_name)] = new_var
+		rs.globals^[fmt.tprint(name)] = new_var
 	case ^VariableExpr:
 		rs.current_token = e.token
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
