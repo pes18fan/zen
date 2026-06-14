@@ -1173,6 +1173,8 @@ interpret :: proc(
 				time.stopwatch_reset(&sw)
 				time.stopwatch_start(&sw)
 			}
+		} else {
+			delete_resolution_map(reso)
 		}
 	}
 
