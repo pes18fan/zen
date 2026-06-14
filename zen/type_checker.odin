@@ -284,6 +284,14 @@ resolve_type_with_module_info :: proc(
 	scheme: TypeScheme,
 	is_module: bool,
 ) {
+	// special case for builtin functions, their types are lazily loaded and
+	// bound to the context only when they're called
+	// we can do this safely at the top of this procedure because the native
+	// functions cannot be reassigned
+	if slice.contains(GLOBAL_NATIVE_FN_NAMES[:], name) {
+		return get_builtin_function_signature(tc, name), false
+	}
+
 	ctx := tc.ctx
 	for ctx != nil {
 		for i := len(ctx.bindings) - 1; i >= 0; i -= 1 {
@@ -1203,8 +1211,8 @@ check_type :: proc(
 		receiver := e.receiver
 		property := e.property
 
-		// handle the module case
 		s := make(Substitution)
+		// handle the module case
 		if v, ok := receiver.(^VariableExpr); ok {
 			t, is_module := resolve_type_with_module_info(tc, v.name.lexeme, v)
 			if !is_module {
@@ -1218,6 +1226,7 @@ check_type :: proc(
 				fmt.panicf("builtin module name '%v' doesn't match anything in module enum", up)
 			}
 
+			// the type is lazily resolved from within the module
 			poly_sig := get_module_function_signature(tc, module, property.lexeme) or_return
 			sig := instantiate(tc, poly_sig) // instantiate the function; cuz it can be polymorphic
 			s = try_unify(type, sig, expected_expression_name) or_return
@@ -1827,49 +1836,50 @@ get_module_function_signature :: proc(
 	return {}, fmt.tprintf("Function '%v' does not exist in builtin module '%v'.", fn_name, builtin_module_name_from_value(module))
 }
 
-register_builtins :: proc(tc: ^TypeChecker) {
+get_builtin_function_signature :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
 	nil_t := tapp(.NIL)
 	string_t := tapp(.STRING)
 	number_t := tapp(.NUMBER)
 	never_t := type_never
 
-	when ODIN_DEBUG {
-		if config.log_type {
-			fmt.eprintln("-- registering native function signatures")
-		}
+	switch name {
+	case "puts":
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
+	case "gets":
+		return tapp(.FUNCTION, {string_t})
+	case "panic":
+		return tapp(.FUNCTION, {string_t, never_t})
+	case "assert":
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
+	case "len":
+		// NOTE: this should be only for strings and lists, not everything;
+		// but right now i have no way to differentiate them with standard HM.
+		// Someday if I add typeclasses that would be doable
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, number_t}))
+	case "typeof":
+		// NOTE: i might turn typeof into an operator, so that i can use
+		// type_string() to create a string representation of the type directly
+		// at compile time
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, string_t}))
+	case "str":
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, string_t}))
+	case "parse":
+		return tapp(.FUNCTION, {string_t, number_t})
+	case "copy":
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, a}))
+	case "dirname":
+		return tapp(.FUNCTION, {string_t})
+	case "filename":
+		return tapp(.FUNCTION, {string_t})
 	}
 
-	a := fresh(tc)
-	bind_type(tc.ctx, "puts", tquant({a}, tapp(.FUNCTION, {a, nil_t})))
-	bind_type(tc.ctx, "gets", tapp(.FUNCTION, {string_t}))
-
-	bind_type(tc.ctx, "panic", tapp(.FUNCTION, {string_t, never_t}))
-
-	b := fresh(tc)
-	bind_type(tc.ctx, "assert", tquant({b}, tapp(.FUNCTION, {b, nil_t})))
-
-	c := fresh(tc)
-	bind_type(tc.ctx, "len", tquant({c}, tapp(.FUNCTION, {c, number_t})))
-
-	d := fresh(tc)
-	bind_type(tc.ctx, "typeof", tquant({d}, tapp(.FUNCTION, {d, string_t})))
-
-	e := fresh(tc)
-	bind_type(tc.ctx, "str", tquant({e}, tapp(.FUNCTION, {e, string_t})))
-
-	bind_type(tc.ctx, "parse", tapp(.FUNCTION, {string_t, number_t}))
-
-	f := fresh(tc)
-	bind_type(tc.ctx, "copy", tquant({f}, tapp(.FUNCTION, {f, f})))
-
-	bind_type(tc.ctx, "dirname", tapp(.FUNCTION, {string_t}))
-	bind_type(tc.ctx, "filename", tapp(.FUNCTION, {string_t}))
-
-	when ODIN_DEBUG {
-		if config.log_type {
-			fmt.eprintln("-- finished registering native function signatures\n")
-		}
-	}
+	fmt.panicf("undefined global-scoped native function '%v'", name)
 }
 
 typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bool) {
@@ -1904,7 +1914,6 @@ typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, 
 	}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
-	register_builtins(&tc)
 
 	_, ok := typecheck_without_arena(&tc, expr)
 	if !ok {
@@ -1956,7 +1965,6 @@ typecheck_full :: proc(
 				pipeline_type = {},
 			}
 			push_function_scope(tc)
-			register_builtins(tc)
 			vm.type_checker = tc
 		}
 
