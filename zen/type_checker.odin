@@ -1507,7 +1507,7 @@ check_type :: proc(
 		switch mod_type {
 		case .BUILTIN:
 			// modules are NOT first class values so they have no type
-			bind_type(tc.ctx, name, {}, is_module = true)
+			bind_type(tc.ctx, strings.clone(name), {}, is_module = true)
 		case .USER:
 			unimplemented()
 		}
@@ -1960,6 +1960,7 @@ typecheck_full :: proc(
 			vm.type_checker = tc
 		}
 
+		vm.type_checker.resolutions = resolutions
 		_, ok := typecheck_without_arena(vm.type_checker, expr)
 		if !ok {
 			delete_typemap(vm.type_checker.typemap)
