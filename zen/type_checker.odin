@@ -14,10 +14,32 @@ TypeChecker :: struct {
 	current_token: Token,
 	return_type:   Type,
 	pipeline_type: Type,
-	had_error:     bool,
 }
 
-TypeMap :: map[string]^Variable
+TypeMap :: map[Expr]TypeScheme
+
+add_to_typemap :: #force_inline proc(tc: ^TypeChecker, expr: Expr, scheme: TypeScheme) {
+	tc.typemap[expr] = scheme
+}
+
+add_to_typemap_after_substitution :: #force_inline proc(
+	tc: ^TypeChecker,
+	expr: Expr,
+	subst: Substitution,
+	typescheme: TypeScheme,
+) {
+	context.allocator = tc.typemap.allocator
+	t := apply_substitution(subst, typescheme)
+	add_to_typemap(tc, expr, t)
+}
+
+delete_typemap :: proc(typemap: TypeMap) {
+	context.allocator = typemap.allocator
+	for _, &scheme in typemap {
+		free_typescheme(&scheme)
+	}
+	delete(typemap)
+}
 
 TypedBinding :: struct {
 	name: string,
@@ -143,6 +165,9 @@ free_type :: proc(type: ^Type) {
 		switch t.constructor {
 		case .NUMBER, .STRING, .NIL, .BOOL: // nothing to free
 		case .FUNCTION, .LIST, .RECORD:
+			for &arg in t.args {
+				free_type(&arg)
+			}
 			delete(t.args)
 		}
 	case TypeAny: // nothing
@@ -452,6 +477,21 @@ apply_substitution :: proc {
 	apply_substitution_context,
 }
 
+// deep-copy a Type into the current allocator so it has no dangling
+// references to arena memory
+clone_type :: proc(t: Type) -> Type {
+	#partial switch v in t {
+	case TypeFunctionApplication:
+		new_args := make([]Type, len(v.args))
+		defer delete(new_args)
+		for arg, i in v.args {
+			new_args[i] = clone_type(arg)
+		}
+		return tapp(v.constructor, new_args)
+	}
+	return t
+}
+
 apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 	switch t in type {
 	case TypeVariable:
@@ -459,7 +499,7 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 		for {
 			tv, tv_ok := result.(TypeVariable)
 			if !tv_ok {
-				return result
+				return clone_type(result)
 			}
 			val, ok := subst[tv]
 			if !ok {
@@ -469,6 +509,7 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 		}
 	case TypeFunctionApplication:
 		new_args := make([]Type, len(t.args))
+		defer delete(new_args)
 		for i in 0 ..< len(t.args) {
 			new_args[i] = apply_substitution(subst, t.args[i])
 		}
@@ -519,7 +560,6 @@ apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 		c = c.enclosing
 	}
 
-	// TODO: add a debug log showing how the context got updated
 	when ODIN_DEBUG {
 		if config.log_type {
 			fmt.eprintfln("-- apply subst %v to current context", subst_string(subst, true))
@@ -635,6 +675,7 @@ UnificationError :: enum {
 // done to provide nicer error messages as just applying unify() makes it
 // unclear which is the expected type
 // NOTE: try_unify() is directional and NOT commutative, unlike unify() which is
+@(require_results)
 try_unify :: proc(
 	expected: Type,
 	checking: Type,
@@ -823,7 +864,6 @@ typecheck_error :: proc(tc: ^TypeChecker, message: string) {
 
 	fmt.eprintfln(": %s", message)
 	fmt.eprintfln("  on [line %d]", token.line)
-	tc.had_error = true
 }
 
 // is the expression a syntactic "value"?
@@ -852,7 +892,7 @@ infer_type :: proc(
 	err: ErrorMessage,
 ) {
 	alpha := fresh(tc)
-	s := check_type(tc, expr, alpha, "") or_return
+	s := check_type(tc, expr, alpha) or_return
 	res := apply_substitution(s, alpha)
 
 	when ODIN_DEBUG {
@@ -876,11 +916,13 @@ check_type :: proc(
 	tc: ^TypeChecker,
 	expr: Expr,
 	type: Type,
-	expected_expression_name: string,
+	expected_expression_name: string = "",
 ) -> (
 	subst: Substitution,
 	err: ErrorMessage,
 ) {
+	if expr == nil {return nil, nil}
+
 	switch e in expr {
 	case ^AssignExpr:
 		tc.current_token = e.token
@@ -888,13 +930,17 @@ check_type :: proc(
 		apply_substitution(s1, tc.ctx)
 		found := resolve_type(tc, e.name.lexeme, e)
 		ty := instantiate(tc, found)
-		sn := try_unify(ty, t1, "assigned value") or_return
-		apply_substitution(sn, tc.ctx)
-		sn2 := try_unify(type, apply_substitution(sn, ty), "assignment") or_return
-		return combine_substitutions(sn2, combine_substitutions(sn, s1)), nil
+		s2 := try_unify(ty, t1, "assigned value") or_return
+		apply_substitution(s2, tc.ctx)
+		sn := try_unify(type, apply_substitution(s2, ty), "assignment") or_return
+
+		s := combine_substitutions(sn, combine_substitutions(s2, s1))
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^BinaryExpr:
 		tc.current_token = e.token
 		operator := e.operator
+		s := make(Substitution)
 
 		#partial switch operator.type {
 		case .PLUS, .MINUS, .STAR, .SLASH, .PERCENT:
@@ -914,7 +960,7 @@ check_type :: proc(
 			) or_return
 			apply_substitution(s2, tc.ctx)
 			sn := try_unify(type, num, expected_expression_name) or_return
-			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+			s = combine_substitutions(sn, combine_substitutions(s2, combine_substitutions(s1, s)))
 		case .DOT_DOT:
 			str := tapp(.STRING)
 			s1 := check_type(tc, e.left, str, "left operand to '..'") or_return
@@ -922,7 +968,7 @@ check_type :: proc(
 			s2 := check_type(tc, e.right, str, "right operand to '..'") or_return
 			apply_substitution(s2, tc.ctx)
 			sn := try_unify(type, str, expected_expression_name) or_return
-			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+			s = combine_substitutions(sn, combine_substitutions(s2, combine_substitutions(s1, s)))
 		case .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL:
 			bool_ := tapp(.BOOL)
 			num := tapp(.NUMBER)
@@ -941,17 +987,20 @@ check_type :: proc(
 			) or_return
 			apply_substitution(s2, tc.ctx)
 			sn := try_unify(type, bool_, expected_expression_name) or_return
-			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+			s = combine_substitutions(sn, combine_substitutions(s2, combine_substitutions(s1, s)))
 		case .EQUAL_EQUAL, .BANG_EQUAL:
 			s1, _ := infer_type(tc, e.left) or_return
 			apply_substitution(s1, tc.ctx)
 			s2, _ := infer_type(tc, e.right) or_return
 			apply_substitution(s2, tc.ctx)
 			sn := try_unify(type, tapp(.BOOL), expected_expression_name) or_return
-			return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+			s = combine_substitutions(sn, combine_substitutions(s2, combine_substitutions(s1, s)))
 		case:
 			fmt.panicf("Invalid binary operator '%s'.", e.operator.lexeme)
 		}
+
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^BlockExpr:
 		tc.current_token = e.token
 		push_scope(tc.ctx)
@@ -962,10 +1011,14 @@ check_type :: proc(
 			s = try_unify(type, tapp(.NIL), expected_expression_name) or_return // infer body with expected type
 		}
 		pop_scope(tc.ctx)
+
+		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^BreakExpr:
 		tc.current_token = e.token
-		return try_unify(type, type_never, expected_expression_name)
+		s := try_unify(type, type_never, expected_expression_name) or_return
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^CallExpr:
 		tc.current_token = e.token
 		callee := e.callee
@@ -1007,22 +1060,31 @@ check_type :: proc(
 			s = combine_substitutions(s1, s)
 		}
 		sn := try_unify(type, apply_substitution(s, ret_type), expected_expression_name) or_return
-		return combine_substitutions(sn, s), nil
+
+		s = combine_substitutions(sn, s)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^ClassExpr:
 		unimplemented()
 	case ^ContinueExpr:
 		tc.current_token = e.token
-		return try_unify(type, type_never, expected_expression_name)
+		s := try_unify(type, type_never, expected_expression_name) or_return
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^DiscardExpr:
 		tc.current_token = e.token
 		s1, _ := infer_type(tc, e.expression) or_return // infer inner and discard it
 		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
-		return combine_substitutions(sn, s1), nil
+		s := combine_substitutions(sn, s1)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^ExitExpr:
 		tc.current_token = e.token
 		s1 := check_type(tc, e.code, tapp(.NUMBER), "exit code") or_return
 		sn := try_unify(type, type_never, expected_expression_name) or_return
-		return combine_substitutions(sn, s1), nil
+		s := combine_substitutions(sn, s1)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^ForExpr:
 		tc.current_token = e.token
 
@@ -1051,7 +1113,10 @@ check_type :: proc(
 		s = combine_substitutions(s_body, s)
 		pop_scope(tc.ctx)
 		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
-		return combine_substitutions(sn, s), nil
+
+		s = combine_substitutions(sn, s)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^ForInExpr:
 		tc.current_token = e.token
 		push_scope(tc.ctx)
@@ -1062,7 +1127,10 @@ check_type :: proc(
 		apply_substitution(s_body, tc.ctx)
 		pop_scope(tc.ctx)
 		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
-		return combine_substitutions(sn, combine_substitutions(s_body, s_iter)), nil
+
+		s := combine_substitutions(sn, combine_substitutions(s_body, s_iter))
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^IfExpr:
 		tc.current_token = e.token
 		s1, _ := infer_type(tc, e.condition) or_return // the condition can be any value
@@ -1092,6 +1160,7 @@ check_type :: proc(
 			s = combine_substitutions(sn, s)
 		}
 
+		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^GetExpr:
 		unimplemented()
@@ -1099,7 +1168,9 @@ check_type :: proc(
 		unimplemented()
 	case ^GroupingExpr:
 		tc.current_token = e.token
-		return check_type(tc, e.expression, type, "grouping expression")
+		s := check_type(tc, e.expression, type, "grouping expression") or_return
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^LogicalExpr:
 		tc.current_token = e.token
 		s1, _ := infer_type(tc, e.left) or_return
@@ -1107,7 +1178,10 @@ check_type :: proc(
 		s2, _ := infer_type(tc, e.right) or_return
 		apply_substitution(s2, tc.ctx)
 		sn := try_unify(type, tapp(.BOOL), expected_expression_name) or_return
-		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+
+		s := combine_substitutions(sn, combine_substitutions(s2, s1))
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^ListExpr:
 		tc.current_token = e.token
 		if len(e.elements) == 0 {
@@ -1127,10 +1201,16 @@ check_type :: proc(
 			tapp(.LIST, {apply_substitution(s, elem)}),
 			expected_expression_name,
 		) or_return
-		return combine_substitutions(sn, s), nil
+
+		s = combine_substitutions(sn, s)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^ItExpr:
 		tc.current_token = e.token
-		return try_unify(type, tc.pipeline_type, expected_expression_name)
+
+		s := try_unify(type, tc.pipeline_type, expected_expression_name) or_return
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^PipeExpr:
 		tc.current_token = e.token
 		left := e.left
@@ -1144,25 +1224,36 @@ check_type :: proc(
 		tc.pipeline_type = t2
 		s := combine_substitutions(s2, s1)
 		sn := try_unify(type, t2, expected_expression_name) or_return
-		return combine_substitutions(sn, s), nil
+
+		s = combine_substitutions(sn, s)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^PrintExpr:
 		tc.current_token = e.token
 		s1, t1 := infer_type(tc, e.expr) or_return
 		sn := try_unify(type, t1, expected_expression_name) or_return // print returns what it printed
-		return combine_substitutions(sn, s1), nil
+
+		s := combine_substitutions(sn, s1)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^ReturnExpr:
 		tc.current_token = e.token
+
+		s := make(Substitution)
 		if e.value != nil {
-			s1 := check_type(tc, e.value, tc.return_type, "return value") or_return
-			apply_substitution(s1, tc.ctx)
+			s = check_type(tc, e.value, tc.return_type, "return value") or_return
+			apply_substitution(s, tc.ctx)
 			sn := try_unify(type, type_never, expected_expression_name) or_return // return expression itself has type `!`
-			return combine_substitutions(sn, s1), nil
+			s = combine_substitutions(sn, s)
 		} else {
-			s1 := try_unify(tc.return_type, tapp(.NIL), expected_expression_name) or_return
-			apply_substitution(s1, tc.ctx)
+			s = try_unify(tc.return_type, tapp(.NIL), expected_expression_name) or_return
+			apply_substitution(s, tc.ctx)
 			sn := try_unify(type, type_never, expected_expression_name) or_return
-			return combine_substitutions(sn, s1), nil
+			s = combine_substitutions(sn, s)
 		}
+
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^SubscriptExpr:
 		tc.current_token = e.token
 		receiver := e.receiver
@@ -1178,7 +1269,10 @@ check_type :: proc(
 		apply_substitution(s2, tc.ctx)
 		s := combine_substitutions(s2, s1)
 		sn := try_unify(type, beta, expected_expression_name) or_return
-		return combine_substitutions(sn, s), nil
+
+		s = combine_substitutions(sn, s)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^SubscriptSetExpr:
 		unimplemented()
 	case ^SuperExpr:
@@ -1188,22 +1282,29 @@ check_type :: proc(
 	case ^LiteralExpr:
 		tc.current_token = e.token
 
+		s := make(Substitution)
 		// just unify with the matching literal constructor
 		switch l in e.value {
 		case f64:
-			return try_unify(type, tapp(.NUMBER), expected_expression_name)
+			s = try_unify(type, tapp(.NUMBER), expected_expression_name) or_return
 		case string:
-			return try_unify(type, tapp(.STRING), expected_expression_name)
+			s = try_unify(type, tapp(.STRING), expected_expression_name) or_return
 		case bool:
-			return try_unify(type, tapp(.BOOL), expected_expression_name)
+			s = try_unify(type, tapp(.BOOL), expected_expression_name) or_return
 		case:
-			return try_unify(type, tapp(.NIL), expected_expression_name)
+			s = try_unify(type, tapp(.NIL), expected_expression_name) or_return
 		}
+
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^VariableExpr:
 		tc.current_token = e.token
 		found := resolve_type(tc, e.name.lexeme, e) // find typescheme in the context (or resolution map)
 		found_t := instantiate(tc, found) // instantiate the found scheme
-		return try_unify(type, found_t, expected_expression_name) // unify typevar with the found type
+
+		s := try_unify(type, found_t, expected_expression_name) or_return // unify typevar with the found type
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^FunctionExpr:
 		tc.current_token = e.token
 		bound_to := e.bound_to
@@ -1257,7 +1358,9 @@ check_type :: proc(
 		apply_substitution(s2, tc.ctx)
 		pop_function_scope(tc)
 
-		return combine_substitutions(s2, s1), nil
+		s := combine_substitutions(s2, s1)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^SequenceExpr:
 		tc.current_token = e.token
 		s1, _ := infer_type(tc, e.left) or_return // infer left with fresh var
@@ -1274,7 +1377,10 @@ check_type :: proc(
 			expected_expression_name,
 		) or_return // infer right with expected type
 		apply_substitution(s2, tc.ctx)
-		return combine_substitutions(s2, s1), nil
+
+		s := combine_substitutions(s2, s1)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^SwitchExpr:
 		tc.current_token = e.token
 		cond_type: Type
@@ -1308,24 +1414,29 @@ check_type :: proc(
 			apply_substitution(s, type),
 			"else branch",
 		) or_return
+
 		s = combine_substitutions(s_else, s)
+		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^UnaryExpr:
 		tc.current_token = e.token
 
+		s := make(Substitution)
 		#partial switch e.operator.type {
 		case .MINUS:
-			s1 := check_type(tc, e.right, tapp(.NUMBER), "operand to '-'") or_return
+			s = check_type(tc, e.right, tapp(.NUMBER), "operand to '-'") or_return
 			sn := try_unify(type, tapp(.NUMBER), expected_expression_name) or_return
-			return combine_substitutions(sn, s1), nil
+			s = combine_substitutions(sn, s)
 		case .NOT:
-			s1, _ := infer_type(tc, e.right) or_return
+			s, _ = infer_type(tc, e.right) or_return
 			sn := try_unify(type, tapp(.BOOL), expected_expression_name) or_return
-			return combine_substitutions(sn, s1), nil
+			s = combine_substitutions(sn, s)
 		case:
 			fmt.panicf("Unknown unary operator '%s'", e.operator.lexeme)
 		}
 
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^UseExpr:
 		unimplemented()
 	case ^VarDeclExpr:
@@ -1355,7 +1466,10 @@ check_type :: proc(
 			}
 		}
 		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return // VarDeclExpr itself evaluates to nil
-		return combine_substitutions(sn, s), nil
+
+		s = combine_substitutions(sn, s)
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^WhileExpr:
 		tc.current_token = e.token
 		push_scope(tc.ctx)
@@ -1365,7 +1479,10 @@ check_type :: proc(
 		apply_substitution(s2, tc.ctx)
 		pop_scope(tc.ctx)
 		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
-		return combine_substitutions(sn, combine_substitutions(s2, s1)), nil
+
+		s := combine_substitutions(sn, combine_substitutions(s2, s1))
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	}
 
 	panic("invalid AST node")
@@ -1687,7 +1804,7 @@ typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, su
 	return ty, true
 }
 
-typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (type: Type, success: bool) {
+typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, success: bool) {
 	// create separate arena to allocate everything for typechecker
 	arena: vmem.Arena
 	arena_err := vmem.arena_init_growing(&arena)
@@ -1695,26 +1812,44 @@ typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (type: Type, succes
 	defer vmem.arena_destroy(&arena)
 
 	arena_alloc := vmem.arena_allocator(&arena)
+	prev_alloc := context.allocator
 	context.allocator = arena_alloc
 
 	tc := TypeChecker {
 		ctx           = nil,
 		resolutions   = resolutions,
+		typemap       = make(TypeMap, prev_alloc),
 		typevar_count = 0,
 		current_token = {},
-		had_error     = false,
+		pipeline_type = {},
+		return_type   = {},
 	}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
 	register_builtins(&tc)
 
-	return typecheck_without_arena(&tc, expr)
+	_, ok := typecheck_without_arena(&tc, expr)
+	if !ok {
+		delete_typemap(tc.typemap)
+		return nil, false
+	}
+	return tc.typemap, true
 }
 
-typecheck_full :: proc(vm: ^VM, expr: Expr, resolutions: ResolutionMap) -> bool {
+typecheck_full :: proc(
+	vm: ^VM,
+	expr: Expr,
+	resolutions: ResolutionMap,
+) -> (
+	typemap: TypeMap,
+	success: bool,
+) {
 	when ODIN_DEBUG {
 		if config.log_type {
 			fmt.eprintln("-- typechecker begin")
+		}
+		defer if config.log_type {
+			fmt.eprintln("\n-- typechecker end")
 		}
 	}
 
@@ -1726,6 +1861,7 @@ typecheck_full :: proc(vm: ^VM, expr: Expr, resolutions: ResolutionMap) -> bool 
 			vm.type_arena_init = true
 		}
 
+		prev_alloc := context.allocator
 		context.allocator = vmem.arena_allocator(&vm.type_arena)
 
 		if vm.type_checker == nil {
@@ -1733,25 +1869,30 @@ typecheck_full :: proc(vm: ^VM, expr: Expr, resolutions: ResolutionMap) -> bool 
 			tc^ = TypeChecker {
 				ctx           = nil,
 				resolutions   = resolutions,
+				// the typemap is the only thing that doesn't use the arena;
+				// this is because it is returned back by the typechecker
+				typemap       = make(TypeMap, prev_alloc),
 				typevar_count = 0,
 				current_token = {},
-				had_error     = false,
+				return_type   = {},
+				pipeline_type = {},
 			}
 			push_function_scope(tc)
 			register_builtins(tc)
 			vm.type_checker = tc
 		}
 
-		typecheck_without_arena(vm.type_checker, expr) or_return
-	} else {
-		typecheck(expr, resolutions) or_return
-	}
-
-	when ODIN_DEBUG {
-		if config.log_type {
-			fmt.eprintln("\n-- typechecker end")
+		_, ok := typecheck_without_arena(vm.type_checker, expr)
+		if !ok {
+			delete_typemap(vm.type_checker.typemap)
+			vm.type_checker.typemap = make(TypeMap, prev_alloc)
+			return nil, false
 		}
-	}
 
-	return true
+		result := vm.type_checker.typemap
+		vm.type_checker.typemap = make(TypeMap, prev_alloc)
+		return result, true
+	} else {
+		return typecheck(expr, resolutions)
+	}
 }

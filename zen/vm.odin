@@ -1190,11 +1190,13 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	TYPE_CHECK :: #config(TYPE_CHECK, false)
+	TYPE_CHECK :: false
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
-		tc_ok := typecheck_full(vm, expr, reso)
+		tm, tc_ok := typecheck_full(vm, expr, reso)
 		defer delete_resolution_map(reso)
+		defer delete_typemap(tm)
+
 		if !tc_ok {
 			return .INTERPRET_COMPILE_ERROR
 		}

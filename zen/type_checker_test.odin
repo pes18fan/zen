@@ -9,7 +9,6 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 	tc := TypeChecker {
 		ctx           = nil,
 		typevar_count = 0,
-		had_error     = false,
 	}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
@@ -292,7 +291,6 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 	tc := TypeChecker {
 		ctx           = nil,
 		typevar_count = 0,
-		had_error     = false,
 	}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
@@ -317,7 +315,6 @@ test_generalize_instantiate :: proc(t: ^tt.T) {
 	tc := TypeChecker {
 		ctx           = nil,
 		typevar_count = 0,
-		had_error     = false,
 	}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
