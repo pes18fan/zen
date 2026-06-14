@@ -1,7 +1,7 @@
 // DRAFT
 // proposed record syntax: subject to change
-record Point(x, y)
-val Vector3 = (x, y, z) // non-declaration form
+type Point = (x, y)
+type Vector3 = (x: Int, y: Int, z: Int) // explicit type annotations
 
 // creating one
 val p = Point(1, 2)     // positional
@@ -25,3 +25,11 @@ val s = q
 
 // the empty record/unit
 val u = ()
+
+// structural equality
+type Size = (x, y)
+assert(Size(1, 2) == Point(1, 2))
+
+// distinct keyword for escaping structural equality
+type DSize = distinct (x, y)
+assert(Size(1, 2) != DSize(1, 2))
