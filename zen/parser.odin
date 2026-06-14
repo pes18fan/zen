@@ -2,6 +2,8 @@ package zen
 
 import "core:fmt"
 import "core:os"
+import "core:path/filepath"
+import "core:slice"
 import "core:strconv"
 import "core:strings"
 
@@ -139,8 +141,10 @@ ClassExpr :: struct {
 }
 
 UseExpr :: struct {
-	token: Token,
-	path:  Token,
+	token:    Token,
+	fullpath: string,
+	name:     string,
+	type:     ModuleType,
 }
 
 FunctionParam :: struct {
@@ -531,7 +535,37 @@ parse_class_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(UseExpr)
 	expr.token = parser_previous(p)
-	expr.path = parser_consume(p, .STRING, "Expect module path.")
+
+	relative_path_str := parser_consume(p, .STRING, "Expect module path.").lexeme
+	relative_path := strings.trim(relative_path_str[1:len(relative_path_str) - 1], " ")
+	abs_path, join_err := filepath.join(
+		[]string{config.__dirname, relative_path},
+		context.allocator,
+	)
+	if join_err != nil {
+		parser_error(
+			p,
+			parser_previous(p),
+			fmt.tprintf("Error when declaring module: %s", os.error_string(join_err)),
+		)
+		return nil
+	}
+	mod_name: string
+	type: ModuleType
+	if slice.contains(STD_MODULES[:], relative_path) {
+		mod_name = relative_path
+		type = .BUILTIN
+	} else if os.exists(abs_path) {
+		mod_name = filepath.short_stem(relative_path)
+		type = .USER
+	} else {
+		parser_error(p, parser_previous(p), fmt.tprintf("Module '%s' not found.", relative_path))
+		return nil
+	}
+	expr.name = strings.clone(mod_name)
+	expr.fullpath = abs_path
+	expr.type = type
+
 	return expr
 }
 
@@ -1422,6 +1456,8 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.right)
 		free(e)
 	case ^UseExpr:
+		delete(e.name)
+		delete(e.fullpath)
 		free(e)
 	case ^VariableExpr:
 		free(e)
@@ -1717,7 +1753,7 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^UseExpr:
 		print_indent(b, indent)
-		fmt.sbprintf(b, "(use %s)\n", e.path.lexeme)
+		fmt.sbprintf(b, "(use %s)\n", e.name)
 	case ^VarDeclExpr:
 		print_indent(b, indent)
 		kind := e.is_final ? "val" : "var"

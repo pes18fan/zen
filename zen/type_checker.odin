@@ -3,6 +3,7 @@ package zen
 import "core:fmt"
 import vmem "core:mem/virtual"
 import "core:os"
+import "core:reflect"
 import "core:slice"
 import "core:strings"
 
@@ -42,8 +43,10 @@ delete_typemap :: proc(typemap: TypeMap) {
 }
 
 TypedBinding :: struct {
-	name: string,
-	var:  Variable,
+	name:        string,
+	scope_depth: int,
+	is_module:   bool,
+	scheme:      TypeScheme,
 }
 
 TypeContext :: struct {
@@ -53,15 +56,20 @@ TypeContext :: struct {
 	scope_boundaries: [dynamic]int,
 }
 
-Variable :: struct {
-	using _: UntypedVariable,
-	scheme:  TypeScheme,
-}
-
-make_variable :: proc(ctx: ^TypeContext, scheme: TypeScheme) -> Variable {
+make_typed_binding :: proc(
+	ctx: ^TypeContext,
+	name: string,
+	scheme: TypeScheme,
+	is_module: bool = false,
+) -> TypedBinding {
 	// NOTE: currently most fields here that come from `UntypedVariable` are
 	// unused here
-	return Variable{scope_depth = ctx.scope_depth, scheme = scheme}
+	return TypedBinding {
+		name = name,
+		scope_depth = ctx.scope_depth,
+		scheme = scheme,
+		is_module = is_module,
+	}
 }
 
 Type :: union #no_nil {
@@ -244,25 +252,54 @@ TypeQuantified :: struct {
 
 Substitution :: map[TypeVariable]Type
 
+// same as resolve_type except it errors out if the resolved binding is not a variable
+@(require_results)
+resolve_type_of_variable :: proc(
+	tc: ^TypeChecker,
+	name: string,
+	node: ResolvingNode,
+) -> (
+	scheme: TypeScheme,
+	err: ErrorMessage,
+) {
+	t, is_module := resolve_type_with_module_info(tc, name, node)
+	if is_module {
+		return {}, "Cannot use a module as a value."
+	}
+	return t, nil
+}
+
 @(require_results)
 resolve_type :: proc(tc: ^TypeChecker, name: string, node: ResolvingNode) -> TypeScheme {
+	t, _ := resolve_type_with_module_info(tc, name, node)
+	return t
+}
+
+@(require_results)
+resolve_type_with_module_info :: proc(
+	tc: ^TypeChecker,
+	name: string,
+	node: ResolvingNode,
+) -> (
+	scheme: TypeScheme,
+	is_module: bool,
+) {
 	ctx := tc.ctx
 	for ctx != nil {
 		for i := len(ctx.bindings) - 1; i >= 0; i -= 1 {
 			b := ctx.bindings[i]
-			if b.name == name && b.var.scope_depth <= ctx.scope_depth {
-				t := b.var.scheme
+			if b.name == name && b.scope_depth <= ctx.scope_depth {
 				when ODIN_DEBUG {
 					if config.log_type {
 						fmt.eprintfln(
 							"-- grab type %v of %s from current context",
-							type_string(t, true),
+							type_string(b.scheme, true),
 							name,
 						)
 					}
 				}
 
-				return t
+				return b.scheme, b.is_module
 			}
 		}
 		ctx = ctx.enclosing
@@ -277,15 +314,19 @@ resolve_type :: proc(tc: ^TypeChecker, name: string, node: ResolvingNode) -> Typ
 		// NOTE: technically the type is in the global context, but for now we're
 		// just keeping it in whichever context it is required in
 		bind_type(tc.ctx, strings.clone(name), alpha)
-		return alpha
+
+		// NOTE: is_module is hardcoded to false because this branch is only
+		// activated for hoisted global values and modules are currently NOT
+		// hoisted, may need changing if I ever decide to hoist modules
+		return alpha, false
 	}
 
 	// nothing found at all
 	fmt.panicf("Couldn't resolve variable '%v' in typechecker", name)
 }
 
-bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme) {
-	append(&ctx.bindings, TypedBinding{name = name, var = make_variable(ctx, scheme)})
+bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme, is_module: bool = false) {
+	append(&ctx.bindings, make_typed_binding(ctx, name, scheme, is_module))
 
 	when ODIN_DEBUG {
 		if config.log_type {
@@ -353,7 +394,7 @@ destroy_type_context :: proc(ctx: ^TypeContext) {
 	c := ctx
 	for c != nil {
 		for i in 0 ..< len(c.bindings) {
-			free_typescheme(&c.bindings[i].var.scheme)
+			free_typescheme(&c.bindings[i].scheme)
 		}
 		delete(c.bindings)
 		delete(c.scope_boundaries)
@@ -452,7 +493,7 @@ free_vars_context :: proc(ctx: ^TypeContext) -> FreeVars {
 
 	for c != nil {
 		for i in 0 ..< len(c.bindings) {
-			scheme := c.bindings[i].var.scheme
+			scheme := c.bindings[i].scheme
 			scheme_fvs := free_vars(scheme)
 			defer delete(scheme_fvs)
 			for k in scheme_fvs {fvs[k] = {}}
@@ -555,7 +596,7 @@ apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	for c != nil {
 		for i in 0 ..< len(c.bindings) {
 			b := &c.bindings[i]
-			b.var.scheme = apply_substitution(subst, b.var.scheme)
+			b.scheme = apply_substitution(subst, b.scheme)
 		}
 		c = c.enclosing
 	}
@@ -928,7 +969,7 @@ check_type :: proc(
 		tc.current_token = e.token
 		s1, t1 := infer_type(tc, e.value) or_return
 		apply_substitution(s1, tc.ctx)
-		found := resolve_type(tc, e.name.lexeme, e)
+		found := resolve_type_of_variable(tc, e.name.lexeme, e) or_return
 		ty := instantiate(tc, found)
 		s2 := try_unify(ty, t1, "assigned value") or_return
 		apply_substitution(s2, tc.ctx)
@@ -1042,22 +1083,17 @@ check_type :: proc(
 		// handle method calls vs regular ones
 		s := make(Substitution)
 
-		if get_expr, ok := callee.(^GetExpr); ok {
-			s1, _ := infer_type(tc, get_expr.receiver) or_return
-			apply_substitution(s1, tc.ctx)
-			s = combine_substitutions(s1, s)
-		} else {
-			s1 := check_type(tc, callee, func_type, "called function") or_return
-			apply_substitution(s1, tc.ctx)
-			s = combine_substitutions(s1, s)
-		}
+		// check called function's type
+		s_callee := check_type(tc, callee, func_type, "called function") or_return
+		apply_substitution(s_callee, tc.ctx)
+		s = combine_substitutions(s_callee, s)
 
 		// typecheck each argument
 		for arg, idx in arguments {
 			expected := apply_substitution(s, arg_types[idx])
-			s1 := check_type(tc, arg, expected, "argument") or_return
-			apply_substitution(s1, tc.ctx)
-			s = combine_substitutions(s1, s)
+			s_arg := check_type(tc, arg, expected, "argument") or_return
+			apply_substitution(s_arg, tc.ctx)
+			s = combine_substitutions(s_arg, s)
 		}
 		sn := try_unify(type, apply_substitution(s, ret_type), expected_expression_name) or_return
 
@@ -1163,7 +1199,34 @@ check_type :: proc(
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^GetExpr:
-		unimplemented()
+		tc.current_token = e.token
+		receiver := e.receiver
+		property := e.property
+
+		// handle the module case
+		s := make(Substitution)
+		if v, ok := receiver.(^VariableExpr); ok {
+			t, is_module := resolve_type_with_module_info(tc, v.name.lexeme, v)
+			if !is_module {
+				return nil, fmt.tprintf("Expect module after '.', got %v.", type_string(t, false))
+			}
+
+			up := strings.to_upper(v.name.lexeme)
+			defer delete(up)
+			module, reflect_ok := reflect.enum_from_name(BuiltinModule, up)
+			if !reflect_ok {
+				fmt.panicf("builtin module name '%v' doesn't match anything in module enum", up)
+			}
+
+			poly_sig := get_module_function_signature(tc, module, property.lexeme) or_return
+			sig := instantiate(tc, poly_sig) // instantiate the function; cuz it can be polymorphic
+			s = try_unify(type, sig, expected_expression_name) or_return
+		} else {
+			unimplemented()
+		}
+
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^SetExpr:
 		unimplemented()
 	case ^GroupingExpr:
@@ -1299,9 +1362,8 @@ check_type :: proc(
 		return s, nil
 	case ^VariableExpr:
 		tc.current_token = e.token
-		found := resolve_type(tc, e.name.lexeme, e) // find typescheme in the context (or resolution map)
+		found := resolve_type_of_variable(tc, e.name.lexeme, e) or_return // find typescheme in the context (or resolution map)
 		found_t := instantiate(tc, found) // instantiate the found scheme
-
 		s := try_unify(type, found_t, expected_expression_name) or_return // unify typevar with the found type
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
@@ -1438,7 +1500,20 @@ check_type :: proc(
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^UseExpr:
-		unimplemented()
+		tc.current_token = e.token
+		name := e.name
+		mod_type := e.type
+
+		switch mod_type {
+		case .BUILTIN:
+			// modules are NOT first class values so they have no type
+			bind_type(tc.ctx, name, {}, is_module = true)
+		case .USER:
+			unimplemented()
+		}
+		s := try_unify(type, tapp(.NIL), expected_expression_name) or_return
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^VarDeclExpr:
 		tc.current_token = e.token
 		s := make(Substitution)
@@ -1635,7 +1710,7 @@ ctx_string :: proc(ctx: ^TypeContext, $debugging: bool) -> string {
 	fmt.sbprint(&sb, "{")
 	for i in 0 ..< len(ctx.bindings) {
 		b := ctx.bindings[i]
-		ty_string := type_string(b.var.scheme, debugging)
+		ty_string := type_string(b.scheme, debugging)
 
 		fmt.sbprintf(&sb, "%s: %v%s", b.name, ty_string, ", " if count < sz - 1 else "")
 		count += 1
@@ -1658,95 +1733,98 @@ bind_type_to_module :: proc(
 	unimplemented()
 }
 
-register_builtin_module :: proc(tc: ^TypeChecker, module: string) {
-	if !slice.contains(STD_MODULES[:], module) {
-		fmt.panicf("Invalid builtin module %v", module)
-	}
-
+get_module_function_signature :: proc(
+	tc: ^TypeChecker,
+	module: BuiltinModule,
+	fn_name: string,
+) -> (
+	scheme: TypeScheme,
+	err: ErrorMessage,
+) {
 	string_t := tapp(.STRING)
 	number_t := tapp(.NUMBER)
 
-	mod := tapp(.RECORD)
-
 	switch module {
-	case "time":
-		bind_type_to_module(tc.ctx, mod, "clock", tapp(.FUNCTION, {number_t}))
-		bind_type_to_module(tc.ctx, mod, "clock_ms", tapp(.FUNCTION, {number_t}))
-	case "math":
-		bind_type_to_module(tc.ctx, mod, "sin", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "cos", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "tan", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "sqrt", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "ln", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "pow", tapp(.FUNCTION, {number_t, number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "floor", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "ceil", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "round", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "abs", tapp(.FUNCTION, {number_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "rand", tapp(.FUNCTION, {number_t}))
-	case "os":
-		bind_type_to_module(tc.ctx, mod, "read", tapp(.FUNCTION, {string_t}))
-		bind_type_to_module(tc.ctx, mod, "write", tapp(.FUNCTION, {string_t, string_t, string_t}))
-		bind_type_to_module(tc.ctx, mod, "args", tapp(.FUNCTION, {tapp(.LIST, {string_t})}))
-	case "list":
-		a := fresh(tc)
-		bind_type_to_module(
-			tc.ctx,
-			mod,
-			"push",
-			tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), tapp(.LIST, {a})})),
-		)
-
-		b := fresh(tc)
-		bind_type_to_module(
-			tc.ctx,
-			mod,
-			"pop",
-			tquant({b}, tapp(.FUNCTION, {tapp(.LIST, {b}), b})),
-		)
-
-		c := fresh(tc)
-		bind_type_to_module(
-			tc.ctx,
-			mod,
-			"remove_last",
-			tquant({c}, tapp(.FUNCTION, {tapp(.LIST, {c}), tapp(.LIST, {c})})),
-		)
-
-		d := fresh(tc)
-		bind_type_to_module(
-			tc.ctx,
-			mod,
-			"sort",
-			tquant({d}, tapp(.FUNCTION, {tapp(.LIST, {d}), tapp(.LIST, {d})})),
-		)
-
-		bind_type_to_module(
-			tc.ctx,
-			mod,
-			"sum",
-			tapp(.FUNCTION, {tapp(.LIST, {number_t}), number_t}),
-		)
-	case "string":
-		bind_type_to_module(tc.ctx, mod, "chomp", tapp(.FUNCTION, {string_t, string_t}))
-		bind_type_to_module(
-			tc.ctx,
-			mod,
-			"replace",
-			tapp(.FUNCTION, {string_t, string_t, string_t, string_t}),
-		)
-		bind_type_to_module(
-			tc.ctx,
-			mod,
-			"slice",
-			tapp(.FUNCTION, {string_t, number_t, number_t, string_t}),
-		)
-		bind_type_to_module(tc.ctx, mod, "upcase", tapp(.FUNCTION, {string_t, string_t}))
-		bind_type_to_module(tc.ctx, mod, "downcase", tapp(.FUNCTION, {string_t, string_t}))
-		bind_type_to_module(tc.ctx, mod, "reverse", tapp(.FUNCTION, {string_t, string_t}))
-		bind_type_to_module(tc.ctx, mod, "asciichar", tapp(.FUNCTION, {string_t, number_t}))
-		bind_type_to_module(tc.ctx, mod, "asciinum", tapp(.FUNCTION, {number_t, string_t}))
+	case .TIME:
+		switch fn_name {
+		case "clock":
+			return tapp(.FUNCTION, {number_t}), nil
+		case "clock_ms":
+			return tapp(.FUNCTION, {number_t}), nil
+		}
+	case .MATH:
+		switch fn_name {
+		case "sin":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "cos":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "tan":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "sqrt":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "ln":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "pow":
+			return tapp(.FUNCTION, {number_t, number_t, number_t}), nil
+		case "floor":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "ceil":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "round":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "abs":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "rand":
+			return tapp(.FUNCTION, {number_t}), nil
+		}
+	case .OS:
+		switch fn_name {
+		case "read":
+			return tapp(.FUNCTION, {string_t}), nil
+		case "write":
+			return tapp(.FUNCTION, {string_t, string_t, string_t}), nil
+		case "args":
+			return tapp(.FUNCTION, {tapp(.LIST, {string_t})}), nil
+		}
+	case .LIST:
+		switch fn_name {
+		case "push":
+			a := fresh(tc)
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), tapp(.LIST, {a})})), nil
+		case "pop":
+			a := fresh(tc)
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), a})), nil
+		case "remove_last":
+			a := fresh(tc)
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), tapp(.LIST, {a})})), nil
+		case "sort":
+			a := fresh(tc)
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), tapp(.LIST, {a})})), nil
+		case "sum":
+			return tapp(.FUNCTION, {tapp(.LIST, {number_t}), number_t}), nil
+		}
+	case .STRING:
+		switch fn_name {
+		case "chomp":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "replace":
+			return tapp(.FUNCTION, {string_t, string_t, string_t, string_t}), nil
+		case "slice":
+			return tapp(.FUNCTION, {string_t, number_t, number_t, string_t}), nil
+		case "upcase":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "downcase":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "reverse":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "asciichar":
+			return tapp(.FUNCTION, {string_t, number_t}), nil
+		case "asciinum":
+			return tapp(.FUNCTION, {number_t, string_t}), nil
+		}
 	}
+
+	return {}, fmt.tprintf("Function '%v' does not exist in builtin module '%v'.", fn_name, builtin_module_name_from_value(module))
 }
 
 register_builtins :: proc(tc: ^TypeChecker) {

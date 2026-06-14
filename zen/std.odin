@@ -17,6 +17,24 @@ BuiltinModule :: enum {
 	LIST,
 }
 
+builtin_module_name_from_value :: #force_inline proc(m: BuiltinModule) -> string {
+	switch m {
+	case .TIME:
+		return "time"
+	case .MATH:
+		return "math"
+	case .OS:
+		return "os"
+	case .STRING:
+		return "string"
+	case .LIST:
+		return "list"
+	}
+
+	fmt.panicf("invalid builtin module type '%v'", m)
+}
+
+
 ModuleFunction :: struct {
 	name:     string,
 	function: NativeFn,
