@@ -1158,6 +1158,11 @@ interpret :: proc(
 		}
 	}
 
+	// TODO: remove this after classes and OOP are removed from zen
+	when TYPE_CHECK {
+		uses_classes := program_uses_classes(expr)
+	}
+
 	sm_ok := semcheck(expr)
 	if !sm_ok {
 		return .INTERPRET_COMPILE_ERROR
@@ -1193,20 +1198,23 @@ interpret :: proc(
 	TYPE_CHECK :: true
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
-		tm, tc_ok := typecheck_full(vm, expr, reso)
-		defer delete_resolution_map(reso)
-		defer delete_typemap(tm)
+		// do not run typechecker if OOP features are used
+		if !uses_classes {
+			tm, tc_ok := typecheck_full(vm, expr, reso)
+			defer delete_resolution_map(reso)
+			defer delete_typemap(tm)
 
-		if !tc_ok {
-			return .INTERPRET_COMPILE_ERROR
-		}
+			if !tc_ok {
+				return .INTERPRET_COMPILE_ERROR
+			}
 
-		/* Time the typechecker. */
-		if config.record_time {
-			time.stopwatch_stop(&sw)
-			fmt.eprintf("Typechecker: %v\n", time.stopwatch_duration(sw))
-			time.stopwatch_reset(&sw)
-			time.stopwatch_start(&sw)
+			/* Time the typechecker. */
+			if config.record_time {
+				time.stopwatch_stop(&sw)
+				fmt.eprintf("Typechecker: %v\n", time.stopwatch_duration(sw))
+				time.stopwatch_reset(&sw)
+				time.stopwatch_start(&sw)
+			}
 		}
 	}
 
