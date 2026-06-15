@@ -1,0 +1,26 @@
+use 'string'
+var q = string.asciichar(34)
+var l = [
+"use 'string'",
+"var q = string.asciichar(34)",
+"var l = [",
+"",
+"]",
+"puts(l[i])",
+"for var i = 0; i < len(l); i = i + 1 {",
+"puts(q .. l[i] .. q)",
+"}",
+"for var i = 0; i < len(l); i = i + 1 {",
+"puts(l[i])",
+"}",
+"]"
+]
+for var i = 0; i < 3; i = i + 1 {
+puts(l[i])
+}
+for var i = 0; i < len(l); i = i + 1 {
+puts(q .. l[i] .. q)
+}
+for var i = 4; i < len(l); i = i + 1 {
+puts(l[i])
+}
