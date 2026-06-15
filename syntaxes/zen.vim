@@ -33,6 +33,7 @@ syn match zenOperator "-"
 syn match zenOperator "\*"
 syn match zenOperator "/"
 syn match zenOperator "%"
+syn match zenOperator ".."
 syn match zenOperator "=="
 syn match zenOperator "!="
 syn match zenOperator "<="
@@ -44,7 +45,7 @@ syn match zenOperator "|>"
 syn match zenOperator "=>"
 
 " Numbers (Matches integers and floats)
-syn match zenNumber "\v<\d+(\.\d+)?([eE][+-]?\d+)>"
+syn match zenNumber "\v<\d+(\.\d+)?>"
 
 " Comments and todo markers
 syn keyword zenTodo TODO FIXME NOTE HACK contained
