@@ -39,10 +39,10 @@ Resolver :: struct {
 }
 
 UntypedContext :: struct {
-	enclosing:                  ^UntypedContext,
-	variables:                  map[string]^UntypedVariable,
-	scope_depth:                int,
-	local_count_for_each_block: [dynamic]int,
+	enclosing:   ^UntypedContext,
+	variables:   map[string]^UntypedVariable,
+	scope_depth: int,
+	local_count: int,
 }
 
 UntypedVariable :: struct #all_or_none {
@@ -219,9 +219,9 @@ declare_variable :: proc(
 		is_module        = false,
 		initialized      = false,
 		scope_depth      = rs.function_scope.scope_depth,
-		local_index      = rs.function_scope.local_count_for_each_block[rs.function_scope.scope_depth],
+		local_index      = rs.function_scope.local_count,
 	}
-	rs.function_scope.local_count_for_each_block[rs.function_scope.scope_depth] += 1
+	rs.function_scope.local_count += 1
 
 	// if the variable exists in a different scope we just shadow the thing
 	if exists {
@@ -493,8 +493,7 @@ push_function_scope_untyped :: proc(rs: ^Resolver) {
 	fs := new(UntypedContext)
 	fs.enclosing = rs.function_scope
 	fs.scope_depth = 0
-	fs.local_count_for_each_block = make([dynamic]int)
-	append(&fs.local_count_for_each_block, 0)
+	fs.local_count = 0
 	fs.variables = make(map[string]^UntypedVariable)
 	rs.function_scope = fs
 }
@@ -513,7 +512,6 @@ pop_function_scope_untyped :: proc(rs: ^Resolver) {
 		}
 	}
 	delete(fs.variables)
-	delete(fs.local_count_for_each_block)
 	free(fs)
 	rs.function_scope = enc
 
@@ -521,7 +519,6 @@ pop_function_scope_untyped :: proc(rs: ^Resolver) {
 
 push_block_scope_untyped :: proc(rs: ^Resolver) {
 	rs.function_scope.scope_depth += 1
-	append(&rs.function_scope.local_count_for_each_block, 0)
 }
 
 pop_block_scope_untyped :: proc(rs: ^Resolver) {
