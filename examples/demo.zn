@@ -9,8 +9,10 @@ print "Hello, world!"
 print "\n" // The print expression does not append a newline by default.
 
 // Use the puts() native function appends a newline after printing.
+puts("With a newline!")
+
 // You can pass single strings to functions without parentheses!
-puts "With a newline!"
+puts "Hey, no parens!"
 
 var name = "Sam" // Create a variable!
 val nice = 69 // Can't reassign to this!
@@ -82,7 +84,7 @@ for c in string.chars("hello") {
 } //=> h e l l o
 
 // Lists.
-val l = [97, 69, 420]
+var l = [97, 69, 420]
 puts(l[0])  //=> 97
 l[1] = 71   //=> 71
 
@@ -165,12 +167,12 @@ use "time"
 time.clock() // Current time in UNIX ms
 
 // You can also import your own files.
-use "./helper.zn"
+// use "./helper.zn"
 
-helper.woo() //=> from a module!
+// helper.woo() //=> from a module!
 
 // Note that if you import your own files, to use functions in them they must
 // be explicitly set as public using the `pub` keyword.
-pub func foo() {
-    puts "You can use this from any file!"
-}
+// pub func foo() {
+//     puts "You can use this from any file!"
+// }
