@@ -145,10 +145,6 @@ UseExpr :: struct {
 	fullpath: string,
 	name:     string,
 	type:     ModuleType,
-
-	// for file imports the entire AST of the imported file is directly
-	// embedded into the UseExpr
-	ast:      Maybe(Expr),
 }
 
 FunctionParam :: struct {
@@ -315,50 +311,21 @@ ParseRule :: struct {
 	precedence: Precedence,
 }
 
-// Forms the abstract syntax tree from a provided slice of tokens.
-// Also performs all module resolution.
-Parser :: struct #all_or_none {
-	tokens:       []Token,
-	current:      int,
-	had_error:    bool,
-	panic_mode:   bool,
-	prev_was_eof: bool,
-	source_dir:   string,
-	files_parsed: map[string]struct{},
-	module_cache: map[string]Expr,
-}
-
-init_parser :: proc(tokens: []Token) -> Parser {
-	return Parser {
-		tokens = tokens,
-		current = 0,
-		had_error = false,
-		panic_mode = false,
-		prev_was_eof = false,
-		source_dir = config.__dirname,
-		files_parsed = make(map[string]struct{}),
-		module_cache = make(map[string]Expr),
-	}
-}
-
-destroy_parser :: proc(p: ^Parser) {
-	delete(p.files_parsed)
-	delete(p.module_cache)
-}
-
 /* Create a list of parsed declarations forming an abstract syntax tree, from
 a list of tokens stored in a parser. */
 parse :: proc(tokens: []Token) -> (expr: Expr, success: bool) {
-	p := init_parser(tokens)
-	defer destroy_parser(&p)
-	return parse_with_parser(&p)
-}
+	p := Parser {
+		tokens       = tokens,
+		current      = 0,
+		had_error    = false,
+		panic_mode   = false,
+		prev_was_eof = false,
+	}
 
-parse_with_parser :: proc(p: ^Parser) -> (expr: Expr, success: bool) {
-	if parser_is_at_end(p) {
+	if parser_is_at_end(&p) {
 		return nil, true
 	}
-	return parse_expression_top(p), !p.had_error
+	return parse_expression_top(&p), !p.had_error
 }
 
 parse_method :: proc(p: ^Parser, can_assign: bool) -> ^FunctionExpr {
@@ -583,81 +550,22 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		)
 		return nil
 	}
-
+	mod_name: string
+	type: ModuleType
 	if slice.contains(STD_MODULES[:], relative_path) {
-		expr.name = strings.clone(relative_path)
-		expr.fullpath = abs_path
-		expr.type = .BUILTIN
-		expr.ast = nil
-		return expr
-	}
-
-	// does the file even exist?
-	if !os.exists(abs_path) {
+		mod_name = relative_path
+		type = .BUILTIN
+	} else if os.exists(abs_path) {
+		mod_name = filepath.short_stem(relative_path)
+		type = .USER
+	} else {
 		parser_error(p, parser_previous(p), fmt.tprintf("Module '%s' not found.", relative_path))
 		return nil
 	}
-
-	expr.type = .USER
+	expr.name = strings.clone(mod_name)
 	expr.fullpath = abs_path
-	expr.name = strings.clone(filepath.short_stem(relative_path))
+	expr.type = type
 
-	// check in module cache
-	if cached, ok := p.module_cache[abs_path]; ok {
-		expr.ast = cached
-		return expr
-	}
-
-	// detect cycles
-	if abs_path in p.files_parsed {
-		parser_error(
-			p,
-			parser_previous(p),
-			fmt.tprintf("Cannot cyclically import module '%v'.", relative_path),
-		)
-		return nil
-	}
-
-	// now read the file
-	source, read_err := os.read_entire_file(abs_path, context.allocator)
-	if read_err != nil {
-		parser_error(
-			p,
-			parser_previous(p),
-			fmt.tprintf("Failed to read file: %v", os.error_string(read_err)),
-		)
-		return nil
-	}
-	defer delete(source)
-
-	tokens, lx_ok := lex(string(source))
-	if !lx_ok {
-		parser_error(p, parser_previous(p), "Lexer error occured when parsing module '%v'.")
-		return nil
-	}
-	defer delete(tokens)
-
-	child := Parser {
-		tokens       = tokens,
-		current      = 0,
-		source_dir   = filepath.dir(abs_path),
-		files_parsed = p.files_parsed,
-		module_cache = p.module_cache,
-		panic_mode   = false,
-		prev_was_eof = false,
-		had_error    = false,
-	}
-	p.files_parsed[abs_path] = {}
-	defer delete_key(&p.files_parsed, abs_path)
-
-	mod_ast, ps_ok := parse_with_parser(&child)
-	if !ps_ok {
-		p.had_error = true
-		return nil
-	}
-
-	p.module_cache[abs_path] = mod_ast
-	expr.ast = mod_ast
 	return expr
 }
 
@@ -1288,6 +1196,24 @@ rules: [TokenType]ParseRule = {
 	.EOF           = {nil, nil, .NONE},
 }
 
+Parser :: struct {
+	tokens:       []Token,
+	current:      int,
+	had_error:    bool,
+	panic_mode:   bool,
+	prev_was_eof: bool,
+}
+
+init_parser :: proc(tokens: []Token) -> Parser {
+	return Parser {
+		tokens = tokens,
+		current = 0,
+		had_error = false,
+		panic_mode = false,
+		prev_was_eof = false,
+	}
+}
+
 parser_error :: proc(p: ^Parser, token: Token, message: string) {
 	if p.panic_mode {return}
 	p.panic_mode = true
@@ -1530,9 +1456,6 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.right)
 		free(e)
 	case ^UseExpr:
-		if e.ast != nil {
-			free_expr(e.ast.?)
-		}
 		delete(e.name)
 		delete(e.fullpath)
 		free(e)
@@ -1830,13 +1753,7 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^UseExpr:
 		print_indent(b, indent)
-		fmt.sbprintf(b, "(use %s", e.name)
-		if ast, ok := e.ast.?; ok {
-			strings.write_string(b, "\n")
-			print_expr(b, ast, indent + 1)
-			print_indent(b, indent)
-		}
-		fmt.sbprintf(b, ")\n")
+		fmt.sbprintf(b, "(use %s)\n", e.name)
 	case ^VarDeclExpr:
 		print_indent(b, indent)
 		kind := e.is_final ? "val" : "var"
