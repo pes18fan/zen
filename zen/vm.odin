@@ -915,8 +915,8 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
 				if !ok {
-					vm_panic(vm, "Unknown builtin module %s.", module_str)
-					return .INTERPRET_RUNTIME_ERROR
+					// panic the whole program because this is never supposed to happen
+					fmt.panicf("unknown builtin module '%v", module_str)
 				}
 
 				module_str_lower := strings.to_lower(module_str)
@@ -930,8 +930,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
 				if !ok {
-					vm_panic(vm, "Unknown builtin module %s.", module_str)
-					return .INTERPRET_RUNTIME_ERROR
+					fmt.panicf("unknown builtin module '%v", module_str)
 				}
 
 				module_str_lower := strings.to_lower(module_str)
@@ -1184,7 +1183,7 @@ interpret :: proc(
 	// to the final (correct) result
 
 	collect_globals(&vm.compiler_globals, gc, expr)
-	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
+	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals, reso)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
