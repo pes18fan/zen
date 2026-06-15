@@ -33,9 +33,7 @@ A dynamically typed language interpreter in **Odin** with an in-progress Hindley
 
 **Critical**: Always run tests through `x.py`, never `run_tests.py` directly.
 
-## Debug methods
-
-### Debug flags
+## Debug flags
 
 Flags provided by the debug binary `dzen`, useful when hunting down errors.
 
@@ -49,12 +47,6 @@ Flags provided by the debug binary `dzen`, useful when hunting down errors.
 | `-L, --log-gc` | Log garbage collection |
 | `-S, --stress-gc` | Run the GC on every allocation |
 | `--log-type` | Log the type checker |
-
-### Debug print procedures
-
-The `dbg_print*` family of procedures which includes `dbg_print`, `dbg_println`,
-`dbg_printf` and `dbg_printfln` can be used for debug printing purposes. They
-are automatically disabled on release builds.
 
 ## Project structure
 
