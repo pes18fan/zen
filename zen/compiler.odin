@@ -17,11 +17,12 @@ U8_COUNT :: 256
 U16_COUNT :: 65536
 
 /* Struct holding state of codegen. */
-Codegen :: struct {
+Codegen :: struct #all_or_none {
 	current_compiler: ^Compiler,
 	current_class:    ^ClassCompiler,
 	current_token:    Token,
 	globals:          ^Table, // Hash table storing global variables.
+	resolutions:      ResolutionMap,
 	gc:               ^GC,
 	prev_mark_roots:  RootSource,
 	had_error:        bool,
@@ -641,7 +642,7 @@ binding_exists_and_is_final :: proc(cg: ^Codegen, name: Token) -> bool {
 
 @(private = "file")
 @(require_results)
-emit_named_variable :: proc(cg: ^Codegen, name: Token, can_assign: bool) -> ErrorMessage {
+emit_named_variable :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 	local, _ := resolve_local(cg, cg.current_compiler, name) or_return
 	upvalue, _ := resolve_upvalue(cg, cg.current_compiler, name) or_return
 
@@ -863,19 +864,19 @@ compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
 	cg.current_class = &class_compiler
 
 	if superclass_name, ok := superclass.?; ok {
-		try(cg, emit_named_variable(cg, superclass_name, can_assign = false)) or_return
+		try(cg, emit_named_variable(cg, superclass_name)) or_return
 
 		begin_scope(cg)
 		try(cg, add_local(cg, synthetic_token("super"), is_final = true)) or_return
 		define_variable(cg, 0)
 
-		try(cg, emit_named_variable(cg, class_name, can_assign = false)) or_return
+		try(cg, emit_named_variable(cg, class_name)) or_return
 
 		emit_opcode(cg, .OP_INHERIT)
 		class_compiler.has_superclass = true
 	}
 
-	try(cg, emit_named_variable(cg, class_name, can_assign = false)) or_return
+	try(cg, emit_named_variable(cg, class_name)) or_return
 
 	for method in methods {
 		cg.current_token = method.token
@@ -1583,7 +1584,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		name := try2(cg, identifier_constant(cg, method)) or_return
 
 		/* Place both the current receiver and the superclass on the stack. */
-		try(cg, emit_named_variable(cg, synthetic_token("this"), can_assign = false)) or_return
+		try(cg, emit_named_variable(cg, synthetic_token("this"))) or_return
 
 		/* Check if the method is immediately invoked or not; since we can apply
      	an optimization involving no use of bound methods if it is. */
@@ -1594,17 +1595,11 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 				compile_expression(cg, arg) or_return
 			}
 
-			try(
-				cg,
-				emit_named_variable(cg, synthetic_token("super"), can_assign = false),
-			) or_return
+			try(cg, emit_named_variable(cg, synthetic_token("super"))) or_return
 			emit_op_with_constant(cg, .OP_SUPER_INVOKE, .OP_SUPER_INVOKE_LONG, name)
 			emit_byte(cg, arg_count)
 		} else {
-			try(
-				cg,
-				emit_named_variable(cg, synthetic_token("super"), can_assign = false),
-			) or_return
+			try(cg, emit_named_variable(cg, synthetic_token("super"))) or_return
 			emit_op_with_constant(cg, .OP_GET_SUPER, .OP_GET_SUPER_LONG, name)
 		}
 	case ^SwitchExpr:
@@ -1616,7 +1611,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		/* `this` is treated as a lexically scoped local variable whose value is
         somehow magically initialized. Also, can_assign is set to false because
         you obviously can't assign to `this`. */
-		try(cg, emit_named_variable(cg, e.token, can_assign = false)) or_return
+		try(cg, emit_named_variable(cg, e.token)) or_return
 	case ^UnaryExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.right) or_return
@@ -1641,7 +1636,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_module_declaration(cg, e) or_return
 	case ^VariableExpr:
 		cg.current_token = e.token
-		try(cg, emit_named_variable(cg, e.token, can_assign = false)) or_return
+		try(cg, emit_named_variable(cg, e.token)) or_return
 	case ^VarDeclExpr:
 		cg.current_token = e.token
 		compile_var_declaration(cg, e) or_return
@@ -1732,7 +1727,15 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 }
 
 /* Compile the provided abstract syntax tree (expression) into a bytecode chunk. */
-codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
+codegen :: proc(
+	gc: ^GC,
+	expr: Expr,
+	globals: ^Table,
+	resolutions: ResolutionMap,
+) -> (
+	fn: ^ObjFunction,
+	success: bool,
+) {
 	// empty program
 	if expr == nil {
 		return nil, true
@@ -1745,10 +1748,14 @@ codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, succ
 	}
 
 	cg := Codegen {
-		globals         = globals,
-		gc              = gc,
-		prev_mark_roots = gc.mark_roots_arg,
-		had_error       = false,
+		current_compiler = nil,
+		current_class    = nil,
+		current_token    = {},
+		globals          = globals,
+		resolutions      = resolutions,
+		gc               = gc,
+		prev_mark_roots  = gc.mark_roots_arg,
+		had_error        = false,
 	}
 	gc.mark_roots_arg = &cg
 
