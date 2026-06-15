@@ -8,10 +8,10 @@ if exists("b:current_syntax")
 endif
 
 " Keywords
-syn keyword zenKeyword use var val print func return pub exit discard
+syn keyword zenKeyword use var val print func return pub exit discard in
 syn keyword zenConditional if else switch
 syn keyword zenRepeat while for break continue
-syn keyword zenRepeat for in
+syn keyword zenRepeat for
 syn keyword zenLogicalOperator and or not
 syn keyword zenKeyword class
 
@@ -22,42 +22,47 @@ syn keyword zenConstant it nil this super
 " Built-in Functions
 syn keyword zenBuiltin puts gets assert panic len typeof str parse copy dirname filename
 
-" Strings (Matches "..." and handles escaped quotes \")
-syn region zenString start=/"/ skip=/\\./ end=/"/
-syn region zenString start=/'/ skip=/\\./ end=/'/
+" Strings, defined with priority and contains to be robust
+syn region zenString start=/"/ skip=/\\./ end=/"/ contains=zenEscape
+syn region zenString start=/'/ skip=/\\./ end=/'/ contains=zenEscape
+syn match  zenEscape /\\./ contained
+
+" Operators
+syn match zenOperator "+"
+syn match zenOperator "-"
+syn match zenOperator "\*"
+syn match zenOperator "/"
+syn match zenOperator "%"
+syn match zenOperator "=="
+syn match zenOperator "!="
+syn match zenOperator "<="
+syn match zenOperator ">="
+syn match zenOperator "<"
+syn match zenOperator ">"
+syn match zenOperator "="
+syn match zenOperator "|>"
+syn match zenOperator "=>"
 
 " Numbers (Matches integers and floats)
-syn match zenNumber "\v<\d+(\.\d+)?>\ze"
+syn match zenNumber "\v<\d+(\.\d+)?([eE][+-]?\d+)>"
 
-" Operators (Matches math, comparison, pipes, and arrows)
-syn match zenOperator "\v\+"
-syn match zenOperator "\v-"
-syn match zenOperator "\v\*"
-syn match zenOperator "\v/"
-syn match zenOperator "\v\%"
-syn match zenOperator "\v\=\="
-syn match zenOperator "\v\!\="
-syn match zenOperator "\v\<="
-syn match zenOperator "\v\>="
-syn match zenOperator "\v\<"
-syn match zenOperator "\v\>"
-syn match zenOperator "\v\="
-syn match zenOperator "\v\|\>"
-syn match zenOperator "\v\=\>"
-
-" Comments (Matches // to the end of the line)
-syn match zenComment "\/\/.*$" contains=@Spell
+" Comments and todo markers
+syn keyword zenTodo TODO FIXME NOTE HACK contained
+syn match zenComment "\/\/.*$" contains=zenTodo,@Spell
 
 " Map our custom groups to Vim's standard highlight groups
+hi def link zenStorageClass    StorageClass
 hi def link zenKeyword         Keyword
 hi def link zenConditional     Conditional
 hi def link zenRepeat          Repeat
 hi def link zenBoolean         Boolean
 hi def link zenConstant        Constant
 hi def link zenBuiltin         Function
+hi def link zenFuncDecl        Function
 hi def link zenString          String
 hi def link zenNumber          Number
 hi def link zenComment         Comment
+hi def link zenTodo            Todo
 hi def link zenOperator        Operator
 hi def link zenLogicalOperator Operator
 
