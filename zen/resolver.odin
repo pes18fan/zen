@@ -30,7 +30,7 @@ awful hacky designs. Some points:
      NOT allowed as type parameters i.e. we can only have rank-1 polymorphism.
 */
 
-Resolver :: struct {
+Resolver :: struct #all_or_none {
 	resolutions:    ResolutionMap,
 	globals:        ^map[string]^UntypedVariable,
 	function_scope: ^UntypedContext,
@@ -493,7 +493,7 @@ push_function_scope_untyped :: proc(rs: ^Resolver) {
 	fs := new(UntypedContext)
 	fs.enclosing = rs.function_scope
 	fs.scope_depth = 0
-	fs.local_count = 0
+	fs.local_count = 1 // starts at 1 cuz the first local is the function itself
 	fs.variables = make(map[string]^UntypedVariable)
 	rs.function_scope = fs
 }
@@ -572,10 +572,10 @@ collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	return true
 }
 
-// WIP
 // Takes in the AST, resolves all variables.
 // Also returns whether the operation succeeded, while printing out the error
 // messages as 'resolution errors' in the process.
+@(require_results)
 resolve :: proc(
 	expr: Expr,
 	existing_globals: ^map[string]^UntypedVariable = nil,
@@ -591,6 +591,7 @@ resolve :: proc(
 		globals = &new_globals
 	}
 	rs := Resolver {
+		resolutions    = nil,
 		globals        = globals,
 		function_scope = nil,
 		current_token  = {},
@@ -656,6 +657,7 @@ delete_resolved_globals :: proc(globals: map[string]^UntypedVariable) {
 	delete(globals)
 }
 
+@(require_results)
 resolve_full :: proc(vm: ^VM, expr: Expr) -> (ResolutionMap, bool) {
 	if config.repl && !vm.resolver_init {
 		vm.resolver_globals = make(map[string]^UntypedVariable)
