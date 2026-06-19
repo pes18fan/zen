@@ -477,7 +477,6 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 				define_variable(rs, binding.name.lexeme)
 			}
 		}
-
 	case ^WhileExpr:
 		rs.current_token = e.token
 		push_block_scope_untyped(rs)
@@ -514,7 +513,6 @@ pop_function_scope_untyped :: proc(rs: ^Resolver) {
 	delete(fs.variables)
 	free(fs)
 	rs.function_scope = enc
-
 }
 
 push_block_scope_untyped :: proc(rs: ^Resolver) {
