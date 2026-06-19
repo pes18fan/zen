@@ -552,18 +552,17 @@ tok_number :: proc(l: ^Lexer) -> Maybe(Token) {
 
 	// Consume the exponential part, if it exists.
 	// `xey` means `x` times 10 to the power of `y`
-	if peek(l) == 'e' && is_digit(peek_next(l)) {
+	if peek(l) == 'e' {
 		advance(l)
 
-		for is_digit(peek(l)) {
-			advance(l)
-		}
-
-		// You cannot have a fractional part here.
-		if peek(l) == '.' {
+		if !is_digit(peek(l)) {
 			syntax_error(l, "Invalid number.")
 			return nil
 		}
+	}
+
+	for is_digit(peek(l)) {
+		advance(l)
 	}
 
 	return make_token(l, .NUMBER)
