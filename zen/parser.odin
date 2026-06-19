@@ -379,7 +379,7 @@ parse_expression_top :: proc(p: ^Parser) -> Expr {
 	if p.panic_mode {
 		parser_synchronize(p)
 	} else {
-		parser_consume_any(p, "Expect newline or semicolon after expression.", .NEWLINE, .SEMI)
+		parser_consume_any(p, "Expect newline or ';' after expression.", .NEWLINE, .SEMI)
 	}
 
 	seq := new(SequenceExpr)
