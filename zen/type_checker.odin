@@ -555,7 +555,12 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 			result = val
 		}
 	case TypeFunctionApplication:
-		return clone_type(t)
+		new_args := make([]Type, len(t.args))
+		defer delete(new_args)
+		for _, i in t.args {
+			new_args[i] = apply_substitution(subst, t.args[i])
+		}
+		return tapp(t.constructor, new_args)
 	case TypeAny:
 		return t
 	case TypeNever:
