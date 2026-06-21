@@ -62,8 +62,6 @@ make_typed_binding :: proc(
 	scheme: TypeScheme,
 	is_module: bool = false,
 ) -> TypedBinding {
-	// NOTE: currently most fields here that come from `UntypedVariable` are
-	// unused here
 	return TypedBinding {
 		name = name,
 		scope_depth = ctx.scope_depth,
@@ -526,8 +524,8 @@ apply_substitution :: proc {
 	apply_substitution_context,
 }
 
-// deep-copy a Type into the current allocator so it has no dangling
-// references to arena memory
+// only the TypeFunctionApplication needs to be cloned as the other types don't
+// carry anything allocated on the heap
 clone_type :: proc(t: Type) -> Type {
 	#partial switch v in t {
 	case TypeFunctionApplication:
@@ -557,12 +555,7 @@ apply_substitution_type :: proc(subst: Substitution, type: Type) -> Type {
 			result = val
 		}
 	case TypeFunctionApplication:
-		new_args := make([]Type, len(t.args))
-		defer delete(new_args)
-		for i in 0 ..< len(t.args) {
-			new_args[i] = apply_substitution(subst, t.args[i])
-		}
-		return tapp(t.constructor, new_args)
+		return clone_type(t)
 	case TypeAny:
 		return t
 	case TypeNever:
