@@ -1,6 +1,123 @@
 package zen
 import tt "core:testing"
 
+// does the `tapp` shorthand actually produce valid types?
+@(test)
+test_tapp :: proc(t: ^tt.T) {
+	context.allocator = context.temp_allocator
+	free_all(context.temp_allocator)
+
+	// Nil
+	tt.expect(t, types_equal(tapp(.NIL), TypeFunctionApplication{constructor = .NIL}))
+
+	// Number
+	tt.expect(t, types_equal(tapp(.NUMBER), TypeFunctionApplication{constructor = .NUMBER}))
+
+	// String
+	tt.expect(t, types_equal(tapp(.STRING), TypeFunctionApplication{constructor = .STRING}))
+
+	// Bool
+	tt.expect(t, types_equal(tapp(.BOOL), TypeFunctionApplication{constructor = .BOOL}))
+
+	// List[Number]
+	tt.expect(
+		t,
+		types_equal(
+			tapp(.LIST, {tapp(.NUMBER)}),
+			TypeFunctionApplication {
+				constructor = .LIST,
+				args = {TypeFunctionApplication{constructor = .NUMBER}},
+			},
+		),
+	)
+
+	// List[List[Number]]
+	tt.expect(
+		t,
+		types_equal(
+			tapp(.LIST, {tapp(.LIST, {tapp(.NUMBER)})}),
+			TypeFunctionApplication {
+				constructor = .LIST,
+				args = {
+					TypeFunctionApplication {
+						constructor = .LIST,
+						args = {TypeFunctionApplication{constructor = .NUMBER}},
+					},
+				},
+			},
+		),
+	)
+
+	// () -> Nil
+	tt.expect(
+		t,
+		types_equal(
+			tapp(.FUNCTION, {tapp(.NIL)}),
+			TypeFunctionApplication {
+				constructor = .FUNCTION,
+				args = {TypeFunctionApplication{constructor = .NIL}},
+			},
+		),
+	)
+
+	// (Number, Number) -> Number
+	tt.expect(
+		t,
+		types_equal(
+			tapp(.FUNCTION, {tapp(.NUMBER), tapp(.NUMBER), tapp(.NUMBER)}),
+			TypeFunctionApplication {
+				constructor = .FUNCTION,
+				args = {
+					TypeFunctionApplication{constructor = .NUMBER},
+					TypeFunctionApplication{constructor = .NUMBER},
+					TypeFunctionApplication{constructor = .NUMBER},
+				},
+			},
+		),
+	)
+
+	// (Number, String) -> String
+	tt.expect(
+		t,
+		types_equal(
+			tapp(.FUNCTION, {tapp(.NUMBER), tapp(.STRING), tapp(.NUMBER)}),
+			TypeFunctionApplication {
+				constructor = .FUNCTION,
+				args = {
+					TypeFunctionApplication{constructor = .NUMBER},
+					TypeFunctionApplication{constructor = .STRING},
+					TypeFunctionApplication{constructor = .NUMBER},
+				},
+			},
+		),
+	)
+
+	// (List[Number], Number) -> List[Number]
+	tt.expect(
+		t,
+		types_equal(
+			tapp(
+				.FUNCTION,
+				{tapp(.LIST, {tapp(.NUMBER)}), tapp(.NUMBER), tapp(.LIST, {tapp(.NUMBER)})},
+			),
+			TypeFunctionApplication {
+				constructor = .FUNCTION,
+				args = {
+					TypeFunctionApplication {
+						constructor = .LIST,
+						args = {TypeFunctionApplication{constructor = .NUMBER}},
+					},
+					TypeFunctionApplication{constructor = .NUMBER},
+					TypeFunctionApplication {
+						constructor = .LIST,
+						args = {TypeFunctionApplication{constructor = .NUMBER}},
+					},
+				},
+			},
+		),
+	)
+}
+
 // do variables successfully unify to primitives?
 @(test)
 test_unify_var_with_primitives :: proc(t: ^tt.T) {
