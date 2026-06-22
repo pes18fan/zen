@@ -17,8 +17,17 @@ Check out more code in `/examples`!
 - elixir-inspired pipe operator `|>`
 - minimal standard library
 
-All the documentation about the language is in the markdown file `DOCUMENTATION.md`
+# documentation
+
+All documentation about the language is in the Markdown file `DOCUMENTATION.md`
 in the root of this repository.
+
+A man page written in Markdown is available in `etc/zen.1.md`. To convert it to
+a format usable by `man`, use `pandoc` to convert as such:
+
+```bash
+pandoc -s -t man ./etc/zen.1.md -o zen.1
+```
 
 # development
 
