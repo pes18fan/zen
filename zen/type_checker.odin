@@ -767,8 +767,6 @@ try_unify :: proc(
 @(require_results)
 unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationError)) {
 	if is_type_any(a) {
-		// any unifies with anything and returns a substitution that turns the
-		// other type into any. What TypeScript does. Unsound, but it works.
 		when ODIN_DEBUG {
 			if config.log_type {
 				fmt.eprintfln(
@@ -779,6 +777,8 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 			}
 		}
 
+		// Any unifies with anything and returns a substitution that turns the
+		// other type into Any. What TypeScript does. Unsound, but it works.
 		if is_type_variable(b) {
 			s := make(Substitution)
 			s[as_type_variable(b)] = a
@@ -795,8 +795,6 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 	}
 
 	if is_type_never(a) {
-		// never also unifies with anything, but it does NOT turn the other
-		// type into never itself.
 		when ODIN_DEBUG {
 			if config.log_type {
 				fmt.eprintfln(
@@ -807,6 +805,18 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 			}
 		}
 
+		// Never also unifies with anything, but it does NOT turn the other
+		// type into never itself.
+		// TODO: one problem with this approach is that it is actually a bit
+		// of a hack. Because `Never` does not ever get into the context because
+		// it doesn't turn anything into itself, we lose the information of a
+		// type being `Never`. This is actually fine for correctness because
+		// the thing will diverge anyways; but this loss of type info means
+		// that potential compile-time optimizations based on branches and
+		// function return values being `Never` cannot be done unless someone
+		// explicitly annotates something as `Never`, which few will probably do.
+		// The fix to this conundrum is proper subtyping, but that is a nontrivial
+		// extension to base Hindley-Milner. A project for later on.
 		return nil, nil
 	}
 
@@ -1666,9 +1676,13 @@ type_string_inner :: proc(ctx: ^TypePrintCtx, type: Type) -> string {
 			defer strings.builder_destroy(&sb)
 			fmt.sbprint(&sb, type_constructor_string(t.constructor))
 
-			for arg in t.args {
-				fmt.sbprint(&sb, " ")
-				fmt.sbprint(&sb, type_string_inner(ctx, arg))
+			if len(t.args) > 0 {
+				strings.write_rune(&sb, '[')
+				for arg, idx in t.args {
+					fmt.sbprint(&sb, type_string_inner(ctx, arg))
+					if idx < len(t.args) - 1 {fmt.sbprint(&sb, ", ")}
+				}
+				strings.write_rune(&sb, ']')
 			}
 
 			return strings.to_string(sb)

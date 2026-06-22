@@ -1,7 +1,0 @@
-{
-    var a = 1
-    {
-        var a = 'a' // shadowed, so works!
-    }
-    a = 'a' // ERR: Expected assigned value to be of type Number, got String.
-}

@@ -1,0 +1,4 @@
+use "list"
+
+var l: List[Number] = [1]
+list.push(l, "a")   // ERR: Expected argument to be of type Number, got String.

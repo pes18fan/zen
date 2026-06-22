@@ -7,9 +7,10 @@ puts(len(empty)) // expect: 3
 var matrix = [[1], [2, 3]]
 puts(len(matrix)) // expect: 2
 
-var nested = []
+// now with annotations
+var nested: List[List[Number]] = []
 nested = [[1, 2], [3, 4]]
 puts(len(nested)) // expect: 2
 
-var labels = ["one", "two", "three"]
+var labels: List[String] = ["one", "two", "three"]
 puts(len(labels)) // expect: 3

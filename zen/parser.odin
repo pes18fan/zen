@@ -611,7 +611,9 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 		case "String":
 			type = tapp(.STRING)
 		case "List":
+			parser_consume(p, .LSQUARE, "Expect '[' after 'List'.")
 			inner_type := parse_type_annotation(p)
+			parser_consume(p, .RSQUARE, "Expect ']' after list type argument.")
 			type = tapp(.LIST, {inner_type})
 		case "Any":
 			type = type_any
