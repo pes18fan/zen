@@ -12,8 +12,7 @@ var l = [
 "}",
 "for var i = 0; i < len(l); i = i + 1 {",
 "puts(l[i])",
-"}",
-"]"
+"}"
 ]
 for var i = 0; i < 3; i = i + 1 {
 puts(l[i])
