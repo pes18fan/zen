@@ -1,0 +1,7 @@
+{
+    var a = 1
+    {
+        var a = 'a'
+    }
+    a = 'b' // ERR: Expected assigned value to be of type Number, got String.
+}
