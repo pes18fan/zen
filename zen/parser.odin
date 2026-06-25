@@ -148,8 +148,8 @@ UseExpr :: struct {
 }
 
 FunctionParam :: struct {
-	token: Token,
-	type:  Maybe(Type),
+	name: Token,
+	type: Maybe(Type),
 }
 
 FunctionExpr :: struct {
@@ -945,7 +945,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 	if !parser_check(p, .RPAREN) {
 		for {
 			param: FunctionParam
-			param.token = parser_consume(p, .IDENT, "Expect parameter name.")
+			param.name = parser_consume(p, .IDENT, "Expect parameter name.")
 			if parser_match(p, .COLON) {
 				param.type = parse_type_annotation(p)
 			}
@@ -1627,7 +1627,7 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		fmt.sbprintf(b, "(func (")
 		for param, i in e.params {
 			if i > 0 {strings.write_string(b, " ")}
-			strings.write_string(b, param.token.lexeme)
+			strings.write_string(b, param.name.lexeme)
 			if type, ok := param.type.(Type); ok {
 				fmt.sbprintf(b, ": %v", type_string(type, false))
 			}

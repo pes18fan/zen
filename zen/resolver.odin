@@ -341,8 +341,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			define_variable(rs, "this")
 		}
 		for param in e.params {
-			try(rs, declare_variable(rs, param.token.lexeme, false)) or_return
-			define_variable(rs, param.token.lexeme)
+			try(rs, declare_variable(rs, param.name.lexeme, false)) or_return
+			define_variable(rs, param.name.lexeme)
 		}
 		resolve_with_resolver(rs, e.body) or_return
 	case ^ForExpr:

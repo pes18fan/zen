@@ -1446,7 +1446,7 @@ check_type :: proc(
 		for param, idx in params {
 			bind_type(
 				tc.ctx,
-				strings.clone(param.token.lexeme),
+				strings.clone(param.name.lexeme),
 				apply_substitution(s1, param_types[idx]),
 			)
 		}
