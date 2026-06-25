@@ -126,17 +126,6 @@
                             "name": "storage.type.zen"
                         },
                         "2": {
-                            "name": "entity.name.class.zen"
-                        }
-                    },
-                    "match": "\\b(class)\\s*([A-Za-z_][A-Za-z0-9_?!]*)"
-                },
-                {
-                    "captures": {
-                        "1": {
-                            "name": "storage.type.zen"
-                        },
-                        "2": {
                             "name": "support.variable.zen"
                         }
                     },

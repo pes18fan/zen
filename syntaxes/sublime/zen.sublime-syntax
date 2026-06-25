@@ -48,10 +48,6 @@ contexts:
       captures:
         1: support.function.zen
         2: punctuation.zen
-    - match: \b(class)\s*({{identifier}})
-      captures:
-        1: storage.type.zen
-        2: entity.name.class.zen
     - match: \b(var|val)\s*({{identifier}})
       captures:
         1: storage.type.zen

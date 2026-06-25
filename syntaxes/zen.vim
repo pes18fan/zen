@@ -13,7 +13,6 @@ syn keyword zenConditional if else switch
 syn keyword zenRepeat while for break continue
 syn keyword zenRepeat for
 syn keyword zenLogicalOperator and or not
-syn keyword zenKeyword class
 
 " Built-in Constants and Values
 syn keyword zenBoolean true false
@@ -52,7 +51,6 @@ syn keyword zenTodo TODO FIXME NOTE HACK contained
 syn match zenComment "\/\/.*$" contains=zenTodo,@Spell
 
 " Map our custom groups to Vim's standard highlight groups
-hi def link zenStorageClass    StorageClass
 hi def link zenKeyword         Keyword
 hi def link zenConditional     Conditional
 hi def link zenRepeat          Repeat

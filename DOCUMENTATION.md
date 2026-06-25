@@ -79,8 +79,7 @@ Uninitialized variables default to `nil`.
 > reflected in `b`. However, this is only true for non-immutable types.
 >
 > Aliasing can cause unexpected results, specifically in the case
-> of lists and class instances, which are both mutable. For more information, 
-> see the section on lists.
+> of lists which are mutable. For more information, see the section on lists.
 
 ## Exiting early
 
@@ -375,79 +374,6 @@ Lists work well with pipelines as well!
 > puts(a)   //=> [1, 2, 3]
 > ```
 
-## Classes
-
-Classes can be used to create your own datatypes.
-
-Declare a class as follows:
-
-```zen
-class Pair {}
-```
-
-You can create instances out of such a class by calling it:
-
-```zen
-var pair = Pair()
-```
-
-Fields can be freely added to an instance.
-
-```zen
-pair.first = 1
-pair.second = 2
-puts(pair.first + pair.second) //=> 3
-```
-
-Methods can be added inside the body of a class. A constructor can also be
-created for the class, which must have the name `init`. When you call a class,
-the arguments you pass to it are sent to the constructor. To access the instance
-within methods, use `this`.
-
-```zen
-class CoffeeMaker {
-    init(coffee) {
-        this.coffee = coffee
-    }
-
-    brew() {
-        print "Enjoy your cup of " .. this.coffee
-
-        // No reusing the grounds!
-        this.coffee = nil
-    }
-}
-
-var maker = CoffeeMaker("coffee and chicory")
-maker.brew()
-```
-
-Classes also support inheritance, where you can use `<` while defining a class
-to make it inherit from another. A subclass will inherit its parent class's
-methods. The `super` keyword followed by a dot and method name can be used
-to access the method as defined in the inheriting class's parent class.
-
-```zen
-class Animal {
-    init(name) {
-        this.name = name
-    }
-}
-
-class Dog < Animal {
-    init(name) {
-        super.init(name)
-    }
-
-    bark() {
-        puts(this.name .. " says woof!")
-    }
-}
-
-val rover = Dog("Rover")
-rover.bark() // Rover says woof!
-```
-
 ## Modules
 
 Modules can be imported using the `use` keyword followed by a string path. Modules
@@ -471,7 +397,7 @@ Further information on what builtin modules are present is provided below.
 ### User-defined modules
 
 User-defined modules basically mean a file of code that can be imported with
-`use`. It will run the file and package all of its functions and classes prefixed
+`use`. It will run the file and package all of its functions prefixed
 with the `pub` keyword within the imported file's name (e.g. the module will
 be called `foo` if the imported file is `foo.zn`.)
 
@@ -493,24 +419,6 @@ Running `a.zn` will print out "bar".
 
 Functions without the `pub` keyword will NOT be imported when a file is `use`d.
 
-Classes can similarly be shared between files:
-
-```zen
-// a.zn
-use "b.zn"
-
-b.Foo().bar()
-```
-
-```zen
-// b.zn
-pub class Foo {
-    bar() {
-        puts("baz")
-    }
-}
-```
-
 ## Discard
 
 The `discard` keyword turns the expression following it into `nil`.
@@ -518,7 +426,6 @@ The `discard` keyword turns the expression following it into `nil`.
 ```zen
 discard 1               //=> nil
 discard "hi"            //=> nil
-discard SomeClass()     //=> nil
 discard func(x) => x    //=> nil
 ```
 
@@ -626,6 +533,13 @@ for you to use.
 > All these functions mutate the list in-place and return the mutated list.
 
 - `sum(l)`: Reduce a list of numbers to its sum.
+
+## Features that used to exist
+
+### Classes
+
+zen had a basic OOP system inherited from clox, with classes and inheritance.
+This however was removed as the language became more functional-styled.
 
 ## The chaotic stuff
 
