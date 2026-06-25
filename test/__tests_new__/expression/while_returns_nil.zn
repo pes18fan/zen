@@ -1,0 +1,3 @@
+var i = 0
+var result = while i < 3 { i = i + 1 }
+print result // expect: nil

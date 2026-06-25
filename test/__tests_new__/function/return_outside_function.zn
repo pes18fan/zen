@@ -1,0 +1,1 @@
+return  // ERR: Cannot return from the top level.

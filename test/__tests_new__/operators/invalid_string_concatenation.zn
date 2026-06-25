@@ -1,0 +1,1 @@
+puts("hello" .. 1) // ERR: Expected right operand to '..' to be of type String, got Number.

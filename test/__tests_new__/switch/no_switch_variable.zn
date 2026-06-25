@@ -1,0 +1,9 @@
+var x = 2
+
+switch {
+    x == 1 => puts("one!")
+    x == 2 => puts("two!")
+    else => puts("neither!")
+}
+
+// expect: two!

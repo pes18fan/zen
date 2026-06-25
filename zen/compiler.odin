@@ -2,7 +2,6 @@ package zen
 
 import "core:fmt"
 import "core:os"
-import "core:strings"
 
 /* Maximum limit for a eight bit unsigned integer. */
 U8_MAX :: 255
@@ -19,10 +18,8 @@ U16_COUNT :: 65536
 /* Struct holding state of codegen. */
 Codegen :: struct #all_or_none {
 	current_compiler: ^Compiler,
-	current_class:    ^ClassCompiler,
 	current_token:    Token,
 	globals:          ^Table, // Hash table storing global variables.
-	resolutions:      ResolutionMap,
 	gc:               ^GC,
 	prev_mark_roots:  RootSource,
 	had_error:        bool,
@@ -44,14 +41,6 @@ Compiler :: struct {
 	loops:       [U8_COUNT]Loop, // Array of loops.
 	loop_count:  int, // Number of loops.
 	scope_depth: int, // The number of blocks currently in scope.
-}
-
-/*
-A struct representing the current innermost class being compiled.
-*/
-ClassCompiler :: struct {
-	enclosing:      ^ClassCompiler,
-	has_superclass: bool,
 }
 
 /* 
@@ -397,8 +386,9 @@ identifiers_equal :: proc(a: Token, b: Token) -> bool {
 	return len(a.lexeme) == len(a.lexeme) && a.lexeme == b.lexeme
 }
 
-/* Create a synthetic token i.e. a token that doesn't actually exist in the
- * source code. Used for `super` and `this`, to create a variable out of them. */
+// Create a synthetic token i.e. a token that doesn't actually exist in the
+// source code. Used for some synthetic variables, like the invisible `__iter`
+// and `__idx` variables in a for-in loop.
 synthetic_token :: #force_inline proc(text: string) -> Token {
 	return Token{lexeme = text}
 }
@@ -788,98 +778,6 @@ compile_function :: proc(
 		emit_byte(cg, u8(compiler.upvalues[i].index))
 	}
 
-	return true
-}
-
-@(require_results)
-compile_method :: proc(cg: ^Codegen, m: ^FunctionExpr) -> bool {
-	assert(m.bound_to != nil, "method lambda must be bound to a name")
-	name := m.bound_to.?
-	params := m.params
-	body := m.body
-	constant := try2(cg, identifier_constant(cg, name)) or_return
-
-	type: FunctionType = .METHOD
-	/* Check if the method is an initializer. */
-	if len(name.lexeme) == 4 && strings.compare(name.lexeme, "init") == 0 {
-		type = .INITIALIZER
-	}
-
-	param_names := make([dynamic]Token)
-	defer delete(param_names)
-	for param in params {
-		append(&param_names, param.name)
-	}
-
-	compile_function(cg, name, param_names[:], body, type, public = false) or_return
-
-	emit_op_with_constant(cg, .OP_METHOD, .OP_METHOD_LONG, constant)
-	return true
-}
-
-@(require_results)
-compile_class_declaration :: proc(cg: ^Codegen, e: ^ClassExpr) -> bool {
-	class_name := e.name
-	methods := e.methods
-	superclass := e.superclass
-	public := e.public
-
-	name_constant := try2(cg, identifier_constant(cg, class_name)) or_return
-	try(cg, declare_variable(cg, class_name, is_final = false, is_loop_variable = true)) or_return
-
-	global_o_str := copy_string(cg.gc, class_name.lexeme)
-	if cg.current_compiler.scope_depth == 0 {
-		if global_exists(cg, global_o_str) {
-			codegen_error(cg, "Cannot redeclare a class.")
-			return false
-		}
-		table_set(cg.globals, global_o_str, bool_val(false))
-	}
-
-	if name_constant <= U8_MAX {
-		emit_opcode(cg, .OP_CLASS)
-		emit_byte(cg, 1 if public else 0)
-		emit_byte(cg, byte(name_constant))
-	} else {
-		emit_opcode(cg, .OP_CLASS_LONG)
-		emit_byte(cg, 1 if public else 0)
-		emit_byte(cg, byte((name_constant >> 8) & 0xff))
-		emit_byte(cg, byte(name_constant & 0xff))
-	}
-	define_variable(cg, name_constant)
-
-	class_compiler: ClassCompiler
-	class_compiler.has_superclass = false
-	class_compiler.enclosing = cg.current_class
-	cg.current_class = &class_compiler
-
-	if superclass_name, ok := superclass.?; ok {
-		try(cg, emit_named_variable(cg, superclass_name)) or_return
-
-		begin_scope(cg)
-		try(cg, add_local(cg, synthetic_token("super"), is_final = true)) or_return
-		define_variable(cg, 0)
-
-		try(cg, emit_named_variable(cg, class_name)) or_return
-
-		emit_opcode(cg, .OP_INHERIT)
-		class_compiler.has_superclass = true
-	}
-
-	try(cg, emit_named_variable(cg, class_name)) or_return
-
-	for method in methods {
-		cg.current_token = method.token
-		compile_method(cg, method) or_return
-	}
-
-	emit_pop(cg)
-	if class_compiler.has_superclass {
-		end_scope(cg)
-	}
-
-	cg.current_class = cg.current_class.enclosing
-	emit_opcode(cg, .OP_NIL)
 	return true
 }
 
@@ -1342,14 +1240,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		case .LESS_EQUAL:
 			emit_opcode(cg, .OP_GREATER, .OP_NOT)
 		case:
-			codegen_error(
-				cg,
-				fmt.tprintf(
-					"Invalid binary operator '%s'. This is a compiler bug.",
-					e.operator.lexeme,
-				),
-			)
-			return false
+			fmt.panicf("Invalid binary operator '%s'", e.operator.lexeme)
 		}
 	case ^BreakExpr:
 		cg.current_token = e.token
@@ -1414,24 +1305,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 
 		property_name := try2(cg, identifier_constant(cg, property)) or_return
 		emit_op_with_constant(cg, .OP_GET_PROPERTY, .OP_GET_PROPERTY_LONG, property_name)
-	case ^SetExpr:
-		cg.current_token = e.token
-		receiver := e.receiver
-		property := e.property
-		value := e.value
-
-		if r, ok := receiver.(^VariableExpr); ok {
-			if binding_exists_and_is_final(cg, r.name) {
-				codegen_error(cg, "Can only set a final variable once.")
-				return false
-			}
-		}
-
-		compile_expression(cg, receiver) or_return
-		compile_expression(cg, value) or_return
-
-		property_name := try2(cg, identifier_constant(cg, property)) or_return
-		emit_op_with_constant(cg, .OP_SET_PROPERTY, .OP_SET_PROPERTY_LONG, property_name)
 	case ^GroupingExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expression) or_return
@@ -1441,9 +1314,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ItExpr:
 		cg.current_token = e.token
 		emit_opcode(cg, .OP_GET_IT)
-	case ^ClassExpr:
-		cg.current_token = e.token
-		compile_class_declaration(cg, e) or_return
 	case ^DiscardExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expression) or_return
@@ -1513,14 +1383,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			compile_expression(cg, e.right) or_return
 			try(cg, patch_jump(cg, end_jump)) or_return
 		case:
-			codegen_error(
-				cg,
-				fmt.tprintf(
-					"Invalid logical operator '%s'. This is a compiler bug.",
-					e.operator.lexeme,
-				),
-			)
-			return false
+			fmt.panicf("Invalid logical operator '%s'", e.operator.lexeme)
 		}
 	case ^PipeExpr:
 		cg.current_token = e.token
@@ -1566,42 +1429,9 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_expression(cg, index) or_return
 		compile_expression(cg, value) or_return
 		emit_opcode(cg, .OP_SUBSCRIPT_SET)
-	case ^SuperExpr:
-		cg.current_token = e.token
-		method := e.method
-		method_args := e.method_args
-
-		name := try2(cg, identifier_constant(cg, method)) or_return
-
-		/* Place both the current receiver and the superclass on the stack. */
-		try(cg, emit_named_variable(cg, synthetic_token("this"))) or_return
-
-		/* Check if the method is immediately invoked or not; since we can apply
-     	an optimization involving no use of bound methods if it is. */
-		if method_args != nil {
-			arg_count := u8(len(method_args))
-
-			for arg in method_args {
-				compile_expression(cg, arg) or_return
-			}
-
-			try(cg, emit_named_variable(cg, synthetic_token("super"))) or_return
-			emit_op_with_constant(cg, .OP_SUPER_INVOKE, .OP_SUPER_INVOKE_LONG, name)
-			emit_byte(cg, arg_count)
-		} else {
-			try(cg, emit_named_variable(cg, synthetic_token("super"))) or_return
-			emit_op_with_constant(cg, .OP_GET_SUPER, .OP_GET_SUPER_LONG, name)
-		}
 	case ^SwitchExpr:
 		cg.current_token = e.token
 		compile_switch_expression(cg, e) or_return
-	case ^ThisExpr:
-		cg.current_token = e.token
-
-		/* `this` is treated as a lexically scoped local variable whose value is
-        somehow magically initialized. Also, can_assign is set to false because
-        you obviously can't assign to `this`. */
-		try(cg, emit_named_variable(cg, e.token)) or_return
 	case ^UnaryExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.right) or_return
@@ -1612,14 +1442,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		case .MINUS:
 			emit_opcode(cg, .OP_NEGATE)
 		case:
-			codegen_error(
-				cg,
-				fmt.tprintf(
-					"Invalid unary operator '%s'. This is a compiler bug.",
-					e.operator.lexeme,
-				),
-			)
-			return false
+			fmt.panicf("Invalid unary operator '%s'", e.operator.lexeme)
 		}
 	case ^UseExpr:
 		cg.current_token = e.token
@@ -1717,15 +1540,7 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 }
 
 /* Compile the provided abstract syntax tree (expression) into a bytecode chunk. */
-codegen :: proc(
-	gc: ^GC,
-	expr: Expr,
-	globals: ^Table,
-	resolutions: ResolutionMap,
-) -> (
-	fn: ^ObjFunction,
-	success: bool,
-) {
+codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
 	// empty program
 	if expr == nil {
 		return nil, true
@@ -1739,10 +1554,8 @@ codegen :: proc(
 
 	cg := Codegen {
 		current_compiler = nil,
-		current_class    = nil,
 		current_token    = {},
 		globals          = globals,
-		resolutions      = resolutions,
 		gc               = gc,
 		prev_mark_roots  = gc.mark_roots_arg,
 		had_error        = false,

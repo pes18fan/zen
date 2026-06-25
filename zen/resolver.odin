@@ -7,9 +7,6 @@ import "core:os"
 TODO: Variable resolution / symbol table creation. Needs very careful
 design so that it can be used seamlessly in the codegen part without any
 awful hacky designs. Some points:
-- Classes and OOP SHOULD work fine and without hacks because records will be
-     in soon and therefore will need to work nicely, but on that same note
-     they're not a huge priority as they'll be replaced by said records
 - The upvalue-based approach used in clox and inherited by zen ever since
      its creation can now safely be replaced because zen now has an AST
      and therefore enough context to know what variables are closed over
@@ -35,7 +32,6 @@ Resolver :: struct #all_or_none {
 	globals:        ^map[string]^UntypedVariable,
 	function_scope: ^UntypedContext,
 	current_token:  Token,
-	class_depth:    int,
 }
 
 UntypedContext :: struct {
@@ -63,8 +59,6 @@ UntypedVariable :: struct #all_or_none {
 
 ResolvingNode :: union #no_nil {
 	^AssignExpr,
-	^SuperExpr,
-	^ThisExpr,
 	^VariableExpr,
 }
 
@@ -301,25 +295,6 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		}
 	case ^ContinueExpr:
 		rs.current_token = e.token
-	case ^ClassExpr:
-		rs.current_token = e.token
-		try(rs, declare_variable(rs, e.name.lexeme, true)) or_return
-		define_variable(rs, e.name.lexeme)
-		rs.class_depth += 1
-		defer rs.class_depth -= 1
-		has_super := false
-		if _, ok := e.superclass.?; ok {
-			has_super = true
-			push_block_scope_untyped(rs)
-			try(rs, declare_variable(rs, "super", true)) or_return
-			define_variable(rs, "super")
-		}
-		for method in e.methods {
-			resolve_with_resolver(rs, method) or_return
-		}
-		if has_super {
-			pop_block_scope_untyped(rs)
-		}
 	case ^DiscardExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.expression) or_return
@@ -336,10 +311,6 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		rs.current_token = e.token
 		push_function_scope_untyped(rs)
 		defer pop_function_scope_untyped(rs)
-		if rs.class_depth > 0 {
-			try(rs, declare_variable(rs, "this", true)) or_return
-			define_variable(rs, "this")
-		}
 		for param in e.params {
 			try(rs, declare_variable(rs, param.name.lexeme, false)) or_return
 			define_variable(rs, param.name.lexeme)
@@ -402,19 +373,6 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.left) or_return
 		resolve_with_resolver(rs, e.right) or_return
-	case ^SetExpr:
-		rs.current_token = e.token
-		resolve_with_resolver(rs, e.receiver) or_return
-		resolve_with_resolver(rs, e.value) or_return
-	case ^SuperExpr:
-		rs.current_token = e.token
-		var := try2(rs, assert_variable_exists_and_resolve_it(rs, "super")) or_return
-		resolved := new_clone(var^)
-		resolved.shadower = nil
-		rs.resolutions[e] = resolved
-		for arg in e.method_args {
-			resolve_with_resolver(rs, arg) or_return
-		}
 	case ^SwitchExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.condition) or_return
@@ -423,12 +381,6 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			resolve_with_resolver(rs, c.body) or_return
 		}
 		resolve_with_resolver(rs, e.else_branch) or_return
-	case ^ThisExpr:
-		rs.current_token = e.token
-		var := try2(rs, assert_variable_exists_and_resolve_it(rs, "this")) or_return
-		resolved := new_clone(var^)
-		resolved.shadower = nil
-		rs.resolutions[e] = resolved
 	case ^UnaryExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.right) or_return
@@ -593,7 +545,6 @@ resolve :: proc(
 		globals        = globals,
 		function_scope = nil,
 		current_token  = {},
-		class_depth    = 0,
 	}
 
 	if setup_native_fns {

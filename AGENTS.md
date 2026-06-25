@@ -1,104 +1,96 @@
 # AGENTS.md — zen
 
-A dynamically typed language interpreter in **Odin** with an in-progress Hindley-Milner typechecker (`typechecker` branch).
+A dynamically typed language interpreter in **Odin** with an in-progress Hindley-Milner typechecker (active `typechecker` branch).
 
 ## Prerequisites
 
-- **Odin** compiler on `PATH` (checked by `x.py` via `odin version`)
-- Python 3 (for `x.py`, test runner, benchmarks)
-- C compiler + `ar` (isocline auto-downloaded & compiled by `x.py`; git clone into `isocline/`)
+- **Odin** on `PATH` (checked by `x.py`)
+- Python 3
+- C compiler + `ar` (isocline auto-downloaded & compiled by `x.py`)
 
-## Build commands (all via `./x.py`)
+## Build commands
 
-| Command | Result |
+| `./x.py ...` | Result |
 |---|---|
-| `./x.py dbg` | Debug build → `bin/dbg/dzen` (flags: `-vet -debug`) |
-| `./x.py rel` | Release build → `bin/rel/zen` (flags: `-vet -o:aggressive`) |
-| `./x.py chaotic` | Release build with `-define:CHAOTIC=true` |
-| `./x.py clean` | Removes `bin/` |
-| `./x.py doc` | Generates `doc/docs.txt` via `odin doc` |
-| `./x.py run --args "file.zn"` | Runs a file with debug build |
+| `dbg` | Debug build → `bin/dbg/dzen` (`-vet -debug`) |
+| `rel` | Release build → `bin/rel/zen` (`-vet -o:aggressive`) |
+| `chaotic` | Release build + `-define:CHAOTIC=true` |
+| `run --args "file.zn"` | Run file with debug build |
+| `doc` | Generate `doc/docs.txt` |
+| `clean` | Remove `bin/` |
 
 ## Test commands
 
-```bash
-./x.py test              # unit tests + e2e tests (default)
-./x.py test --recompile  # rebuild debug binary first
-./x.py test --strict -s  # fail on memory leaks (debug build only)
-./x.py test -u           # unit tests only
-./x.py test -e           # e2e tests only
-./x.py test -t           # typechecking tests only
-./x.py bench             # benchmarks (release build)
-```
-
-**Critical**: Always run tests through `x.py`, never `run_tests.py` directly.
-
-## Debug flags
-
-Flags provided by the debug binary `dzen`, useful when hunting down errors.
-
-| Flag | Result |
+| `./x.py ...` | Action |
 |---|---|
-| `-C, --compile` | Compile only, useful with `-D` |
-| `-D, --dump` | Dump disassembled bytecode |
-| `-T, --trace` | Trace script execution |
-| `--dump-tokens` | Dump tokens from the lexer and exit |
-| `--dump-ast` | Dump the AST produced by the parser and exit |
-| `-L, --log-gc` | Log garbage collection |
-| `-S, --stress-gc` | Run the GC on every allocation |
-| `--log-type` | Log the type checker |
+| `test` | Unit tests + e2e tests |
+| `test --recompile` | Rebuild debug binary first |
+| `test -s` (`--strict`) | Fail on memory leaks (debug build only) |
+| `test -u` | Unit tests only |
+| `test -e` | E2E tests only (directory `test/__tests__/`) |
+| `test -n` (`--new`) | Run `test/__tests_new__/` (typechecker + non-OOP suite) |
+| `bench` | Benchmarks via release build |
+
+Always run tests through `x.py`, never `run_tests.py` directly (hardcodes paths).
+
+## Debug flags (debug build `dzen` only)
+
+| Flag | Effect |
+|---|---|
+| `--dump-tokens` | Dump tokens from lexer, exit |
+| `--dump-ast` | Dump AST from parser, exit |
+| `-D, --dump` | Disassemble bytecode |
+| `-T, --trace` | Trace execution |
+| `-C, --compile` | Compile only (use with `-D`) |
+| `-L, --log-gc` | Log GC |
+| `-S, --stress-gc` | GC on every allocation |
+| `--log-type` | Log type inference |
+
+Short flags bundle: `-tD` → time + disassemble. These all print "Unknown option" in release builds.
 
 ## Project structure
 
-| Path | Purpose |
+| Path | Role |
 |---|---|
-| `zen/main.odin` | Entry point, argument parsing, REPL |
-| `zen/vm.odin` | Virtual machine, bytecode interpreter |
-| `zen/type_checker.odin` | Hindley-Milner type checker |
-| `zen/*.odin` (excluding tests) | Compiler/interpreter core |
-| `zen/*_test.odin` | Unit tests (run via `odin test zen`) |
-| `test/__tests__/` | E2E tests (run via `x.py test`) |
-| `test/typechecking/` | Typechecking tests (run via `x.py test -t`) |
-| `test/benchmark/` | Benchmarks (run via `x.py bench`) |
-| `examples/` | Example programs |
-| `core/builtin.zn` | LSP type stubs |
+| `zen/main.odin` | Entry point, CLI, REPL |
+| `zen/vm.odin` | VM + `interpret()` — orchestrates the full pipeline |
+| `zen/lexer.odin` | Lexer |
+| `zen/parser.odin` | Parser |
+| `zen/semcheck.odin` | Semantic analysis pass |
+| `zen/resolver.odin` | Variable resolution (scopes, upvalues) |
+| `zen/type_checker.odin` | Hindley-Milner type inference |
+| `zen/compiler.odin` | Bytecode codegen |
+| `zen/*_test.odin` | Unit tests (`odin test zen`) |
+| `test/__tests__/` | E2E tests |
+| `test/__tests_new__/` | New suite: replaces `__tests__` + old `typechecking/` dirs |
+| `test/benchmark/` | Benchmarks |
+| `examples/` | Example `.zn` programs |
+| `core/builtin.zn` | LSP type stubs (future use) |
+
+## Compilation pipeline
+
+```
+Lex → Parse → Semcheck → Resolve → Typecheck → Codegen → VM
+```
+
+`typecheck` is conditional: disabled via `TYPE_CHECK :: true` + OOP guard at `vm.odin:999` — if the program uses classes/`super`/`this` or user modules, typechecking is skipped entirely and the program runs dynamically.
 
 ## Key quirks
 
-- **Debug-only flags**: `--dump-tokens`, `--dump-ast`, `-D` (disassemble), `-T` (trace), `-L` (log GC), `-S` (stress GC) are only in debug builds. Release builds print "Unknown option".
-- **CLI**: Short flags bundle (e.g. `-tD` for time + disassemble). Run `zen -h` to see all.
-- **Exit codes**: 65 (lex/parse/compile error), 70 (runtime error), 74 (read error), 0 (ok).
-- **NaN boxing**: `NAN_BOXING :: true` in `value.odin:10` — values are `u64` using quiet-NaN mantissa bits.
-- **Memory leaks**: Debug builds use `mem.Tracking_Allocator`. Pass `--strict` to fail on leaks.
-- **Test runner**: Run through `x.py` instead of `run_tests.py` directly (`run_tests.py` hardcodes paths).
-- **E2E interpreter**: `bin/test/zen` (a copy of debug build). Rebuild with `--recompile`.
-- **Benchmark interpreter**: `bin/rel/zen`. Rebuild with `--recompile` or `./x.py rel`.
-- **`// DRAFT`**: Tests with this marker are skipped by both e2e and benchmark runners.
-- **`typechecker` branch**: Active development; separates typechecking tests from main e2e suite temporarily.
+- **Debug-only flags**: All flags except `-t`/`--time` cause "Unknown option" in release builds.
+- **Exit codes**: 65 (lex/parse/compile), 70 (runtime), 74 (read), 0 (ok).
+- **NaN boxing**: `NAN_BOXING :: true` at `value.odin:10` — values are `u64` using quiet-NaN mantissa bits.
+- **Memory leaks**: Debug builds use `mem.Tracking_Allocator`. `--strict` makes it a failure.
+- **`// DRAFT`** in a test file skips it. `// expect:` matches stdout, `// ERR:` matches stderr.
+- **`typechecker` branch**: Active development. `test/__tests_new__/` is the new suite; old `test/typechecking/` is removed.
+- **`test -n`** (`--new`): runs `test/__tests_new__/` — a combined non-OOP e2e + typechecking suite.
+- **E2E timeout**: 2 seconds per test (infinite loops).
+- **CI / config files**: None exist (no `.github`, no opencode config, no linter config).
 
 ## Testing workflow
 
-1. **Unit tests**: Run `odin test zen` (or `./x.py test -u`)
-2. **E2E tests**: Run `./x.py test -e` (requires `bin/test/zen`)
-3. **Typechecking tests**: Run `./x.py test -t` (requires `bin/test/zen`)
-4. **Benchmarks**: Run `./x.py bench` (requires `bin/rel/zen`)
+1. `./x.py test --recompile` — rebuild `bin/test/zen`, run unit + e2e
+2. `./x.py test --recompile -n` — rebuild, run the new suite
+3. `./x.py bench` — benchmark via release build
 
-**Important**: When running multiple test types, use `./x.py test --recompile` first to rebuild the debug binary.
-
-## Architecture notes
-
-- **Two-phase compilation**: Source → AST → Resolution → Typechecking → Codegen → Bytecode → Interpretation
-- **REPL**: Built-in REPL with persistent type checker state
-- **Module system**: File-based with `pub` keyword for public exports
-- **Type system**: Hindley-Milner with type inference, currently in `typechecker` branch
-- **Value representation**: NaN boxing for compact value storage
-- **Memory management**: Custom garbage collector with arena allocation for type checking
-
-## Common pitfalls
-
-- Debug-only flags will cause "Unknown option" errors in release builds
-- Test files use `// expect:` for expected output and `// ERR:` for expected errors
-- E2E tests timeout after 2 seconds (infinite loops)
-- Typechecking tests are separate from e2e tests (different directory)
-- Release builds have `-o:aggressive` optimization, debug builds have `-vet -debug`
-- The `typechecker` branch is active; typechecking tests are isolated
+`./x.py dbg` → `./x.py test -u` is faster than `--recompile` if you only changed non-Odin files.

@@ -1,0 +1,6 @@
+use "string"
+
+print "hello"
+    |> string.upcase()
+    |> it .. ", " .. it .. "!"
+    |> it .. "!!" // expect: HELLO, HELLO!!!

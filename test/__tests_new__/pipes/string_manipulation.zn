@@ -1,0 +1,6 @@
+use "string"
+
+print " hello, world "
+    |> string.chomp()
+    |> string.replace("world", "universe")
+    |> string.upcase() // expect: HELLO, UNIVERSE

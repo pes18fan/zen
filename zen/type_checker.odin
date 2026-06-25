@@ -1063,7 +1063,7 @@ check_type :: proc(
 		push_scope(tc.ctx)
 		s := make(Substitution)
 		if e.expression != nil {
-			s = check_type(tc, e.expression, type, "block") or_return // infer body with expected type
+			s = check_type(tc, e.expression, type, expected_expression_name) or_return // infer body with expected type
 		} else {
 			s = try_unify(type, tapp(.NIL), expected_expression_name) or_return // infer body with expected type
 		}
@@ -1116,8 +1116,6 @@ check_type :: proc(
 		s = combine_substitutions(sn, s)
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
-	case ^ClassExpr:
-		unimplemented()
 	case ^ContinueExpr:
 		tc.current_token = e.token
 		s := try_unify(type, type_never, expected_expression_name) or_return
@@ -1227,7 +1225,11 @@ check_type :: proc(
 		if v, ok := receiver.(^VariableExpr); ok {
 			_, is_module := resolve_type_with_module_info(tc, v.name.lexeme, v)
 			if !is_module {
-				fmt.panicf("encountered property access on non-module variable receiver")
+				_, t := infer_type(tc, receiver) or_return
+				return nil, fmt.tprintf(
+					"Expected dot-accessed value to be a module, got %v.",
+					type_string(t, false),
+				)
 			}
 
 			up := strings.to_upper(v.name.lexeme)
@@ -1242,13 +1244,15 @@ check_type :: proc(
 			sig := instantiate(tc, poly_sig) // instantiate the function; cuz it can be polymorphic
 			s = try_unify(type, sig, expected_expression_name) or_return
 		} else {
-			unimplemented()
+			_, t := infer_type(tc, receiver) or_return
+			return nil, fmt.tprintf(
+				"Expected dot-accessed value to be a module, got %v.",
+				type_string(t, false),
+			)
 		}
 
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
-	case ^SetExpr:
-		unimplemented()
 	case ^GroupingExpr:
 		tc.current_token = e.token
 		s := check_type(tc, e.expression, type, "grouping expression") or_return
@@ -1378,10 +1382,6 @@ check_type :: proc(
 		s = combine_substitutions(sn, s)
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
-	case ^SuperExpr:
-		unimplemented()
-	case ^ThisExpr:
-		unimplemented()
 	case ^LiteralExpr:
 		tc.current_token = e.token
 

@@ -1,0 +1,20 @@
+func classify(n) {
+    if n < 0 {
+        return "negative"
+    } else {
+        if n == 0 {
+            return "zero"
+        } else {
+            if n < 10 {
+                return "small"
+            } else {
+                return "large"
+            }
+        }
+    }
+}
+
+puts(classify(-5))  // expect: negative
+puts(classify(0))   // expect: zero
+puts(classify(5))   // expect: small
+puts(classify(100)) // expect: large

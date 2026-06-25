@@ -1,0 +1,3 @@
+func bad(): String {
+    42  // ERR: Expected function body to be of type String, got Number.
+}

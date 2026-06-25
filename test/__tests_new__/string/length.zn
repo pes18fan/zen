@@ -1,0 +1,4 @@
+puts(len(""))        // expect: 0
+puts(len("a"))       // expect: 1
+puts(len("hello"))   // expect: 5
+puts(len("hello\n")) // expect: 6

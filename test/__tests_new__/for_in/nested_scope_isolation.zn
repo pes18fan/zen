@@ -1,0 +1,7 @@
+// Variables declared inside body don't leak
+for x in [1, 2] {
+    var inner = x * 10
+    puts(inner)
+}
+puts(inner)
+// ERR: Undefined variable 'inner'

@@ -1,0 +1,3 @@
+var x
+puts(x)    // expect: nil
+puts(x == nil) // expect: true

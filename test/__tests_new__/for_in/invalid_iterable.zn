@@ -1,0 +1,5 @@
+// Iterating over a non-iterable should be a runtime error
+for x in 42 {
+    puts(x)
+}
+// ERR: Expected iterable to be of type List[a], got Number.

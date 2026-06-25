@@ -15,7 +15,6 @@ Expr :: union #shared_nil {
 	^BlockExpr,
 	^BreakExpr,
 	^CallExpr,
-	^ClassExpr,
 	^ContinueExpr,
 	^DiscardExpr,
 	^ExitExpr,
@@ -32,13 +31,10 @@ Expr :: union #shared_nil {
 	^PipeExpr,
 	^PrintExpr,
 	^ReturnExpr,
-	^SetExpr,
 	^SequenceExpr,
 	^SubscriptExpr,
 	^SubscriptSetExpr,
-	^SuperExpr,
 	^SwitchExpr,
-	^ThisExpr,
 	^UnaryExpr,
 	^UseExpr,
 	^VariableExpr,
@@ -132,14 +128,6 @@ ItExpr :: struct {
 	token: Token,
 }
 
-ClassExpr :: struct {
-	token:      Token,
-	name:       Token,
-	superclass: Maybe(Token),
-	methods:    []^FunctionExpr,
-	public:     bool,
-}
-
 UseExpr :: struct {
 	token:    Token,
 	fullpath: string,
@@ -212,13 +200,6 @@ SequenceExpr :: struct {
 	right:    Expr,
 }
 
-SetExpr :: struct {
-	token:    Token,
-	receiver: Expr,
-	property: Token,
-	value:    Expr,
-}
-
 SubscriptExpr :: struct {
 	token:    Token,
 	receiver: Expr,
@@ -232,12 +213,6 @@ SubscriptSetExpr :: struct {
 	value:    Expr,
 }
 
-SuperExpr :: struct {
-	token:       Token,
-	method:      Token,
-	method_args: []Expr, // nil if the method wasn't directly invoked
-}
-
 // Variant of the switch statement whose cases must evaluate to expressions
 ExprSwitchCase :: struct {
 	condition: Expr,
@@ -249,10 +224,6 @@ SwitchExpr :: struct {
 	condition:   Expr,
 	cases:       []ExprSwitchCase,
 	else_branch: Expr,
-}
-
-ThisExpr :: struct {
-	token: Token,
 }
 
 UnaryExpr :: struct {
@@ -510,28 +481,6 @@ parse_for :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	return stmt
 }
 
-parse_class_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	expr := new(ClassExpr)
-	expr.token = parser_previous(p)
-	expr.name = parser_consume(p, .IDENT, "Expect class name.")
-	expr.public = false
-	methods := make([dynamic]^FunctionExpr, 0)
-
-	if parser_match(p, .LESS) {
-		expr.superclass = parser_consume(p, .IDENT, "Expect superclass name.")
-	}
-
-	parser_consume(p, .LSQUIRLY, "Expect '{' before class body.")
-	for !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
-		append(&methods, parse_method(p, can_assign))
-		if parser_match(p, .SEMI) || parser_match(p, .NEWLINE) {}
-	}
-	expr.methods = methods[:]
-
-	parser_consume(p, .RSQUIRLY, "Expect '}' after class body.")
-	return expr
-}
-
 parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(UseExpr)
 	expr.token = parser_previous(p)
@@ -580,14 +529,8 @@ parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			}
 		}
 		return expr
-	} else if parser_match(p, .CLASS) {
-		expr := parse_class_expr(p, can_assign)
-		if class_e, ok := expr.(^ClassExpr); ok {
-			class_e.public = true
-		}
-		return expr
 	} else {
-		parser_error(p, parser_peek(p), "Only functions or classes can be set as public.")
+		parser_error(p, parser_peek(p), "Only functions can be set as public.")
 		return nil
 	}
 }
@@ -802,10 +745,7 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		parser_error(
 			p,
 			literal.token,
-			fmt.tprintf(
-				"'%s' is not a valid literal. This is a compiler bug.",
-				literal.token.lexeme,
-			),
+			fmt.tprintf("'%s' is not a valid literal", literal.token.lexeme),
 		)
 	}
 
@@ -860,37 +800,6 @@ parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	var_expr.token = name
 	var_expr.name = name
 	return var_expr
-}
-
-parse_super :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	super_expr := new(SuperExpr)
-	super_expr.token = parser_previous(p)
-	parser_consume(p, .DOT, "Expect '.' after 'super'.")
-	super_expr.method = parser_consume(p, .IDENT, "Expect superclass method name.")
-	method_args := make([dynamic]Expr, 0, 1)
-
-	// was the retrieved method immediately invoked?
-	if parser_match(p, .LPAREN) {
-		if !parser_check(p, .RPAREN) {
-			for {
-				append(&method_args, parse_expression(p))
-				parser_match(p, .COMMA) or_break
-			}
-		}
-		super_expr.method_args = method_args[:]
-		parser_consume(p, .RPAREN, "Expect ')' after method parameters.")
-	} else {
-		super_expr.method_args = nil
-		delete(method_args)
-	}
-
-	return super_expr
-}
-
-parse_this :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	this_expr := new(ThisExpr)
-	this_expr.token = parser_previous(p)
-	return this_expr
 }
 
 parse_it :: proc(p: ^Parser, can_assign: bool) -> Expr {
@@ -1094,16 +1003,6 @@ parse_call :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 parse_dot :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	dot := parser_previous(p) // The '.' token
 	property := parser_consume(p, .IDENT, "Expect property name after '.'.")
-	if can_assign && parser_match(p, .EQUAL) {
-		equals := parser_previous(p)
-		value := parse_expression(p)
-		set_expr := new(SetExpr)
-		set_expr.token = equals // The '=' token
-		set_expr.receiver = left
-		set_expr.property = property
-		set_expr.value = value
-		return set_expr
-	}
 	get_expr := new(GetExpr)
 	get_expr.token = dot
 	get_expr.receiver = left
@@ -1169,7 +1068,6 @@ rules: [TokenType]ParseRule = {
 	.AND           = {nil, parse_logical, .AND},
 	.BREAK         = {parse_break, nil, .NONE},
 	.CONTINUE      = {parse_continue, nil, .NONE},
-	.CLASS         = {parse_class_expr, nil, .NONE},
 	.DISCARD       = {parse_discard, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
 	.EXIT          = {parse_exit, nil, .NONE},
@@ -1187,8 +1085,6 @@ rules: [TokenType]ParseRule = {
 	.PUB           = {parse_pub, nil, .NONE},
 	.RETURN        = {parse_return, nil, .NONE},
 	.SWITCH        = {parse_switch_expr, nil, .CONDITIONAL},
-	.SUPER         = {parse_super, nil, .NONE},
-	.THIS          = {parse_this, nil, .NONE},
 	.TRUE          = {parse_literal, nil, .NONE},
 	.USE           = {parse_use_expr, nil, .NONE},
 	.WHILE         = {parse_while, nil, .NONE},
@@ -1297,7 +1193,6 @@ parser_synchronize :: proc(p: ^Parser) {
 		#partial switch parser_peek(p).type {
 		case .BREAK,
 		     .CONTINUE,
-		     .CLASS,
 		     .FUNC,
 		     .EXIT,
 		     .FOR,
@@ -1347,12 +1242,6 @@ free_expr :: proc(expr: Expr) {
 		}
 		delete(e.arguments)
 		free_expr(e.callee)
-		free(e)
-	case ^ClassExpr:
-		for method in e.methods {
-			free_expr(method)
-		}
-		delete(e.methods)
 		free(e)
 	case ^DiscardExpr:
 		free_expr(e.expression)
@@ -1422,10 +1311,6 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.left)
 		free_expr(e.right)
 		free(e)
-	case ^SetExpr:
-		free_expr(e.receiver)
-		free_expr(e.value)
-		free(e)
 	case ^SubscriptExpr:
 		free_expr(e.receiver)
 		free_expr(e.index)
@@ -1435,14 +1320,6 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.index)
 		free_expr(e.value)
 		free(e)
-	case ^SuperExpr:
-		if e.method_args != nil {
-			for arg in e.method_args {
-				free_expr(arg)
-			}
-			delete(e.method_args)
-		}
-		free(e)
 	case ^SwitchExpr:
 		free_expr(e.condition)
 		for c in e.cases {
@@ -1451,8 +1328,6 @@ free_expr :: proc(expr: Expr) {
 		}
 		delete(e.cases)
 		free_expr(e.else_branch)
-		free(e)
-	case ^ThisExpr:
 		free(e)
 	case ^UnaryExpr:
 		free_expr(e.right)
@@ -1537,19 +1412,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_indent(b, indent)
 		strings.write_string(b, "(discard\n")
 		print_expr(b, e.expression, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^ClassExpr:
-		print_indent(b, indent)
-		fmt.sbprintf(b, "(class %s", e.name.lexeme)
-		if e.superclass != nil {
-			superclass: Token = e.superclass.?
-			fmt.sbprintf(b, " < %s", superclass.lexeme)
-		}
-		strings.write_string(b, "\n")
-		for method in e.methods {
-			print_expr(b, method, indent + 1)
-		}
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ContinueExpr:
@@ -1696,13 +1558,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
-	case ^SetExpr:
-		print_indent(b, indent)
-		fmt.sbprintf(b, "(set %s\n", e.property.lexeme)
-		print_expr(b, e.receiver, indent + 1)
-		print_expr(b, e.value, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
 	case ^SubscriptExpr:
 		print_indent(b, indent)
 		strings.write_string(b, "(subscript\n")
@@ -1718,9 +1573,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.value, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
-	case ^SuperExpr:
-		print_indent(b, indent)
-		fmt.sbprintf(b, "(super %s)\n", e.method.lexeme)
 	case ^SwitchExpr:
 		print_indent(b, indent)
 		strings.write_string(b, "(switch")
@@ -1744,9 +1596,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		}
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
-	case ^ThisExpr:
-		print_indent(b, indent)
-		strings.write_string(b, "this\n")
 	case ^UnaryExpr:
 		print_indent(b, indent)
 		fmt.sbprintf(b, "(unary %s\n", e.operator.lexeme)

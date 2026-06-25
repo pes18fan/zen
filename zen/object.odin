@@ -6,11 +6,8 @@ import "core:strings"
 
 /* The type of an `Obj`. */
 ObjType :: enum {
-	BOUND_METHOD,
-	CLASS,
 	CLOSURE,
 	FUNCTION,
-	INSTANCE,
 	LIST,
 	MODULE,
 	NATIVE,
@@ -87,43 +84,6 @@ ObjClosure :: struct {
 	upvalue_count: int,
 }
 
-/*
-A class. Classes store a table of methods. They don't store fields since in
-zen, fields can be added freely to an instance without having to be declared
-in the class declaration.
-*/
-ObjClass :: struct {
-	using obj: Obj,
-	name:      ^ObjString,
-	methods:   Table,
-}
-
-/*
-An instance of some class. Instances store a table of their fields.
-*/
-ObjInstance :: struct {
-	using obj:   Obj,
-	klass:       ^ObjClass,
-	fields:      Table,
-	field_count: int,
-}
-
-/*
-A bound method is a runtime object that stores a method after it is accessed
-from an instance. We know that a method access and method call can be 
-seperated; for example by storing the method in a variable and calling it
-later on. Since the method will probably need to remember which instance it was
-accessed from (the receiver), we need this new runtime type to wrap it in.
-*/
-ObjBoundMethod :: struct {
-	using obj: Obj,
-	/* Note that the receiver can only be an ObjInstance; calling it a Value
-	 * here is simply for convenience and to avoid having to cast it every
-	 * time. */
-	receiver:  Value,
-	method:    ^ObjClosure,
-}
-
 /* A list. Stores a ValueArray for its items. */
 ObjList :: struct {
 	using obj: Obj,
@@ -145,24 +105,12 @@ obj_type :: #force_inline proc(value: Value) -> ObjType {
 	return as_obj(value).type
 }
 
-is_bound_method :: #force_inline proc(value: Value) -> bool {
-	return is_obj_type(value, .BOUND_METHOD)
-}
-
-is_class :: #force_inline proc(value: Value) -> bool {
-	return is_obj_type(value, .CLASS)
-}
-
 is_closure :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .CLOSURE)
 }
 
 is_function :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .FUNCTION)
-}
-
-is_instance :: #force_inline proc(value: Value) -> bool {
-	return is_obj_type(value, .INSTANCE)
 }
 
 is_list :: #force_inline proc(value: Value) -> bool {
@@ -181,24 +129,12 @@ is_module :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .MODULE)
 }
 
-as_bound_method :: #force_inline proc(value: Value) -> ^ObjBoundMethod {
-	return (^ObjBoundMethod)(as_obj(value))
-}
-
-as_class :: #force_inline proc(value: Value) -> ^ObjClass {
-	return (^ObjClass)(as_obj(value))
-}
-
 as_closure :: #force_inline proc(value: Value) -> ^ObjClosure {
 	return (^ObjClosure)(as_obj(value))
 }
 
 as_function :: #force_inline proc(value: Value) -> ^ObjFunction {
 	return (^ObjFunction)(as_obj(value))
-}
-
-as_instance :: #force_inline proc(value: Value) -> ^ObjInstance {
-	return (^ObjInstance)(as_obj(value))
 }
 
 as_list :: #force_inline proc(value: Value) -> ^ObjList {
@@ -231,12 +167,8 @@ is_obj_type :: #force_inline proc(value: Value, type: ObjType) -> bool {
 
 type_of_obj :: proc(obj: ^Obj) -> string {
 	switch obj.type {
-	case .CLASS:
-		return "class"
-	case .BOUND_METHOD, .FUNCTION, .NATIVE, .CLOSURE:
+	case .FUNCTION, .NATIVE, .CLOSURE:
 		return "function"
-	case .INSTANCE:
-		return "instance"
 	case .LIST:
 		return "list"
 	case .MODULE:
@@ -284,20 +216,6 @@ allocate_obj :: proc(
 	return obj
 }
 
-new_bound_method :: proc(gc: ^GC, receiver: Value, method: ^ObjClosure) -> ^ObjBoundMethod {
-	bound := cast(^ObjBoundMethod)(allocate_obj(gc, ObjBoundMethod, .BOUND_METHOD))
-	bound.receiver = receiver
-	bound.method = method
-	return bound
-}
-
-new_class :: proc(gc: ^GC, name: ^ObjString) -> ^ObjClass {
-	klass := cast(^ObjClass)(allocate_obj(gc, ObjClass, .CLASS))
-	klass.name = name
-	klass.methods = init_table()
-	return klass
-}
-
 new_closure :: proc(gc: ^GC, function: ^ObjFunction) -> ^ObjClosure {
 	upvalues := make([]^ObjUpvalue, function.upvalue_count) // allocate with the upvalue count of the function!!!!!!!!!
 
@@ -316,13 +234,6 @@ new_function :: proc(gc: ^GC) -> ^ObjFunction {
 	fn.chunk = init_chunk()
 	fn.has_returned = false
 	return fn
-}
-
-new_instance :: proc(gc: ^GC, klass: ^ObjClass) -> ^ObjInstance {
-	instance := cast(^ObjInstance)(allocate_obj(gc, ObjInstance, .INSTANCE))
-	instance.klass = klass
-	instance.fields = init_table()
-	return instance
 }
 
 new_list :: proc(gc: ^GC) -> ^ObjList {
@@ -421,18 +332,10 @@ stringify_function :: proc(fn: ^ObjFunction) -> string {
 
 stringify_object :: proc(obj: ^Obj) -> string {
 	switch obj.type {
-	case .BOUND_METHOD:
-		/* Bound methods are an implementation detail, we don't expose that
-			 * since from the user's perspective they're just functions. */
-		return stringify_function(as_bound_method(obj_val(obj)).method.function)
-	case .CLASS:
-		return fmt.tprintf("<class %s>", as_class(obj_val(obj)).name.chars)
 	case .CLOSURE:
 		return stringify_function(as_closure(obj_val(obj)).function)
 	case .FUNCTION:
 		return stringify_function(as_function(obj_val(obj)))
-	case .INSTANCE:
-		return fmt.tprintf("<instance of %s>", as_instance(obj_val(obj)).klass.name.chars)
 	case .LIST:
 		{
 			list := as_list(obj_val(obj))
@@ -480,16 +383,6 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 	}
 
 	switch obj.type {
-	case .BOUND_METHOD:
-		/* Only free the bound method itself, not its references; to ensure
-	     * that `this` can still find that object if the method gets stored
-		 * and invoked later. */
-		bound := (^ObjBoundMethod)(obj)
-		free(bound)
-	case .CLASS:
-		klass := (^ObjClass)(obj)
-		free_table(&klass.methods)
-		free(klass)
 	case .CLOSURE:
 		closure := (^ObjClosure)(obj)
 		delete(closure.upvalues)
@@ -498,10 +391,6 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 		fn := (^ObjFunction)(obj)
 		free_chunk(&fn.chunk)
 		free(fn)
-	case .INSTANCE:
-		instance := (^ObjInstance)(obj)
-		free_table(&instance.fields)
-		free(instance)
 	case .LIST:
 		list := (^ObjList)(obj)
 		free_value_array(&list.items)

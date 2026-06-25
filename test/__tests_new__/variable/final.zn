@@ -1,0 +1,2 @@
+val a = "ok"
+print a // expect: ok

@@ -1,0 +1,10 @@
+var a = "global"
+{
+    var a = "outer"
+    {
+        var a = "inner"
+        puts(a) // expect: inner
+    }
+    puts(a) // expect: outer
+}
+puts(a) // expect: global

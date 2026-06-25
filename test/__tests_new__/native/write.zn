@@ -1,0 +1,8 @@
+use "os"
+
+os.write("write_helper.txt", "w", "stuff")
+
+puts(os.read("write_helper.txt")) // expect: stuff
+
+// Clearing the file
+os.write("write_helper.txt", "w", "")

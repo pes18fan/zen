@@ -1,0 +1,3 @@
+{
+    use "string"    // ERR: Can only declare modules at the top level.
+}

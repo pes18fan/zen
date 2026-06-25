@@ -1,0 +1,2 @@
+var s = "hello"
+puts(s[0]) // ERR: Expected subscripted expression to be of type List[a], got String.

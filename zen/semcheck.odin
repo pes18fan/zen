@@ -12,11 +12,10 @@ SemanticCompiler :: struct {
 }
 
 /* Main state for the semantic analysis pass. Holds the current scope,
-class context, pipeline state and some other necessary items.
+pipeline state and some other necessary items.
 One Semantic instance is created per call to `semcheck`. */
 Semantic :: struct {
 	current_compiler: ^SemanticCompiler,
-	current_class:    ^ClassCompiler,
 	current_token:    Token,
 	had_error:        bool,
 	pipeline_active:  bool,
@@ -40,12 +39,7 @@ end_semantic_compiler :: proc(sm: ^Semantic) {
 }
 
 init_semantic :: proc() -> Semantic {
-	return Semantic {
-		current_compiler = nil,
-		current_class = nil,
-		had_error = false,
-		pipeline_active = false,
-	}
+	return Semantic{current_compiler = nil, had_error = false, pipeline_active = false}
 }
 
 semantic_error :: proc(sm: ^Semantic, message: string) {
@@ -149,35 +143,6 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		for arg in e.arguments {
 			semcheck_expr(sm, arg) or_return
 		}
-	case ^ClassExpr:
-		sm.current_token = e.token
-		name := e.name
-		methods := e.methods
-		superclass := e.superclass
-
-		class_compiler: ClassCompiler
-		class_compiler.enclosing = sm.current_class
-		class_compiler.has_superclass = superclass != nil
-		sm.current_class = &class_compiler
-
-		if superclass_name, ok := superclass.?; ok {
-			if identifiers_equal(name, superclass_name) {
-				semantic_error(sm, "A class can't inherit from itself.")
-				return false
-			}
-		}
-
-		for method in methods {
-			assert(method.bound_to != nil, "method must be bound to a name")
-			method_name := method.bound_to.?
-			if method_name.lexeme == "init" {
-				semcheck_function_expr(sm, method, .INITIALIZER) or_return
-			} else {
-				semcheck_function_expr(sm, method, .METHOD) or_return
-			}
-		}
-
-		sm.current_class = sm.current_class.enclosing
 	case ^ContinueExpr:
 		sm.current_token = e.token
 		if sm.current_compiler.loop_depth == 0 {
@@ -312,12 +277,6 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 				right = next_seq.right
 			}
 		}
-	case ^SetExpr:
-		sm.current_token = e.token
-		receiver := e.receiver
-		value := e.value
-		semcheck_expr(sm, receiver) or_return
-		semcheck_expr(sm, value) or_return
 	case ^SubscriptExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.receiver) or_return
@@ -330,27 +289,6 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		semcheck_expr(sm, receiver) or_return
 		semcheck_expr(sm, index) or_return
 		semcheck_expr(sm, value) or_return
-	case ^SuperExpr:
-		sm.current_token = e.token
-
-		if sm.current_class == nil {
-			semantic_error(sm, "Can't use 'super' outside a class.")
-			return false
-		} else if !sm.current_class.has_superclass {
-			semantic_error(sm, "Can't use 'super' in a class with no superclass.")
-			return false
-		}
-
-		if e.method_args != nil {
-			if len(e.method_args) > U8_MAX {
-				semantic_error(sm, "Cannot have more than 255 arguments.")
-				return false
-			}
-
-			for arg in e.method_args {
-				semcheck_expr(sm, arg) or_return
-			}
-		}
 	case ^SwitchExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.condition) or_return
@@ -359,12 +297,6 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			semcheck_expr(sm, c.body) or_return
 		}
 		semcheck_expr(sm, e.else_branch) or_return
-	case ^ThisExpr:
-		sm.current_token = e.token
-		if sm.current_class == nil {
-			semantic_error(sm, "Cannot use 'this' outside a class.")
-			return false
-		}
 	case ^UnaryExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.right) or_return
@@ -428,115 +360,18 @@ semcheck :: proc(expr: Expr) -> (success: bool) {
 	return true
 }
 
-// Temporary, tiny pass right after parsing done to detect if the program
-// uses any OOP features. If it does, the typechecker is disabled.
-// This function will only exist for the time period between the creation of
-// the typechecker and the removal of OOP.
+
 @(require_results)
-should_not_typecheck :: proc(expr: Expr, reso: ResolutionMap) -> bool {
+has_user_modules :: proc(expr: Expr) -> bool {
 	if expr == nil {return false}
 
-	switch e in expr {
-	case ^ClassExpr, ^ThisExpr, ^SuperExpr:
-		return true
-	case ^SetExpr:
-		// a SetExpr on a module is an invalid operation, so we deliberately avoid
-		// typechecking the thing
-		return true
-	case ^AssignExpr:
-		return should_not_typecheck(e.value, reso)
-	case ^BinaryExpr:
-		return should_not_typecheck(e.left, reso) || should_not_typecheck(e.right, reso)
-	case ^BlockExpr:
-		return should_not_typecheck(e.expression, reso)
-	case ^BreakExpr: // nothing
-	case ^CallExpr:
-		for arg in e.arguments {
-			if should_not_typecheck(arg, reso) {
-				return true
-			}
-		}
-		return should_not_typecheck(e.callee, reso)
-	case ^ContinueExpr: // nothing
-	case ^DiscardExpr:
-		return should_not_typecheck(e.expression, reso)
-	case ^ExitExpr:
-		return should_not_typecheck(e.code, reso)
-	case ^ForExpr:
-		return(
-			should_not_typecheck(e.initializer, reso) ||
-			should_not_typecheck(e.condition, reso) ||
-			should_not_typecheck(e.increment, reso) ||
-			should_not_typecheck(e.body, reso) \
-		)
-	case ^ForInExpr:
-		return should_not_typecheck(e.iterable, reso) || should_not_typecheck(e.body, reso)
-	case ^FunctionExpr:
-		return should_not_typecheck(e.body, reso)
-	case ^GetExpr:
-		receiver := e.receiver
-		if v, ok := receiver.(^VariableExpr); ok {
-			r := reso[v]
-			if !r.is_module {return true}
-		} else {
-			return true
-		}
-	case ^IfExpr:
-		return(
-			should_not_typecheck(e.condition, reso) ||
-			should_not_typecheck(e.then_branch, reso) ||
-			should_not_typecheck(e.else_branch, reso) \
-		)
-	case ^ItExpr: // nothing
-	case ^ListExpr:
-		for elem in e.elements {
-			if should_not_typecheck(elem, reso) {return true}
-		}
-	case ^LiteralExpr: // nothing
-	case ^LogicalExpr:
-		return should_not_typecheck(e.left, reso) || should_not_typecheck(e.right, reso)
-	case ^PipeExpr:
-		return should_not_typecheck(e.left, reso) || should_not_typecheck(e.right, reso)
-	case ^PrintExpr:
-		return should_not_typecheck(e.expr, reso)
-	case ^ReturnExpr:
-		return should_not_typecheck(e.value, reso)
-	case ^SubscriptExpr:
-		return should_not_typecheck(e.receiver, reso) || should_not_typecheck(e.index, reso)
-	case ^SubscriptSetExpr:
-		return(
-			should_not_typecheck(e.receiver, reso) ||
-			should_not_typecheck(e.index, reso) ||
-			should_not_typecheck(e.value, reso) \
-		)
-	case ^SwitchExpr:
-		if should_not_typecheck(e.condition, reso) {return true}
-		for c in e.cases {
-			if should_not_typecheck(c.condition, reso) ||
-			   should_not_typecheck(c.body, reso) {return true}
-		}
-		return should_not_typecheck(e.else_branch, reso)
-	case ^UnaryExpr:
-		return should_not_typecheck(e.right, reso)
-	case ^VariableExpr: // nothing
-	case ^VarDeclExpr:
-		for binding in e.bindings {
-			if should_not_typecheck(binding.initializer, reso) {return true}
-		}
-	case ^WhileExpr:
-		return should_not_typecheck(e.condition, reso) || should_not_typecheck(e.body, reso)
-	// this is to handle the case of modules importing classes which are then
-	// invoked via `GetExpr`. An imported user module obviously may not use
-	// classes at all; but we simply cannot know that right now
-	case ^UseExpr:
-		if e.type == .USER {
-			return true
-		}
-	case ^GroupingExpr:
-		return should_not_typecheck(e.expression, reso)
+	#partial switch e in expr {
+	// only need to check this case as modules are forced by the semantic
+	// analyzer to be at global scope
 	case ^SequenceExpr:
-		return should_not_typecheck(e.left, reso) || should_not_typecheck(e.right, reso)
-	// other cases don't matter
+		return has_user_modules(e.left) || has_user_modules(e.right)
+	case ^UseExpr:
+		if e.type == .USER {return true}
 	}
 
 	return false

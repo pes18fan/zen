@@ -1,0 +1,28 @@
+var i = 0
+while i < 5 {
+    if i == 2 {
+        i = i + 1
+        continue
+    }
+
+    print i
+    print "\n"
+    i = i + 1
+}
+// expect: 0
+// expect: 1
+// expect: 3
+// expect: 4
+
+i = 0
+while i < 5 {
+    if i == 2 {
+        break
+    }
+
+    print i
+    print "\n"
+    i = i + 1
+}
+// expect: 0
+// expect: 1

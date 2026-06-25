@@ -1,0 +1,15 @@
+func check(v) {
+    if v {
+        puts("truthy")
+    } else {
+        puts("falsey")
+    }
+}
+
+check(true)    // expect: truthy
+check(1)       // expect: truthy
+check(0)       // expect: truthy
+check("")      // expect: truthy
+check([])      // expect: truthy
+check(false)   // expect: falsey
+check(nil)     // expect: falsey
