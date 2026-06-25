@@ -1,0 +1,7 @@
+// Iteration with numbers, verify value correctness
+var sum = 0
+for n in [1, 2, 3, 4, 5] {
+    sum = sum + n
+}
+puts(sum)
+// expect: 15

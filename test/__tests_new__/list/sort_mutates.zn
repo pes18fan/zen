@@ -1,0 +1,8 @@
+// NOTE: this will be invalid once CoW is introduced
+use "list"
+
+var a = [3, 1, 2]
+var b = a
+list.sort(a)
+puts(a) // expect: [1, 2, 3]
+puts(b) // expect: [1, 2, 3]

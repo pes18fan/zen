@@ -1,3 +1,0 @@
-func bad(): String {
-    42  // ERR: Expected block to be of type String, got Number.
-}

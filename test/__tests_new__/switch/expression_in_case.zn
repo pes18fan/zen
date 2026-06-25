@@ -1,0 +1,6 @@
+var x = 10
+switch x {
+    5 + 5 => puts("ten")      // expect: ten
+    5 + 6 => puts("eleven")
+    else  => puts("other")
+}

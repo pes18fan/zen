@@ -1,0 +1,5 @@
+// Single element list
+for x in [42] {
+    puts(x)
+}
+// expect: 42

@@ -1,0 +1,10 @@
+var x = "global"
+
+func test() {
+    puts(x) // expect: global
+    var x = "local"
+    puts(x) // expect: local
+}
+
+test()
+puts(x) // expect: global

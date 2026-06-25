@@ -363,7 +363,7 @@ test_lexer_asi_r_squirly :: proc(t: ^tt.T) {
 /* Test keywords. */
 @(test)
 test_lexer_keywords :: proc(t: ^tt.T) {
-	source := `class func if while for break continue return switch var val pub use exit this super`
+	source := `func if while for break continue return switch var val pub use exit`
 
 	got, ok := lex(source)
 	defer delete(got)
@@ -371,7 +371,6 @@ test_lexer_keywords :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .CLASS, lexeme = "class", line = 1},
 		Token{type = .FUNC, lexeme = "func", line = 1},
 		Token{type = .IF, lexeme = "if", line = 1},
 		Token{type = .WHILE, lexeme = "while", line = 1},
@@ -385,8 +384,6 @@ test_lexer_keywords :: proc(t: ^tt.T) {
 		Token{type = .PUB, lexeme = "pub", line = 1},
 		Token{type = .USE, lexeme = "use", line = 1},
 		Token{type = .EXIT, lexeme = "exit", line = 1},
-		Token{type = .THIS, lexeme = "this", line = 1},
-		Token{type = .SUPER, lexeme = "super", line = 1},
 		Token{type = .EOF, lexeme = "", line = 1},
 	}
 

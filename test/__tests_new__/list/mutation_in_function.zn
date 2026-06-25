@@ -1,0 +1,11 @@
+// Function mutates the passed list (reference semantics)
+// NOTE: this will be invalid once CoW is introduced
+use "list"
+
+func add_item(lst, item) {
+    list.push(lst, item)
+}
+
+var l = [1, 2]
+add_item(l, 3)
+puts(l) // expect: [1, 2, 3]

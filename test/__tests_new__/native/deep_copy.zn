@@ -1,0 +1,9 @@
+use "list"
+
+var inner = [1, 2, 3]
+var outer = [inner, outer]
+var copied = copy(outer)
+
+list.push(inner, 4)
+puts(outer[0])  // expect: [1, 2, 3, 4]
+puts(copied[0]) // expect: [1, 2, 3]

@@ -1,0 +1,7 @@
+use "list"
+
+var result = []
+for var i = 5; i > 0; i = i - 1 {
+    list.push(result, i)
+}
+puts(result) // expect: [5, 4, 3, 2, 1]

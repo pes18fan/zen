@@ -1,0 +1,13 @@
+func outer() {
+    val a = "1"
+
+    func inner() {
+        a = "2" // ERR: Can only set a final variable once.
+    }
+
+    return inner
+}
+
+// The program shouldn't actually reach this point, I'll just keep it here
+// for completeness's sake.
+outer()() 

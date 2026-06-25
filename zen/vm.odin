@@ -442,25 +442,8 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						vm_panic(vm, panic_str)
 						return .INTERPRET_RUNTIME_ERROR
 					}
-				} else if is_instance(vm_peek(vm, 0)) {
-					instance := as_instance(vm_peek(vm, 0))
-					name := read_string(frame)
-
-					/* Look for a field. */
-					value: Value; ok: bool
-					if value, ok = table_get(&instance.fields, name); ok {
-						vm_pop(vm) /* Instance. */
-						vm_push(vm, value)
-						break /* Step out of the switch statement. */
-					}
-
-					/* Look for a method. If we don't find one, it means that name
-				     * wasn't a field either, which is a runtime error. */
-					if !bind_method(vm, instance.klass, name) {
-						return .INTERPRET_RUNTIME_ERROR
-					}
 				} else {
-					vm_panic(vm, "Only instances have properties.")
+					vm_panic(vm, "Only modules allow dot access.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
@@ -485,79 +468,10 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						vm_panic(vm, panic_str)
 						return .INTERPRET_RUNTIME_ERROR
 					}
-				} else if is_instance(vm_peek(vm, 0)) {
-					instance := as_instance(vm_peek(vm, 0))
-					name := read_string_long(frame)
-
-					value: Value; ok: bool
-					if value, ok = table_get(&instance.fields, name); ok {
-						vm_pop(vm)
-						vm_push(vm, value)
-						break
-					}
-
-					if !bind_method(vm, instance.klass, name) {
-						return .INTERPRET_RUNTIME_ERROR
-					}
 				} else {
-					vm_panic(vm, "Only instances have properties.")
+					vm_panic(vm, "Only modules allow dot access.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
-			}
-		case .OP_SET_PROPERTY:
-			{
-				if !is_instance(vm_peek(vm, 1)) {
-					vm_panic(vm, "Only instances have fields.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				/* Get the instance, which is at this moment the 2nd to the top
-				 * value on the stack. */
-				instance := as_instance(vm_peek(vm, 1))
-
-				/* Store the value on top of the stack into the instance's fields. */
-				table_set(&instance.fields, read_string(frame), vm_peek(vm, 0))
-
-				/* Pop the value that we just stored as a field. */
-				value := vm_pop(vm)
-
-				/* Pop the instance off the stack. */
-				vm_pop(vm)
-
-				/* Push the value we stored back on the stack, that's what a 
-				 * setter expression does. */
-				vm_push(vm, value)
-			}
-		case .OP_SET_PROPERTY_LONG:
-			{
-				if !is_instance(vm_peek(vm, 1)) {
-					vm_panic(vm, "Only instances have fields.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				instance := as_instance(vm_peek(vm, 1))
-				table_set(&instance.fields, read_string_long(frame), vm_peek(vm, 0))
-
-				value := vm_pop(vm)
-				vm_pop(vm)
-
-				vm_push(vm, value)
-			}
-		case .OP_GET_SUPER:
-			name := read_string(frame)
-			superclass := as_class(vm_pop(vm))
-
-			/* Look up the method in the superclass and push it to the
-				 * stack as an ObjBoundMethod. */
-			if !bind_method(vm, superclass, name) {
-				return .INTERPRET_RUNTIME_ERROR
-			}
-		case .OP_GET_SUPER_LONG:
-			name := read_string_long(frame)
-			superclass := as_class(vm_pop(vm))
-
-			if !bind_method(vm, superclass, name) {
-				return .INTERPRET_RUNTIME_ERROR
 			}
 		case .OP_GET_IT:
 			vm_push(vm, vm.it)
@@ -666,30 +580,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				arg_count := read_byte(frame)
 
 				if !invoke(vm, method, int(arg_count)) {
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				frame = &vm.frames[vm.frame_count - 1]
-			}
-		case .OP_SUPER_INVOKE:
-			{
-				method := read_string(frame)
-				arg_count := read_byte(frame)
-				superclass := as_class(vm_pop(vm))
-
-				if !invoke_from_class(vm, superclass, method, int(arg_count)) {
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				frame = &vm.frames[vm.frame_count - 1]
-			}
-		case .OP_SUPER_INVOKE_LONG:
-			{
-				method := read_string_long(frame)
-				arg_count := read_byte(frame)
-				superclass := as_class(vm_pop(vm))
-
-				if !invoke_from_class(vm, superclass, method, int(arg_count)) {
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
@@ -863,51 +753,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 			vm_push(vm, result) // Push the return value back to the stack.
 			frame = &vm.frames[vm.frame_count - 1]
-		case .OP_CLASS:
-			public := bool(read_byte(frame))
-			name := read_string(frame)
-
-			vm_push(vm, obj_val(new_class(vm.gc, name)))
-
-			/* If the current file is being imported AND the class being
-             * compiled is set as public with the `pub` keyword, add the 
-             * declared class into the module that's importing it. */
-			importing_module, ok := importer.?
-			if public && ok {
-				module := importing_module.module
-				table_set(&module.values, name, vm_peek(vm, 0))
-			}
-		case .OP_CLASS_LONG:
-			public := bool(read_byte(frame))
-			name := read_string_long(frame)
-
-			vm_push(vm, obj_val(new_class(vm.gc, name)))
-
-			importing_module, ok := importer.?
-			if public && ok {
-				module := importing_module.module
-				table_set(&module.values, name, vm_peek(vm, 0))
-			}
-		case .OP_INHERIT:
-			{
-				superclass := vm_peek(vm, 1)
-
-				if !is_class(superclass) {
-					vm_panic(vm, "Superclass must be a class.")
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				subclass := as_class(vm_peek(vm, 0))
-
-				/* Copy all the superclass's methods to the subclass.
-				 * This is what we call "copy-down inheritance". */
-				table_add_all(from = &as_class(superclass).methods, to = &subclass.methods)
-				vm_pop(vm) /* Subclass. */
-			}
-		case .OP_METHOD:
-			define_method(vm, read_string(frame))
-		case .OP_METHOD_LONG:
-			define_method(vm, read_string_long(frame))
 		case .OP_MODULE_BUILTIN:
 			{
 				module_str := strings.to_upper(read_string(frame).chars)
@@ -1133,9 +978,10 @@ interpret :: proc(
 		return .INTERPRET_COMPILE_ERROR
 	}
 
-	// TODO: remove this after classes and OOP are removed from zen
-	when TYPE_CHECK {
-		dont_typecheck := should_not_typecheck(expr, reso)
+	// this is temporary; the resolution map should only be
+	// deleted after the typechecking is done
+	when !TYPE_CHECK {
+		delete_resolution_map(reso)
 	}
 
 	/* Time the resolver. */
@@ -1146,11 +992,14 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
+	when TYPE_CHECK {
+		should_not_typecheck := has_user_modules(expr)
+	}
+
 	TYPE_CHECK :: true
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
-		// do not run typechecker if OOP features are used
-		if !dont_typecheck {
+		if !should_not_typecheck {
 			tm, tc_ok := typecheck_full(vm, expr, reso)
 			defer delete_resolution_map(reso)
 			defer delete_typemap(tm)
@@ -1177,15 +1026,9 @@ interpret :: proc(
 	// to the final (correct) result
 
 	collect_globals(&vm.compiler_globals, gc, expr)
-	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals, reso)
+	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
-	}
-
-	// this is temporary; the resolution map should only be
-	// deleted after the typechecking is done
-	when !TYPE_CHECK {
-		delete_resolution_map(reso)
 	}
 
 	/* Time the compiler. */
@@ -1278,34 +1121,6 @@ call :: proc(vm: ^VM, closure: ^ObjClosure, arg_count: int) -> bool {
 call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 	if is_obj(callee) {
 		#partial switch obj_type(callee) {
-		case .BOUND_METHOD:
-			{
-				bound := as_bound_method(callee)
-
-				/* The receiver must be stored at stack slot zero. */
-				vm.stack[vm.stack_top - arg_count] = bound.receiver
-
-				/* Pull the raw closure out of the ObjBoundMethod and call it. */
-				return call(vm, bound.method, arg_count)
-			}
-		case .CLASS:
-			{
-				klass := as_class(callee)
-				vm.stack[vm.stack_top - arg_count] = obj_val(new_instance(vm.gc, klass))
-
-				/* Look for an initializer. */
-				initializer: Value; ok: bool
-				if initializer, ok = table_get(&klass.methods, vm.gc.init_string); ok {
-					return call(vm, as_closure(initializer), arg_count)
-				} else if arg_count != 0 {
-					/* If there is no initializer, passing arguments to a class
-                     * call makes no sense and is thus an error. */
-					vm_panic(vm, "Expected 0 arguments but got %d.", arg_count)
-					return false
-				}
-
-				return true
-			}
 		/* We only handle ObjClosures here, since all ObjFunctions are wrapped
 		into closures as soon as they're pulled out of the constant table. */
 		case .CLOSURE:
@@ -1336,19 +1151,8 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 		}
 	}
 
-	vm_panic(vm, "Can only call functions and classes.")
+	vm_panic(vm, "Can only call functions.")
 	return false
-}
-
-@(private = "file")
-invoke_from_class :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString, arg_count: int) -> bool {
-	method: Value; ok: bool
-	if method, ok = table_get(&klass.methods, name); !ok {
-		vm_panic(vm, "Undefined property '%s'.", name.chars)
-		return false
-	}
-
-	return call(vm, as_closure(method), arg_count)
 }
 
 /* Invoke a method or a function in a module. */
@@ -1388,47 +1192,8 @@ invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 		}
 	}
 
-	if !is_instance(receiver) {
-		vm_panic(vm, "Only methods and module functions can be invoked.")
-		return false
-	}
-
-	instance := as_instance(receiver)
-
-	/* We've reached this point since the compiler thought that it saw a
-	 * method invocation. However, fields on instances can also contain 
-	 * functions, so it might have actually seen a field access and an immediate
-	 * call of the function stored in that field. To handle this corner case,
-	 * we need to look for a field of the same name in that instance first.
-	 * This is necessary but unfortunately sacrifices a bit of performance. */
-	value: Value; ok: bool
-	if value, ok = table_get(&instance.fields, name); ok {
-		/* Replace the receiver under the arguments with the value of the
-		 * field, since the function itself is always the first value in
-		 * its callframe. */
-		vm.stack[vm.stack_top - arg_count] = value
-		return call_value(vm, value, arg_count)
-	}
-
-	return invoke_from_class(vm, instance.klass, name, arg_count)
-}
-
-@(private = "file")
-bind_method :: proc(vm: ^VM, klass: ^ObjClass, name: ^ObjString) -> bool {
-	/* Look for the method in the method table. */
-	method: Value; ok: bool
-	if method, ok = table_get(&klass.methods, name); !ok {
-		vm_panic(vm, "Undefined property '%s'.", name.chars)
-		return false
-	}
-
-	/* Create a bound method out of the method we pulled from the table and
-	 * its receiver on top of the stack. */
-	bound := new_bound_method(vm.gc, vm_peek(vm, 0), as_closure(method))
-
-	vm_pop(vm) /* Receiver. */
-	vm_push(vm, obj_val(bound))
-	return true
+	vm_panic(vm, "Cannot invoke on a non-module value.")
+	return false
 }
 
 /* Capture the provided stack slot as an upvalue. */
@@ -1469,18 +1234,6 @@ close_upvalues :: proc(vm: ^VM, last: ^Value) {
 		upvalue.location = &upvalue.closed
 		vm.open_upvalues = upvalue.next_upvalue
 	}
-}
-
-/* 
-Define the method on top of the stack by adding it to the methods table of
-the class directly below it on the stack.
-*/
-@(private = "file")
-define_method :: proc(vm: ^VM, name: ^ObjString) {
-	method := vm_peek(vm, 0)
-	klass := as_class(vm_peek(vm, 1))
-	table_set(&klass.methods, name, method)
-	vm_pop(vm) /* Method closure. */
 }
 
 /* Concatenate two strings. */

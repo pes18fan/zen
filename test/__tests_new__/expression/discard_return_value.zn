@@ -1,0 +1,12 @@
+var x = 0
+
+func normal() {
+    x = 1
+}
+
+func discarder() {
+    discard x = 1
+}
+
+puts(normal())      // expect: 1
+puts(discarder())   // expect: nil

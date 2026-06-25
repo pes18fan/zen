@@ -248,22 +248,6 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 	}
 
 	switch object.type {
-	/* A bound method contains a reference to the receiver and the
-		method. */
-	case .BOUND_METHOD:
-		{
-			bound := (^ObjBoundMethod)(object)
-			mark_value(gc, bound.receiver)
-			mark_object(gc, (^Obj)(bound.method))
-		}
-	/* A class contains a reference to an ObjString with its name and a table
-	    containing its methods. */
-	case .CLASS:
-		{
-			klass := (^ObjClass)(object)
-			mark_object(gc, (^Obj)(klass.name))
-			mark_table(gc, &klass.methods)
-		}
 	/* A closure contains a reference to the function it wraps, and
         to all the upvalues it captures. */
 	case .CLOSURE:
@@ -283,14 +267,6 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 			function := (^ObjFunction)(object)
 			mark_object(gc, (^Obj)(function.name))
 			mark_array(gc, &function.chunk.constants)
-		}
-	/* An instance contains a reference to its class and references to
-	 * its fields. */
-	case .INSTANCE:
-		{
-			instance := (^ObjInstance)(object)
-			mark_object(gc, (^Obj)(instance.klass))
-			mark_table(gc, &instance.fields)
 		}
 	/* A list contains references to its elements. */
 	case .LIST:

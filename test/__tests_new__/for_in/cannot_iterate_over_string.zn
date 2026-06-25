@@ -1,0 +1,6 @@
+// Iterating over a string isn't possible; must use string.chars to turn it
+// to a list
+for c in "hello" {
+    puts(c)
+}
+// ERR: Expected iterable to be of type List[a], got String.

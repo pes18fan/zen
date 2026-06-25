@@ -289,15 +289,6 @@ copy_value :: proc(gc: ^GC, value: Value) -> Value {
 	obj := as_obj(value)
 
 	#partial switch obj.type {
-	case .INSTANCE:
-		{
-			instance := as_instance(obj_val(obj))
-			new := new_instance(gc, instance.klass)
-
-			/* Deep copy the fields */
-			table_add_all(from = &instance.fields, to = &new.fields)
-			return obj_val(new)
-		}
 	case .LIST:
 		{
 			list := as_list(obj_val(obj))

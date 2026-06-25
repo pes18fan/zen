@@ -1,0 +1,2 @@
+// This may change in the future.
+pub val a = "foo" // ERR: Only functions can be set as public.

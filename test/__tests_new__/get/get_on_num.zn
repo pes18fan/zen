@@ -1,0 +1,1 @@
+123.foo // ERR: Expected dot-accessed value to be a module, got Number.

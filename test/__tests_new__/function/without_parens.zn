@@ -1,0 +1,3 @@
+// Like Lua, zen allows function calls without parens IF the function has a
+// single argument that is a string.
+puts "hello" // expect: hello

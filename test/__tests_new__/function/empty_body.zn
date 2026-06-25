@@ -1,0 +1,2 @@
+func f() {}
+print f() // expect: nil

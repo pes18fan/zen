@@ -1,2 +1,0 @@
-func f(a: Never) => a
-f(1)    // ERR: Expected a diverging expression of type Never, got Number.

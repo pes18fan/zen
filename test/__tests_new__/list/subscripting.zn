@@ -1,0 +1,5 @@
+var l = [1, 2, 3, 4]
+
+puts(l[0]) // expect: 1
+puts(l[0] + l[3]) // expect: 5
+puts(l[1 + 2]) // expect: 4

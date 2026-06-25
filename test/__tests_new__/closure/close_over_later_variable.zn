@@ -1,0 +1,11 @@
+func f() {
+    var a = "a"
+    var b = "b"
+
+    func g() {
+        print b .. "\n" // expect: b
+        print a .. "\n" // expect: a
+    }
+    g()
+}
+f()

@@ -177,14 +177,6 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return constant_instruction("OP_GET_PROPERTY", c, offset)
 	case .OP_GET_PROPERTY_LONG:
 		return long_constant_instruction("OP_GET_PROPERTY_LONG", c, offset)
-	case .OP_SET_PROPERTY:
-		return constant_instruction("OP_SET_PROPERTY", c, offset)
-	case .OP_SET_PROPERTY_LONG:
-		return long_constant_instruction("OP_SET_PROPERTY_LONG", c, offset)
-	case .OP_GET_SUPER:
-		return constant_instruction("OP_GET_SUPER", c, offset)
-	case .OP_GET_SUPER_LONG:
-		return long_constant_instruction("OP_GET_SUPER_LONG", c, offset)
 	case .OP_GET_IT:
 		return simple_instruction("OP_GET_IT", offset)
 	case .OP_SET_IT:
@@ -231,10 +223,6 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return invoke_instruction("OP_INVOKE", c, offset, long = false)
 	case .OP_INVOKE_LONG:
 		return invoke_instruction("OP_INVOKE_LONG", c, offset, long = true)
-	case .OP_SUPER_INVOKE:
-		return invoke_instruction("OP_SUPER_INVOKE", c, offset, long = false)
-	case .OP_SUPER_INVOKE_LONG:
-		return invoke_instruction("OP_SUPER_INVOKE_LONG", c, offset, long = true)
 	case .OP_LIST:
 		return byte_instruction("OP_LIST", c, offset)
 	case .OP_SUBSCRIPT:
@@ -278,16 +266,6 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return byte_instruction("OP_CLOSE_LOOP_VAR", c, offset)
 	case .OP_RETURN:
 		return simple_instruction("OP_RETURN", offset)
-	case .OP_CLASS:
-		return class_instruction("OP_CLASS", c, offset, long = false)
-	case .OP_CLASS_LONG:
-		return class_instruction("OP_CLASS_LONG", c, offset, long = true)
-	case .OP_INHERIT:
-		return simple_instruction("OP_INHERIT", offset)
-	case .OP_METHOD:
-		return constant_instruction("OP_METHOD", c, offset)
-	case .OP_METHOD_LONG:
-		return long_constant_instruction("OP_METHOD_LONG", c, offset)
 	case .OP_MODULE_BUILTIN:
 		return constant_instruction("OP_MODULE_BUILTIN", c, offset)
 	case .OP_MODULE_BUILTIN_LONG:

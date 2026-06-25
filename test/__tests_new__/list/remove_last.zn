@@ -1,0 +1,7 @@
+// NOTE: this will become invalid once CoW is introduced (as `l` is mutated)
+use "list"
+
+var l = [1, 2, 3]
+var popped = list.remove_last(l)
+puts(popped) // expect: [1, 2]
+puts(l)      // expect: [1, 2]

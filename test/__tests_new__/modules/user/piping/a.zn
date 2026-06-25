@@ -1,0 +1,5 @@
+use "b.zn"
+
+print b.a()
+    |> b.b()
+    |> b.c() // expect: abc

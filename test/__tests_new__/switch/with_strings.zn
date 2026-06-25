@@ -1,0 +1,16 @@
+func day_type(day) {
+    switch day {
+        "monday"    => return "weekday"
+        "tuesday"   => return "weekday"
+        "wednesday" => return "weekday"
+        "thursday"  => return "weekday"
+        "friday"    => return "weekday"
+        "saturday"  => return "weekend"
+        "sunday"    => return "weekend"
+        else        => return "unknown"
+    }
+}
+
+puts(day_type("monday"))   // expect: weekday
+puts(day_type("saturday")) // expect: weekend
+puts(day_type("holiday"))  // expect: unknown

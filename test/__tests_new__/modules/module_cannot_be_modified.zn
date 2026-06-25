@@ -1,0 +1,3 @@
+use "math"
+
+math.floor = nil // ERR: Invalid assignment target.

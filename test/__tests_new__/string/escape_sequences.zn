@@ -1,0 +1,12 @@
+puts("hello\nworld")
+// expect: hello
+// expect: world
+
+puts("tab\there")
+// expect: tab	here
+
+var s = "line1\nline2\nline3"
+puts(s)
+// expect: line1
+// expect: line2
+// expect: line3

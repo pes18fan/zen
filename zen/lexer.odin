@@ -46,7 +46,6 @@ TokenType :: enum {
 	AND,
 	BREAK,
 	CONTINUE,
-	CLASS,
 	DISCARD,
 	ELSE,
 	EXIT,
@@ -64,8 +63,6 @@ TokenType :: enum {
 	PUB,
 	RETURN,
 	SWITCH,
-	SUPER,
-	THIS,
 	TRUE,
 	USE,
 	WHILE,
@@ -225,7 +222,6 @@ set_separators :: proc(tokens: []Token) -> []Token {
 				     .STRING,
 				     .NUMBER,
 				     .TRUE,
-				     .THIS,
 				     .FALSE,
 				     .NIL,
 				     .BREAK,
@@ -376,16 +372,7 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 	case 'b':
 		return check_keyword(l, 1, 4, "reak", .BREAK)
 	case 'c':
-		{
-			if l.current - l.start > 1 {
-				switch utf8.rune_at(l.source, l.start + 1) {
-				case 'o':
-					return check_keyword(l, 2, 6, "ntinue", .CONTINUE)
-				case 'l':
-					return check_keyword(l, 2, 3, "ass", .CLASS)
-				}
-			}
-		}
+		return check_keyword(l, 1, 7, "ontinue", .CONTINUE)
 	case 'd':
 		return check_keyword(l, 1, 6, "iscard", .DISCARD)
 	case 'e':
@@ -456,27 +443,9 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 	case 'r':
 		return check_keyword(l, 1, 5, "eturn", .RETURN)
 	case 's':
-		{
-			if l.current - l.start > 1 {
-				switch utf8.rune_at(l.source, l.start + 1) {
-				case 'u':
-					return check_keyword(l, 2, 3, "per", .SUPER)
-				case 'w':
-					return check_keyword(l, 2, 4, "itch", .SWITCH)
-				}
-			}
-		}
+		return check_keyword(l, 1, 5, "witch", .SWITCH)
 	case 't':
-		{
-			if l.current - l.start > 1 {
-				switch utf8.rune_at(l.source, l.start + 1) {
-				case 'r':
-					return check_keyword(l, 2, 2, "ue", .TRUE)
-				case 'h':
-					return check_keyword(l, 2, 2, "is", .THIS)
-				}
-			}
-		}
+		return check_keyword(l, 1, 3, "rue", .TRUE)
 	case 'u':
 		return check_keyword(l, 1, 2, "se", .USE)
 	case 'w':

@@ -1,0 +1,3 @@
+use "math"
+
+puts(math.sqrt(-1)) // ERR: Cannot use 'sqrt' to find the square root of a negative number.

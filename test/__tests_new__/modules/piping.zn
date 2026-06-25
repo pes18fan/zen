@@ -1,0 +1,5 @@
+use "string"
+
+print "abcd"
+    |> string.upcase()
+    |> string.replace("BCD", "efg") // expect: Aefg
