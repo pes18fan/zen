@@ -11,7 +11,6 @@ Check out more code in `/examples`!
 # features
 
 - dynamic typing with garbage collection
-- object-oriented programming: classes and inheritance
 - first-class functions and closures
 - file-based module system for code organization
 - elixir-inspired pipe operator `|>`
