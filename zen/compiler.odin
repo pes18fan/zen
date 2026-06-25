@@ -394,17 +394,7 @@ patch_breaks :: proc(cg: ^Codegen) -> ErrorMessage {
 
 /* Check if two idents are equal. */
 identifiers_equal :: proc(a: Token, b: Token) -> bool {
-	if len(a.lexeme) != len(b.lexeme) {return false}
-	if a.lexeme == b.lexeme {
-		// HACK: temporary fix for making the internal __iter and __idx variables
-		// of the for-in loop inaccessible (which itself is a bit of a hack)
-		// must be fixed in the AST version
-		if len(a.lexeme) >= 2 && a.lexeme[0:2] == "__" {
-			return false
-		}
-		return true
-	}
-	return false
+	return len(a.lexeme) == len(a.lexeme) && a.lexeme == b.lexeme
 }
 
 /* Create a synthetic token i.e. a token that doesn't actually exist in the
@@ -815,13 +805,13 @@ compile_method :: proc(cg: ^Codegen, m: ^FunctionExpr) -> bool {
 		type = .INITIALIZER
 	}
 
-	param_tokens := make([dynamic]Token)
-	defer delete(param_tokens)
+	param_names := make([dynamic]Token)
+	defer delete(param_names)
 	for param in params {
-		append(&param_tokens, param.token)
+		append(&param_names, param.name)
 	}
 
-	compile_function(cg, name, param_tokens[:], body, type, public = false) or_return
+	compile_function(cg, name, param_names[:], body, type, public = false) or_return
 
 	emit_op_with_constant(cg, .OP_METHOD, .OP_METHOD_LONG, constant)
 	return true
@@ -1465,16 +1455,16 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		body := e.body
 		bound_to := e.bound_to
 
-		param_tokens := make([dynamic]Token)
-		defer delete(param_tokens)
+		param_names := make([dynamic]Token)
+		defer delete(param_names)
 		for param in params {
-			append(&param_tokens, param.token)
+			append(&param_names, param.name)
 		}
 
 		compile_function(
 			cg,
 			bound_to.? or_else synthetic_token("lambda"),
-			param_tokens[:],
+			param_names[:],
 			body,
 			.LAMBDA,
 			public = e.public,

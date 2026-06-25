@@ -1138,12 +1138,6 @@ interpret :: proc(
 		dont_typecheck := should_not_typecheck(expr, reso)
 	}
 
-	// this is temporary; the resolution map should only be
-	// deleted after the typechecking is done
-	when !TYPE_CHECK {
-		delete_resolution_map(reso)
-	}
-
 	/* Time the resolver. */
 	if config.record_time {
 		time.stopwatch_stop(&sw)
@@ -1186,6 +1180,12 @@ interpret :: proc(
 	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals, reso)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
+	}
+
+	// this is temporary; the resolution map should only be
+	// deleted after the typechecking is done
+	when !TYPE_CHECK {
+		delete_resolution_map(reso)
 	}
 
 	/* Time the compiler. */
