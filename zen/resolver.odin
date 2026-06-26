@@ -536,7 +536,7 @@ resolve :: proc(
 	}
 
 	if setup_native_fns {
-		for fn_name in GLOBAL_NATIVE_FN_NAMES {
+		#unroll for fn_name in GLOBAL_NATIVE_FN_NAMES {
 			native_var := new(UntypedVariable)
 			native_var^ = {
 				shadower         = nil,
@@ -599,7 +599,7 @@ resolve_full :: proc(vm: ^VM, expr: Expr) -> (ResolutionMap, bool) {
 	if config.repl && !vm.resolver_init {
 		vm.resolver_globals = make(map[string]^UntypedVariable)
 		vm.resolver_init = true
-		for fn_name in GLOBAL_NATIVE_FN_NAMES {
+		#unroll for fn_name in GLOBAL_NATIVE_FN_NAMES {
 			native_var := new(UntypedVariable)
 			native_var^ = {
 				shadower         = nil,

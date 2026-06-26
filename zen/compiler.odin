@@ -1536,7 +1536,7 @@ codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, succ
 
 	/* Add all the native function names to the global table, for variable
      * existence checks. */
-	for fn_name in GLOBAL_NATIVE_FN_NAMES {
+	#unroll for fn_name in GLOBAL_NATIVE_FN_NAMES {
 		table_set(globals, copy_string(gc, fn_name), bool_val(true))
 	}
 
@@ -1587,7 +1587,7 @@ collect_expr_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
 /* Collect all global functions declared in the file and put them into the
 `globals` table. */
 collect_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
-	for fn_name in GLOBAL_NATIVE_FN_NAMES {
+	#unroll for fn_name in GLOBAL_NATIVE_FN_NAMES {
 		table_set(globals, copy_string(gc, fn_name), bool_val(true))
 	}
 

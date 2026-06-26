@@ -1226,14 +1226,15 @@ check_type :: proc(
 			defer delete(up)
 			module, reflect_ok := reflect.enum_from_name(BuiltinModule, up)
 			if !reflect_ok {
-				fmt.panicf("builtin module name '%v' doesn't match anything in module enum", up)
+				fmt.panicf("couldn't find %v in builtin module", up)
 			}
-
 			// the type is lazily resolved from within the module
 			poly_sig := get_module_function_signature(tc, module, property.lexeme) or_return
 			sig := instantiate(tc, poly_sig) // instantiate the function; cuz it can be polymorphic
 			s = try_unify(type, sig, expected_expression_name) or_return
 		} else {
+			// only reason we're inferring the type at all is to provide the
+			// error message some extra context
 			_, t := infer_type(tc, receiver) or_return
 			return nil, fmt.tprintf(
 				"Expected dot-accessed value to be a module, got %v.",
