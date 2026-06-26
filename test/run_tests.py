@@ -174,16 +174,17 @@ def check_for_leaks(stderr: str):
 
 
 # return values: stdout, stderr, returncode, timeout
-def capture_output(command: str) -> (str, str, int, bool):
+def capture_output(command: str) -> tuple[str, str, int, bool]:
     try:
         result = subprocess.run(
             command, shell=True, text=True, capture_output=True, timeout=2
         )
-        return result.stdout, result.stderr, result.returncode, False
+        err = result.stderr.splitlines()
+        return result.stdout, "" if err == [] else err[0], result.returncode, False
     except subprocess.TimeoutExpired:
         return "", "", 1, True
     except Exception as e:
-        return "", str(e), 1
+        return "", str(e), 1, False
 
 
 if __name__ == "__main__":

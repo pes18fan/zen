@@ -2,7 +2,6 @@ package zen
 
 import "core:fmt"
 import vmem "core:mem/virtual"
-import "core:os"
 import "core:reflect"
 import "core:slice"
 import "core:strings"
@@ -622,7 +621,7 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 	for var, ty in s2 {
 		when ODIN_DEBUG {
 			if var in s1 && !types_equal(s1[var], ty) {
-				color_yellow(os.stderr, "WARNING")
+				fmt.eprint(color_yellow("WARNING"))
 				fmt.eprintfln(
 					": substitutions %v and %v map same variable %v to different values",
 					subst_string(s1, true),
@@ -911,16 +910,7 @@ type_mismatch_string :: proc(want: Type, got: Type) -> string {
 
 typecheck_error :: proc(tc: ^TypeChecker, message: string) {
 	token := tc.current_token
-	color_red(os.stderr, "type error ")
-
-	if token.type == .EOF {
-		fmt.eprintf("at end")
-	} else {
-		fmt.eprintf("at '%s'", token.lexeme)
-	}
-
-	fmt.eprintfln(": %s", message)
-	fmt.eprintfln("  on [line %d]", token.line)
+	print_error(token, message)
 }
 
 // is the expression a syntactic "value"?
@@ -1456,7 +1446,12 @@ check_type :: proc(
 		tc.return_type = apply_substitution(s1, ret_type)
 		defer tc.return_type = old_ret
 
-		s2 := check_type(tc, body, apply_substitution(s1, ret_type), "function body") or_return
+		s2 := check_type(
+			tc,
+			body,
+			apply_substitution(s1, ret_type),
+			fmt.tprintf("return value of function '%s'", bound_to.?.lexeme) if bound_to != nil else "function body",
+		) or_return
 		apply_substitution(s2, tc.ctx)
 		pop_function_scope(tc)
 

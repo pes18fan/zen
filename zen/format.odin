@@ -1,51 +1,40 @@
 package zen
 
 import "core:fmt"
-import "core:os"
 import "core:terminal"
 
-/* Print text in red in the specific `stream`. */
-color_red :: proc(stream: ^os.File, text: string) {
+/* Returns text in red. */
+color_red :: proc(text: string) -> string {
 	if !terminal.color_enabled {
-		fmt.fprint(stream, text)
-		return
+		return text
 	}
 
-	fmt.fprint(stream, "\x1b[31m")
-	fmt.fprint(stream, text)
-	color_reset(stream)
+	return fmt.tprintf("\x1b[31m%s\x1b[0m", text)
 }
 
-/* Print text in green in the specific `stream`. */
-color_green :: proc(stream: ^os.File, text: string) {
+/* Returns text in green. */
+color_green :: proc(text: string) -> string {
 	if !terminal.color_enabled {
-		fmt.fprint(stream, text)
-		return
+		return text
 	}
 
-	fmt.fprint(stream, "\x1b[32m")
-	fmt.fprint(stream, text)
-	color_reset(stream)
+	return fmt.tprintf("\x1b[32m%s\x1b[0m", text)
 }
 
-/* Print text in yellow in the specific `stream`. */
-color_yellow :: proc(stream: ^os.File, text: string) {
+/* Returns text in yellow. */
+color_yellow :: proc(text: string) -> string {
 	if !terminal.color_enabled {
-		fmt.fprint(stream, text)
-		return
+		return text
 	}
 
-	fmt.fprint(stream, "\x1b[33m")
-	fmt.fprint(stream, text)
-	color_reset(stream)
+	return fmt.tprintf("\x1b[33m%s\x1b[0m", text)
 }
 
-/* 
-Reset the text color in the terminal.
-This does not need to be called manually, all the coloring functions call it in
-the end.
-*/
-@(private = "file")
-color_reset :: proc(stream: ^os.File) {
-	fmt.fprint(stream, "\x1b[0m")
+/* Returns text styled in bold. */
+style_bold :: proc(text: string) -> string {
+	if !terminal.color_enabled {
+		return text
+	}
+
+	return fmt.tprintf("\x1b[1m%s\x1b[0m", text)
 }

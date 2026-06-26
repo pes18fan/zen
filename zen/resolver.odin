@@ -1,7 +1,6 @@
 package zen
 
 import "core:fmt"
-import "core:os"
 
 /*
 TODO: Variable resolution / symbol table creation. Needs very careful
@@ -250,18 +249,7 @@ define_variable :: proc(rs: ^Resolver, name: string) {
 
 resolver_error :: proc(rs: ^Resolver, message: string) {
 	token := rs.current_token
-	color_red(os.stderr, "compile error ")
-
-	if token.type == .EOF {
-		fmt.eprint("at end")
-	} else if token.type == .NEWLINE {
-		fmt.eprint("at end of line")
-	} else {
-		fmt.eprintf("at '%s'", token.lexeme)
-	}
-
-	fmt.eprintfln(": %s", message)
-	fmt.eprintfln("  on [line %d]", token.line)
+	print_error(token, message)
 }
 
 @(require_results)

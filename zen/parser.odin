@@ -485,13 +485,19 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(UseExpr)
 	expr.token = parser_previous(p)
 
-	relative_path_str := parser_consume(p, .STRING, "Expect module path.").lexeme
+	if !parser_check(p, .STRING) {
+		free(expr)
+		parser_error(p, parser_peek(p), "Expect module path.")
+		return nil
+	}
+	relative_path_str := parser_advance(p).lexeme
 	relative_path := strings.trim(relative_path_str[1:len(relative_path_str) - 1], " ")
 	abs_path, join_err := filepath.join(
 		[]string{config.__dirname, relative_path},
 		context.allocator,
 	)
 	if join_err != nil {
+		free(expr)
 		parser_error(
 			p,
 			parser_previous(p),
@@ -508,6 +514,8 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		mod_name = filepath.short_stem(relative_path)
 		type = .USER
 	} else {
+		delete(abs_path)
+		free(expr)
 		parser_error(p, parser_previous(p), fmt.tprintf("Module '%s' not found.", relative_path))
 		return nil
 	}
@@ -1115,19 +1123,7 @@ init_parser :: proc(tokens: []Token) -> Parser {
 parser_error :: proc(p: ^Parser, token: Token, message: string) {
 	if p.panic_mode {return}
 	p.panic_mode = true
-
-	color_red(os.stderr, "parse error ")
-
-	if token.type == .EOF {
-		fmt.eprint("at end")
-	} else if token.type == .NEWLINE {
-		fmt.eprint("at end of line")
-	} else {
-		fmt.eprintf("at '%s'", token.lexeme)
-	}
-
-	fmt.eprintfln(": %s", message)
-	fmt.eprintfln("  on [line %d]", token.line)
+	print_error(token, message)
 	p.had_error = true
 }
 

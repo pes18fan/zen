@@ -1,8 +1,5 @@
 package zen
 
-import "core:fmt"
-import "core:os"
-
 SemanticCompiler :: struct {
 	enclosing:   ^SemanticCompiler, // The enclosing function.
 	func_type:   FunctionType, // Type of the function being checked.
@@ -44,18 +41,7 @@ init_semantic :: proc() -> Semantic {
 
 semantic_error :: proc(sm: ^Semantic, message: string) {
 	token := sm.current_token
-	color_red(os.stderr, "compile error ")
-
-	if token.type == .EOF {
-		fmt.eprint("at end")
-	} else if token.type == .NEWLINE {
-		fmt.eprint("at end of line")
-	} else {
-		fmt.eprintf("at '%s'", token.lexeme)
-	}
-
-	fmt.eprintfln(": %s", message)
-	fmt.eprintfln("  on [line %d]", token.line)
+	print_error(token, message)
 	sm.had_error = true
 }
 

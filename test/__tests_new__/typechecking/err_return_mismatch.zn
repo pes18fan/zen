@@ -1,4 +1,4 @@
 func f() {
     return 42
-    "hello" // ERR: Expected function body to be of type Number, got String.
+    "hello" // ERR: Expected return value of function 'f' to be of type Number, got String.
 }
