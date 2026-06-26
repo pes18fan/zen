@@ -148,19 +148,6 @@ def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, new: 
         os.makedirs("bin/test", exist_ok=True)
         shutil.copy(f"bin/dbg/{DBG_OUT}", f"bin/test/{OUT}")
 
-    if new:
-        print("Running new test suite:")
-        typechecking_args = [
-            "python", "./run_tests.py", "-d", "__tests_new__/"]
-        if strict:
-            typechecking_args.append("--strict")
-        try:
-            subprocess.run(typechecking_args, cwd="test/", check=True)
-        except ProcError as e:
-            print(f"Error during typechecking tests: {e}", file=sys.stderr)
-            exit(1)
-        return
-
     if not e2e_only:
         print("Running unit tests:")
         try:
@@ -174,15 +161,27 @@ def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, new: 
 
     print("")
 
-    print("Running end-to-end tests:")
-    e2e_args = ["python", "./run_tests.py"]
-    if strict:
-        e2e_args.append("--strict")
-    try:
-        subprocess.run(e2e_args, cwd="test/", check=True)
-    except ProcError as e:
-        print(f"Error during e2e tests: {e}", file=sys.stderr)
-        exit(1)
+    if new:
+        print("Running new e2e test suite:")
+        new_suite_args = [
+            "python", "./run_tests.py", "-d", "__tests_new__/"]
+        if strict:
+            new_suite_args.append("--strict")
+        try:
+            subprocess.run(new_suite_args, cwd="test/", check=True)
+        except ProcError as e:
+            print(f"Error during e2e tests: {e}", file=sys.stderr)
+            exit(1)
+    else:
+        print("Running end-to-end tests:")
+        e2e_args = ["python", "./run_tests.py"]
+        if strict:
+            e2e_args.append("--strict")
+        try:
+            subprocess.run(e2e_args, cwd="test/", check=True)
+        except ProcError as e:
+            print(f"Error during e2e tests: {e}", file=sys.stderr)
+            exit(1)
 
 
 def benchmark(recompile: bool):

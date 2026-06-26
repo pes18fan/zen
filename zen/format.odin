@@ -30,6 +30,15 @@ color_yellow :: proc(text: string) -> string {
 	return fmt.tprintf("\x1b[33m%s\x1b[0m", text)
 }
 
+/* Returns text in yellow. */
+color_blue :: proc(text: string) -> string {
+	if !terminal.color_enabled {
+		return text
+	}
+
+	return fmt.tprintf("\x1b[34m%s\x1b[0m", text)
+}
+
 /* Returns text styled in bold. */
 style_bold :: proc(text: string) -> string {
 	if !terminal.color_enabled {

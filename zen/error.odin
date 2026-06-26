@@ -78,7 +78,8 @@ print_error :: #force_inline proc(token: Token, message: string) {
 	fmt.eprint(color_red("error"))
 	fmt.eprintfln(": %s", style_bold(message))
 
-	fmt.eprintf(" --> %s", "REPL" if config.repl else filepath.base(config.__path))
+	fmt.eprint(color_blue(" --> "))
+	fmt.eprintf(style_bold("%s"), "REPL" if config.repl else filepath.base(config.__path))
 	if token.type == .EOF {
 		fmt.eprintln(" at end of file")
 	} else if token.type == .NEWLINE {
@@ -88,10 +89,12 @@ print_error :: #force_inline proc(token: Token, message: string) {
 	}
 
 	source_line := token_line(token)
-	fmt.eprintln("  |")
-	fmt.eprintfln("%d |\t%s", token.position.line, source_line)
+	fmt.eprintln(color_blue("  | "))
 
-	fmt.eprint("  |\t")
+	fmt.eprintf(color_blue("%d | "), token.position.line)
+	fmt.eprintfln("%s", source_line)
+
+	fmt.eprint(color_blue("  | "))
 	for _ in 0 ..< token.position.column - 1 {
 		fmt.eprint(" ")
 	}
