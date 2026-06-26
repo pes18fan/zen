@@ -49,31 +49,6 @@ long_constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 }
 
 @(private = "file")
-class_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
-	public := bool(c.code[offset + 1])
-	constant: int
-	if long {
-		constant = int(c.code[offset + 2]) << 8 | int(c.code[offset + 3])
-	} else {
-		constant = int(c.code[offset + 2])
-	}
-
-	fmt.eprintf("%-16s %4d '", name, constant)
-
-	str := stringify_value(c.constants.values[constant])
-	fmt.eprint(str)
-	fmt.eprint("'")
-	fmt.eprintf(", %s", public ? "public" : "private")
-	fmt.eprintf("\n")
-
-	if long {
-		return offset + 4
-	} else {
-		return offset + 3
-	}
-}
-
-@(private = "file")
 user_module_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
 	module_name_idx, module_path_idx: int
 	if long {

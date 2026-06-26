@@ -1,12 +1,14 @@
-// while loop (single iteration only due to pre-existing runtime bug)
 var count = 5
 while count < 10 {
     puts(count)
-    count = 10
+    count = count + 1
 }
 // expect: 5
+// expect: 6
+// expect: 7
+// expect: 8
+// expect: 9
 
-// while with bool condition (works correctly)
 var run = false
 while run {
     puts("nope")
