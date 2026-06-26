@@ -5,6 +5,7 @@ import "core:os"
 import tt "core:testing"
 
 /* Check if two slices of `Token`s are the same. */
+/* Does NOT compare the `source` fields. */
 @(private = "file")
 expect_tokens_equal :: proc(
 	want: []Token,
@@ -15,12 +16,12 @@ expect_tokens_equal :: proc(
 	err_recieved: Maybe(Token),
 ) {
 	got := got
-	for i in want {
+	for tok in want {
 		if len(got) == 0 {break}
 
-		if i != got[0] {
-			return false, i, got[0]
-		}
+		if tok.type != got[0].type {return false, tok, got[0]}
+		if tok.lexeme != got[0].lexeme {return false, tok, got[0]}
+		if tok.position != got[0].position {return false, tok, got[0]}
 		got = got[1:]
 	}
 
@@ -58,53 +59,53 @@ func test() {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .FUNC, lexeme = "func", line = 2},
-		Token{type = .IDENT, lexeme = "foo", line = 2},
-		Token{type = .LPAREN, lexeme = "(", line = 2},
-		Token{type = .RPAREN, lexeme = ")", line = 2},
-		Token{type = .LSQUIRLY, lexeme = "{", line = 2},
-		Token{type = .IF, lexeme = "if", line = 3},
-		Token{type = .NOT, lexeme = "not", line = 3},
-		Token{type = .FALSE, lexeme = "false", line = 3},
-		Token{type = .LSQUIRLY, lexeme = "{", line = 3},
-		Token{type = .PRINT, lexeme = "print", line = 4},
-		Token{type = .IDENT, lexeme = "str", line = 4},
-		Token{type = .RSQUIRLY, lexeme = "}", line = 5},
-		Token{type = .RSQUIRLY, lexeme = "}", line = 6},
-		Token{type = .NEWLINE, lexeme = "\n", line = 6},
-		Token{type = .FUNC, lexeme = "func", line = 8},
-		Token{type = .IDENT, lexeme = "add", line = 8},
-		Token{type = .LPAREN, lexeme = "(", line = 8},
-		Token{type = .IDENT, lexeme = "a", line = 8},
-		Token{type = .COMMA, lexeme = ",", line = 8},
-		Token{type = .IDENT, lexeme = "b", line = 8},
-		Token{type = .RPAREN, lexeme = ")", line = 8},
-		Token{type = .FAT_ARROW, lexeme = "=>", line = 8},
-		Token{type = .IDENT, lexeme = "a", line = 8},
-		Token{type = .PLUS, lexeme = "+", line = 8},
-		Token{type = .IDENT, lexeme = "b", line = 8},
-		Token{type = .NEWLINE, lexeme = "\n", line = 8},
-		Token{type = .FUNC, lexeme = "func", line = 10},
-		Token{type = .IDENT, lexeme = "test", line = 10},
-		Token{type = .LPAREN, lexeme = "(", line = 10},
-		Token{type = .RPAREN, lexeme = ")", line = 10},
-		Token{type = .LSQUIRLY, lexeme = "{", line = 10},
-		Token{type = .IDENT, lexeme = "foo", line = 11},
-		Token{type = .LPAREN, lexeme = "(", line = 11},
-		Token{type = .STRING, lexeme = "\"just a little lexer exercise\"", line = 11},
-		Token{type = .RPAREN, lexeme = ")", line = 11},
-		Token{type = .NEWLINE, lexeme = "\n", line = 11},
-		Token{type = .IDENT, lexeme = "println", line = 12},
-		Token{type = .LPAREN, lexeme = "(", line = 12},
-		Token{type = .IDENT, lexeme = "add", line = 12},
-		Token{type = .LPAREN, lexeme = "(", line = 12},
-		Token{type = .NUMBER, lexeme = "1", line = 12},
-		Token{type = .COMMA, lexeme = ",", line = 12},
-		Token{type = .NUMBER, lexeme = "2", line = 12},
-		Token{type = .RPAREN, lexeme = ")", line = 12},
-		Token{type = .RPAREN, lexeme = ")", line = 12},
-		Token{type = .RSQUIRLY, lexeme = "}", line = 13},
-		Token{type = .EOF, lexeme = "", line = 13},
+		Token{type = .FUNC, lexeme = "func", position = Pos{2, 1}},
+		Token{type = .IDENT, lexeme = "foo", position = Pos{2, 6}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{2, 9}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{2, 10}},
+		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{2, 12}},
+		Token{type = .IF, lexeme = "if", position = Pos{3, 5}},
+		Token{type = .NOT, lexeme = "not", position = Pos{3, 8}},
+		Token{type = .FALSE, lexeme = "false", position = Pos{3, 12}},
+		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{3, 18}},
+		Token{type = .PRINT, lexeme = "print", position = Pos{4, 9}},
+		Token{type = .IDENT, lexeme = "str", position = Pos{4, 15}},
+		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{5, 5}},
+		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{6, 1}},
+		Token{type = .NEWLINE, lexeme = "\n", position = Pos{6, 2}},
+		Token{type = .FUNC, lexeme = "func", position = Pos{8, 1}},
+		Token{type = .IDENT, lexeme = "add", position = Pos{8, 6}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{8, 9}},
+		Token{type = .IDENT, lexeme = "a", position = Pos{8, 10}},
+		Token{type = .COMMA, lexeme = ",", position = Pos{8, 11}},
+		Token{type = .IDENT, lexeme = "b", position = Pos{8, 13}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{8, 14}},
+		Token{type = .FAT_ARROW, lexeme = "=>", position = Pos{8, 16}},
+		Token{type = .IDENT, lexeme = "a", position = Pos{8, 19}},
+		Token{type = .PLUS, lexeme = "+", position = Pos{8, 21}},
+		Token{type = .IDENT, lexeme = "b", position = Pos{8, 23}},
+		Token{type = .NEWLINE, lexeme = "\n", position = Pos{8, 24}},
+		Token{type = .FUNC, lexeme = "func", position = Pos{10, 1}},
+		Token{type = .IDENT, lexeme = "test", position = Pos{10, 6}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{10, 10}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{10, 11}},
+		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{10, 13}},
+		Token{type = .IDENT, lexeme = "foo", position = Pos{11, 5}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{11, 8}},
+		Token{type = .STRING, lexeme = "\"just a little lexer exercise\"", position = Pos{11, 9}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{11, 39}},
+		Token{type = .NEWLINE, lexeme = "\n", position = Pos{11, 40}},
+		Token{type = .IDENT, lexeme = "println", position = Pos{12, 5}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{12, 12}},
+		Token{type = .IDENT, lexeme = "add", position = Pos{12, 13}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{12, 16}},
+		Token{type = .NUMBER, lexeme = "1", position = Pos{12, 17}},
+		Token{type = .COMMA, lexeme = ",", position = Pos{12, 18}},
+		Token{type = .NUMBER, lexeme = "2", position = Pos{12, 20}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{12, 21}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{12, 22}},
+		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{13, 1}},
+		Token{type = .EOF, lexeme = "", position = Pos{13, 2}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -125,17 +126,17 @@ test_lexer_chained_calls :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .IDENT, lexeme = "some_string", line = 1},
-		Token{type = .DOT, lexeme = ".", line = 2},
-		Token{type = .IDENT, lexeme = "reverse", line = 2},
-		Token{type = .LPAREN, lexeme = "(", line = 2},
-		Token{type = .RPAREN, lexeme = ")", line = 2},
-		Token{type = .DOT, lexeme = ".", line = 3},
-		Token{type = .IDENT, lexeme = "capitalize", line = 3},
-		Token{type = .LPAREN, lexeme = "(", line = 3},
-		Token{type = .RPAREN, lexeme = ")", line = 3},
-		Token{type = .NEWLINE, lexeme = "\n", line = 3},
-		Token{type = .EOF, lexeme = "", line = 4},
+		Token{type = .IDENT, lexeme = "some_string", position = Pos{1, 1}},
+		Token{type = .DOT, lexeme = ".", position = Pos{2, 5}},
+		Token{type = .IDENT, lexeme = "reverse", position = Pos{2, 6}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{2, 13}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{2, 14}},
+		Token{type = .DOT, lexeme = ".", position = Pos{3, 5}},
+		Token{type = .IDENT, lexeme = "capitalize", position = Pos{3, 6}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{3, 16}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{3, 17}},
+		Token{type = .NEWLINE, lexeme = "\n", position = Pos{3, 18}},
+		Token{type = .EOF, lexeme = "", position = Pos{4, 5}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -153,18 +154,18 @@ test_lexer_oneline_block :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .FUNC, lexeme = "func", line = 1},
-		Token{type = .IDENT, lexeme = "a", line = 1},
-		Token{type = .LPAREN, lexeme = "(", line = 1},
-		Token{type = .IDENT, lexeme = "x", line = 1},
-		Token{type = .RPAREN, lexeme = ")", line = 1},
-		Token{type = .LSQUIRLY, lexeme = "{", line = 1},
-		Token{type = .RETURN, lexeme = "return", line = 1},
-		Token{type = .IDENT, lexeme = "x", line = 1},
-		Token{type = .STAR, lexeme = "*", line = 1},
-		Token{type = .NUMBER, lexeme = "2", line = 1},
-		Token{type = .RSQUIRLY, lexeme = "}", line = 1},
-		Token{type = .EOF, lexeme = "", line = 1},
+		Token{type = .FUNC, lexeme = "func", position = Pos{1, 1}},
+		Token{type = .IDENT, lexeme = "a", position = Pos{1, 6}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{1, 7}},
+		Token{type = .IDENT, lexeme = "x", position = Pos{1, 8}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{1, 9}},
+		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{1, 11}},
+		Token{type = .RETURN, lexeme = "return", position = Pos{1, 13}},
+		Token{type = .IDENT, lexeme = "x", position = Pos{1, 20}},
+		Token{type = .STAR, lexeme = "*", position = Pos{1, 22}},
+		Token{type = .NUMBER, lexeme = "2", position = Pos{1, 24}},
+		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{1, 26}},
+		Token{type = .EOF, lexeme = "", position = Pos{1, 27}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -205,14 +206,14 @@ test_lexer_literals :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .NUMBER, lexeme = "42", line = 1},
-		Token{type = .NUMBER, lexeme = "3.14", line = 1},
-		Token{type = .NUMBER, lexeme = "1e2", line = 1},
-		Token{type = .STRING, lexeme = "\"hello\"", line = 1},
-		Token{type = .TRUE, lexeme = "true", line = 1},
-		Token{type = .FALSE, lexeme = "false", line = 1},
-		Token{type = .NIL, lexeme = "nil", line = 1},
-		Token{type = .EOF, lexeme = "", line = 1},
+		Token{type = .NUMBER, lexeme = "42", position = Pos{1, 1}},
+		Token{type = .NUMBER, lexeme = "3.14", position = Pos{1, 4}},
+		Token{type = .NUMBER, lexeme = "1e2", position = Pos{1, 9}},
+		Token{type = .STRING, lexeme = "\"hello\"", position = Pos{1, 13}},
+		Token{type = .TRUE, lexeme = "true", position = Pos{1, 21}},
+		Token{type = .FALSE, lexeme = "false", position = Pos{1, 26}},
+		Token{type = .NIL, lexeme = "nil", position = Pos{1, 32}},
+		Token{type = .EOF, lexeme = "", position = Pos{1, 35}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -230,31 +231,31 @@ test_lexer_operators :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .PLUS, lexeme = "+", line = 1},
-		Token{type = .MINUS, lexeme = "-", line = 1},
-		Token{type = .STAR, lexeme = "*", line = 1},
-		Token{type = .SLASH, lexeme = "/", line = 1},
-		Token{type = .PERCENT, lexeme = "%", line = 1},
-		Token{type = .EQUAL_EQUAL, lexeme = "==", line = 1},
-		Token{type = .BANG_EQUAL, lexeme = "!=", line = 1},
-		Token{type = .LESS, lexeme = "<", line = 1},
-		Token{type = .GREATER, lexeme = ">", line = 1},
-		Token{type = .LESS_EQUAL, lexeme = "<=", line = 1},
-		Token{type = .GREATER_EQUAL, lexeme = ">=", line = 1},
-		Token{type = .AND, lexeme = "and", line = 1},
-		Token{type = .OR, lexeme = "or", line = 1},
-		Token{type = .NOT, lexeme = "not", line = 1},
-		Token{type = .LPAREN, lexeme = "(", line = 1},
-		Token{type = .RPAREN, lexeme = ")", line = 1},
-		Token{type = .LSQUARE, lexeme = "[", line = 1},
-		Token{type = .RSQUARE, lexeme = "]", line = 1},
-		Token{type = .LSQUIRLY, lexeme = "{", line = 1},
-		Token{type = .RSQUIRLY, lexeme = "}", line = 1},
-		Token{type = .DOT, lexeme = ".", line = 1},
-		Token{type = .COMMA, lexeme = ",", line = 1},
-		Token{type = .BAR_GREATER, lexeme = "|>", line = 1},
-		Token{type = .FAT_ARROW, lexeme = "=>", line = 1},
-		Token{type = .EOF, lexeme = "", line = 1},
+		Token{type = .PLUS, lexeme = "+", position = Pos{1, 1}},
+		Token{type = .MINUS, lexeme = "-", position = Pos{1, 3}},
+		Token{type = .STAR, lexeme = "*", position = Pos{1, 5}},
+		Token{type = .SLASH, lexeme = "/", position = Pos{1, 7}},
+		Token{type = .PERCENT, lexeme = "%", position = Pos{1, 9}},
+		Token{type = .EQUAL_EQUAL, lexeme = "==", position = Pos{1, 11}},
+		Token{type = .BANG_EQUAL, lexeme = "!=", position = Pos{1, 14}},
+		Token{type = .LESS, lexeme = "<", position = Pos{1, 17}},
+		Token{type = .GREATER, lexeme = ">", position = Pos{1, 19}},
+		Token{type = .LESS_EQUAL, lexeme = "<=", position = Pos{1, 21}},
+		Token{type = .GREATER_EQUAL, lexeme = ">=", position = Pos{1, 24}},
+		Token{type = .AND, lexeme = "and", position = Pos{1, 27}},
+		Token{type = .OR, lexeme = "or", position = Pos{1, 31}},
+		Token{type = .NOT, lexeme = "not", position = Pos{1, 34}},
+		Token{type = .LPAREN, lexeme = "(", position = Pos{1, 38}},
+		Token{type = .RPAREN, lexeme = ")", position = Pos{1, 40}},
+		Token{type = .LSQUARE, lexeme = "[", position = Pos{1, 42}},
+		Token{type = .RSQUARE, lexeme = "]", position = Pos{1, 44}},
+		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{1, 46}},
+		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{1, 48}},
+		Token{type = .DOT, lexeme = ".", position = Pos{1, 50}},
+		Token{type = .COMMA, lexeme = ",", position = Pos{1, 52}},
+		Token{type = .BAR_GREATER, lexeme = "|>", position = Pos{1, 54}},
+		Token{type = .FAT_ARROW, lexeme = "=>", position = Pos{1, 57}},
+		Token{type = .EOF, lexeme = "", position = Pos{1, 59}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -270,10 +271,10 @@ test_lexer_asi_identifier :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .IDENT, lexeme = "a", line = 1},
-		Token{type = .NEWLINE, lexeme = "\n", line = 1},
-		Token{type = .IDENT, lexeme = "b", line = 2},
-		Token{type = .EOF, lexeme = "", line = 2},
+		Token{type = .IDENT, lexeme = "a", position = Pos{1, 1}},
+		Token{type = .NEWLINE, lexeme = "\n", position = Pos{1, 2}},
+		Token{type = .IDENT, lexeme = "b", position = Pos{2, 1}},
+		Token{type = .EOF, lexeme = "", position = Pos{2, 2}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -289,10 +290,10 @@ test_lexer_asi_suppressed_in_list :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .LSQUARE, lexeme = "[", line = 1},
-		Token{type = .IDENT, lexeme = "a", line = 2},
-		Token{type = .RSQUARE, lexeme = "]", line = 3},
-		Token{type = .EOF, lexeme = "", line = 3},
+		Token{type = .LSQUARE, lexeme = "[", position = Pos{1, 1}},
+		Token{type = .IDENT, lexeme = "a", position = Pos{2, 1}},
+		Token{type = .RSQUARE, lexeme = "]", position = Pos{3, 1}},
+		Token{type = .EOF, lexeme = "", position = Pos{3, 2}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -308,14 +309,14 @@ test_lexer_asi_suppressed_in_block_in_list_and_parens :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .LSQUARE, lexeme = "[", line = 1},
-		Token{type = .LSQUIRLY, lexeme = "{", line = 2},
-		Token{type = .IDENT, lexeme = "a", line = 3},
-		Token{type = .NEWLINE, lexeme = "\n", line = 3},
-		Token{type = .IDENT, lexeme = "b", line = 4},
-		Token{type = .RSQUIRLY, lexeme = "}", line = 5},
-		Token{type = .RSQUARE, lexeme = "]", line = 6},
-		Token{type = .EOF, lexeme = "", line = 6},
+		Token{type = .LSQUARE, lexeme = "[", position = Pos{1, 1}},
+		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{2, 1}},
+		Token{type = .IDENT, lexeme = "a", position = Pos{3, 1}},
+		Token{type = .NEWLINE, lexeme = "\n", position = Pos{3, 2}},
+		Token{type = .IDENT, lexeme = "b", position = Pos{4, 1}},
+		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{5, 1}},
+		Token{type = .RSQUARE, lexeme = "]", position = Pos{6, 1}},
+		Token{type = .EOF, lexeme = "", position = Pos{6, 2}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -331,10 +332,10 @@ test_lexer_asi_suppressed_in :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .IDENT, lexeme = "a", line = 1},
-		Token{type = .IN, lexeme = "in", line = 2},
-		Token{type = .IDENT, lexeme = "b", line = 2},
-		Token{type = .EOF, lexeme = "", line = 2},
+		Token{type = .IDENT, lexeme = "a", position = Pos{1, 1}},
+		Token{type = .IN, lexeme = "in", position = Pos{2, 1}},
+		Token{type = .IDENT, lexeme = "b", position = Pos{2, 4}},
+		Token{type = .EOF, lexeme = "", position = Pos{2, 5}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -350,10 +351,10 @@ test_lexer_asi_r_squirly :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .RSQUIRLY, lexeme = "}", line = 1},
-		Token{type = .NEWLINE, lexeme = "\n", line = 1},
-		Token{type = .PRINT, lexeme = "print", line = 2},
-		Token{type = .EOF, lexeme = "", line = 2},
+		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{1, 1}},
+		Token{type = .NEWLINE, lexeme = "\n", position = Pos{1, 2}},
+		Token{type = .PRINT, lexeme = "print", position = Pos{2, 1}},
+		Token{type = .EOF, lexeme = "", position = Pos{2, 6}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -371,20 +372,20 @@ test_lexer_keywords :: proc(t: ^tt.T) {
 	if !tt.expect(t, ok, "lexer error") {return}
 
 	want := []Token {
-		Token{type = .FUNC, lexeme = "func", line = 1},
-		Token{type = .IF, lexeme = "if", line = 1},
-		Token{type = .WHILE, lexeme = "while", line = 1},
-		Token{type = .FOR, lexeme = "for", line = 1},
-		Token{type = .BREAK, lexeme = "break", line = 1},
-		Token{type = .CONTINUE, lexeme = "continue", line = 1},
-		Token{type = .RETURN, lexeme = "return", line = 1},
-		Token{type = .SWITCH, lexeme = "switch", line = 1},
-		Token{type = .VAR, lexeme = "var", line = 1},
-		Token{type = .VAL, lexeme = "val", line = 1},
-		Token{type = .PUB, lexeme = "pub", line = 1},
-		Token{type = .USE, lexeme = "use", line = 1},
-		Token{type = .EXIT, lexeme = "exit", line = 1},
-		Token{type = .EOF, lexeme = "", line = 1},
+		Token{type = .FUNC, lexeme = "func", position = Pos{1, 1}},
+		Token{type = .IF, lexeme = "if", position = Pos{1, 6}},
+		Token{type = .WHILE, lexeme = "while", position = Pos{1, 9}},
+		Token{type = .FOR, lexeme = "for", position = Pos{1, 15}},
+		Token{type = .BREAK, lexeme = "break", position = Pos{1, 19}},
+		Token{type = .CONTINUE, lexeme = "continue", position = Pos{1, 25}},
+		Token{type = .RETURN, lexeme = "return", position = Pos{1, 34}},
+		Token{type = .SWITCH, lexeme = "switch", position = Pos{1, 41}},
+		Token{type = .VAR, lexeme = "var", position = Pos{1, 48}},
+		Token{type = .VAL, lexeme = "val", position = Pos{1, 52}},
+		Token{type = .PUB, lexeme = "pub", position = Pos{1, 56}},
+		Token{type = .USE, lexeme = "use", position = Pos{1, 60}},
+		Token{type = .EXIT, lexeme = "exit", position = Pos{1, 64}},
+		Token{type = .EOF, lexeme = "", position = Pos{1, 68}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)

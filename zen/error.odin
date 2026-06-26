@@ -1,5 +1,7 @@
 package zen
 
+import "core:fmt"
+import "core:path/filepath"
 ErrorMessage :: Maybe(string)
 
 // Helper to avoid a billion `if err != nil`s everywhere
@@ -70,4 +72,28 @@ try2_resolver :: #force_inline proc(rs: ^Resolver, ret: $T, err: ErrorMessage) -
 	}
 
 	return ret, true
+}
+
+print_error :: #force_inline proc(token: Token, message: string) {
+	fmt.eprint(color_red("error"))
+	fmt.eprintfln(": %s", style_bold(message))
+
+	fmt.eprintf(" --> %s", "REPL" if config.repl else filepath.base(config.__path))
+	if token.type == .EOF {
+		fmt.eprintln(" at end of file")
+	} else if token.type == .NEWLINE {
+		fmt.eprintln(" at end of line %d", token.position.line)
+	} else {
+		fmt.eprintfln(" at %d:%d", token.position.line, token.position.column)
+	}
+
+	source_line := token_line(token)
+	fmt.eprintln("  |")
+	fmt.eprintfln("%d |\t%s", token.position.line, source_line)
+
+	fmt.eprint("  |\t")
+	for _ in 0 ..< token.position.column - 1 {
+		fmt.eprint(" ")
+	}
+	fmt.eprintln(color_red("^"))
 }

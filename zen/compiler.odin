@@ -1,7 +1,6 @@
 package zen
 
 import "core:fmt"
-import "core:os"
 
 /* Maximum limit for a eight bit unsigned integer. */
 U8_MAX :: 255
@@ -147,7 +146,7 @@ string_constant :: proc(cg: ^Codegen, text: string) -> (int, ErrorMessage) {
 @(private = "file")
 emit_byte :: proc(cg: ^Codegen, bytes: ..byte) {
 	for b in bytes {
-		write_chunk(current_chunk(cg), b, cg.current_token.line)
+		write_chunk(current_chunk(cg), b, cg.current_token.position.line)
 	}
 }
 
@@ -155,7 +154,7 @@ emit_byte :: proc(cg: ^Codegen, bytes: ..byte) {
 @(private = "file")
 emit_opcode :: proc(cg: ^Codegen, opcodes: ..OpCode) {
 	for oc in opcodes {
-		write_chunk(current_chunk(cg), byte(oc), cg.current_token.line)
+		write_chunk(current_chunk(cg), byte(oc), cg.current_token.position.line)
 	}
 }
 
@@ -1468,18 +1467,7 @@ or a return should be made immediately after calling it.
 */
 codegen_error :: proc(cg: ^Codegen, message: string) {
 	token := cg.current_token
-	color_red(os.stderr, "compile error ")
-
-	if token.type == .EOF {
-		fmt.eprint("at end")
-	} else if token.type == .NEWLINE {
-		fmt.eprint("at end of line")
-	} else {
-		fmt.eprintf("at '%s'", token.lexeme)
-	}
-
-	fmt.eprintfln(": %s", message)
-	fmt.eprintfln("  on [line %d]", token.line)
+	print_error(token, message)
 	cg.had_error = true
 }
 

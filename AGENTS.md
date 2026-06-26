@@ -1,12 +1,18 @@
 # AGENTS.md — zen
 
-A dynamically typed language interpreter in **Odin** with an in-progress Hindley-Milner typechecker (active `typechecker` branch).
+A dynamically typed language interpreter in **Odin** with an in-progress Hindley-Milner typechecker.
+
+## Branches
+
+| Branch | Purpose |
+|---|---|
+| `main` | Stable: no type inference |
+| `typechecker` | Active: HM type inference (`TYPE_CHECK :: true` at `zen/vm.odin:999`), classes & OOP removed |
 
 ## Prerequisites
 
-- **Odin** on `PATH` (checked by `x.py`)
-- Python 3
-- C compiler + `ar` (isocline auto-downloaded & compiled by `x.py`)
+- **Odin** on `PATH`, Python 3, C compiler + `ar`
+- isocline auto-downloaded & compiled by `x.py`
 
 ## Build commands
 
@@ -28,17 +34,17 @@ A dynamically typed language interpreter in **Odin** with an in-progress Hindley
 | `test -s` (`--strict`) | Fail on memory leaks (debug build only) |
 | `test -u` | Unit tests only |
 | `test -e` | E2E tests only (directory `test/__tests__/`) |
-| `test -n` (`--new`) | Run `test/__tests_new__/` (typechecker + non-OOP suite) |
+| `test -n` (`--new`) | Run `test/__tests_new__/` (combined e2e + typechecker suite) |
 | `bench` | Benchmarks via release build |
 
-Always run tests through `x.py`, never `run_tests.py` directly (hardcodes paths).
+Always run tests through `x.py`, never `run_tests.py` directly (hardcodes `../bin/test/zen`).
 
 ## Debug flags (debug build `dzen` only)
 
 | Flag | Effect |
 |---|---|
-| `--dump-tokens` | Dump tokens from lexer, exit |
-| `--dump-ast` | Dump AST from parser, exit |
+| `--dump-tokens` | Dump tokens, exit |
+| `--dump-ast` | Dump AST, exit |
 | `-D, --dump` | Disassemble bytecode |
 | `-T, --trace` | Trace execution |
 | `-C, --compile` | Compile only (use with `-D`) |
@@ -46,26 +52,7 @@ Always run tests through `x.py`, never `run_tests.py` directly (hardcodes paths)
 | `-S, --stress-gc` | GC on every allocation |
 | `--log-type` | Log type inference |
 
-Short flags bundle: `-tD` → time + disassemble. These all print "Unknown option" in release builds.
-
-## Project structure
-
-| Path | Role |
-|---|---|
-| `zen/main.odin` | Entry point, CLI, REPL |
-| `zen/vm.odin` | VM + `interpret()` — orchestrates the full pipeline |
-| `zen/lexer.odin` | Lexer |
-| `zen/parser.odin` | Parser |
-| `zen/semcheck.odin` | Semantic analysis pass |
-| `zen/resolver.odin` | Variable resolution (scopes, upvalues) |
-| `zen/type_checker.odin` | Hindley-Milner type inference |
-| `zen/compiler.odin` | Bytecode codegen |
-| `zen/*_test.odin` | Unit tests (`odin test zen`) |
-| `test/__tests__/` | E2E tests |
-| `test/__tests_new__/` | New suite: replaces `__tests__` + old `typechecking/` dirs |
-| `test/benchmark/` | Benchmarks |
-| `examples/` | Example `.zn` programs |
-| `core/builtin.zn` | LSP type stubs (future use) |
+Short flags bundle: `-tD` → time + disassemble. All except `-t`/`--time` print "Unknown option" in release builds.
 
 ## Compilation pipeline
 
@@ -73,24 +60,21 @@ Short flags bundle: `-tD` → time + disassemble. These all print "Unknown optio
 Lex → Parse → Semcheck → Resolve → Typecheck → Codegen → VM
 ```
 
-`typecheck` is conditional: disabled via `TYPE_CHECK :: true` + OOP guard at `vm.odin:999` — if the program uses classes/`super`/`this` or user modules, typechecking is skipped entirely and the program runs dynamically.
+Typechecking is skipped when `has_user_modules(expr)` is true (user modules bypass inference on `typechecker` branch; `main` branch has no typechecker at all).
 
 ## Key quirks
 
 - **Debug-only flags**: All flags except `-t`/`--time` cause "Unknown option" in release builds.
 - **Exit codes**: 65 (lex/parse/compile), 70 (runtime), 74 (read), 0 (ok).
-- **NaN boxing**: `NAN_BOXING :: true` at `value.odin:10` — values are `u64` using quiet-NaN mantissa bits.
+- **NaN boxing**: `NAN_BOXING :: true` at `zen/value.odin:10` — values are `u64` using quiet-NaN mantissa bits.
 - **Memory leaks**: Debug builds use `mem.Tracking_Allocator`. `--strict` makes it a failure.
 - **`// DRAFT`** in a test file skips it. `// expect:` matches stdout, `// ERR:` matches stderr.
-- **`typechecker` branch**: Active development. `test/__tests_new__/` is the new suite; old `test/typechecking/` is removed.
-- **`test -n`** (`--new`): runs `test/__tests_new__/` — a combined non-OOP e2e + typechecking suite.
 - **E2E timeout**: 2 seconds per test (infinite loops).
-- **CI / config files**: None exist (no `.github`, no opencode config, no linter config).
+- **No CI, no linter config, no opencode config**.
 
 ## Testing workflow
 
-1. `./x.py test --recompile` — rebuild `bin/test/zen`, run unit + e2e
-2. `./x.py test --recompile -n` — rebuild, run the new suite
+1. `./x.py test --recompile -n` — rebuild debug binary + run new suite (typechecker branch)
+2. `./x.py test --recompile` — rebuild + unit + e2e
 3. `./x.py bench` — benchmark via release build
-
-`./x.py dbg` → `./x.py test -u` is faster than `--recompile` if you only changed non-Odin files.
+4. `./x.py dbg` → `./x.py test -u` is faster if you only changed non-Odin files

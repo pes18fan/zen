@@ -185,24 +185,24 @@ print_help :: proc(stream: ^os.File) {
     -t, --time          Record time taken to compile and run`
 	}
 
-	color_green(stream, "zen ")
+	fmt.fprint(stream, color_green("zen "))
 	fmt.fprintfln(stream, "%s", VERSION)
 	fmt.fprintln(stream, "Interpreter for the zen programming language.")
 	fmt.fprintln(stream)
 
-	color_green(stream, "Usage:")
+	fmt.fprint(stream, color_green("Usage:"))
 	fmt.fprintln(stream)
 	fmt.fprintln(stream, "    ", usage)
 	fmt.fprintln(stream)
 
-	color_green(stream, "Options:")
+	fmt.fprint(stream, color_green("Options:"))
 	fmt.fprintln(stream, options)
 }
 
 /* Print the version message in `stream`. */
 @(private = "file")
 print_version_message :: proc(stream: ^os.File) {
-	color_green(stream, "zen ")
+	fmt.fprint(stream, color_green("zen "))
 	fmt.fprintln(stream, VERSION)
 	fmt.fprintln(stream, "written with <3 by pes18fan")
 }
@@ -378,6 +378,9 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 				fmt.eprintfln("Failed to read from stdin: %s", os.error_string(err))
 			}
 
+			config.__path = "Piped input"
+			vm.name = "Piped input"
+			vm.path = "Piped input"
 			res := interpret(vm, vm.gc, string(buf[:n]))
 			return interpret_result_exit_code(res)
 		} else {
@@ -427,8 +430,7 @@ interpret_result_exit_code :: proc(result: InterpretResult) -> int {
 }
 
 internal_compiler_error :: proc(prefix, message: string, loc := #caller_location) -> ! {
-	color_red(os.stderr, "Internal compiler error!")
-	fmt.eprintln()
+	fmt.eprintln(color_red("Internal compiler error!"))
 	fmt.eprint(prefix)
 	if message != "" {
 		fmt.eprintf(": %v", message)

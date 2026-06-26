@@ -1,7 +1,8 @@
 package zen
 
 import "core:fmt"
-import "core:os"
+import "core:path/filepath"
+import "core:strings"
 import "core:unicode/utf8"
 
 /* The type of a token. */
@@ -74,17 +75,30 @@ TokenType :: enum {
 
 /* A token in the source. */
 Token :: struct {
-	type:   TokenType,
-	lexeme: string,
+	type:     TokenType,
+	lexeme:   string,
+	source:   string,
+	position: Pos,
+}
+
+token_line :: proc(token: Token) -> string {
+	lines := strings.split_lines(token.source)
+	defer delete(lines)
+	return lines[token.position.line - 1]
+}
+
+Pos :: struct #all_or_none {
 	line:   int,
+	column: int,
 }
 
 /* The lexer. */
-Lexer :: struct {
-	source:  string,
-	start:   int,
-	current: int,
-	line:    int,
+Lexer :: struct #all_or_none {
+	source:         string,
+	start:          int,
+	current:        int,
+	start_position: Pos,
+	position:       Pos,
 }
 
 /* 
@@ -93,9 +107,10 @@ illegal tokens are returned on syntax errors.
 */
 @(private = "file")
 syntax_error :: proc(l: ^Lexer, message: string) {
-	color_red(os.stderr, "syntax error: ")
-	fmt.eprintf("%s\n", message)
-	fmt.eprintf("  on [line %d]\n", l.line)
+	fmt.eprint(color_red("error"))
+	fmt.eprintfln(": %s", style_bold(message))
+	fmt.eprintfln("  at line %d, column %d", l.position.line, l.position.column)
+	fmt.eprintfln("  in %s", "REPL" if config.repl else filepath.base(config.__path))
 }
 
 /* Returns true if `c` is alphanumeric, a question mark or an exclamation mark. */
@@ -126,6 +141,7 @@ is_at_end :: proc(l: ^Lexer) -> bool {
 @(private = "file")
 advance :: proc(l: ^Lexer) -> rune #no_bounds_check {
 	defer l.current += 1
+	defer l.position.column += 1
 	return utf8.rune_at(l.source, l.current)
 }
 
@@ -158,6 +174,7 @@ match :: proc(l: ^Lexer, expected: rune) -> bool {
 		return false
 	}
 	defer l.current += 1
+	defer l.position.column += 1
 
 	return true
 }
@@ -165,7 +182,12 @@ match :: proc(l: ^Lexer, expected: rune) -> bool {
 /* Create a token of the provided `type`. */
 @(private = "file")
 make_token :: proc(l: ^Lexer, type: TokenType) -> Token {
-	return Token{type = type, lexeme = l.source[l.start:l.current], line = l.line}
+	return Token {
+		type = type,
+		lexeme = l.source[l.start:l.current],
+		position = l.start_position,
+		source = l.source,
+	}
 }
 
 /*
@@ -544,14 +566,14 @@ tok_string :: proc(l: ^Lexer, starts_with: rune) -> Maybe(Token) {
 	if starts_with == '"' {
 		for peek(l) != '"' && !is_at_end(l) {
 			if peek(l) == '\n' {
-				l.line += 1
+				l.position.line += 1
 			}
 			advance(l)
 		}
 	} else {
 		for peek(l) != '\'' && !is_at_end(l) {
 			if peek(l) == '\n' {
-				l.line += 1
+				l.position.line += 1
 			}
 			advance(l)
 		}
@@ -572,6 +594,7 @@ tok_string :: proc(l: ^Lexer, starts_with: rune) -> Maybe(Token) {
 lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	skip_whitespace(l)
 	l.start = l.current
+	l.start_position = l.position
 
 	if is_at_end(l) {
 		return make_token(l, .EOF)
@@ -636,7 +659,10 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case '\n':
 		/* Line increment deferred, because otherwise the newline will be 
 		 * counted as being on the next line. */
-		defer l.line += 1
+		defer {
+			l.position.line += 1
+			l.position.column = 1
+		}
 		return make_token(l, .NEWLINE)
 	}
 
@@ -649,10 +675,11 @@ Lex the tokens. If an error occurs, `success` is false.
 */
 lex :: proc(source: string) -> (tokens: []Token, success: bool) {
 	l := Lexer {
-		source  = source,
-		start   = 0,
-		current = 0,
-		line    = 1,
+		source         = source,
+		start          = 0,
+		current        = 0,
+		start_position = {1, 1},
+		position       = {1, 1},
 	}
 
 	toks := make([dynamic]Token)

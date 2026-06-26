@@ -5,7 +5,6 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import vmem "core:mem/virtual"
-import "core:os"
 import "core:reflect"
 import "core:slice"
 import "core:strings"
@@ -101,9 +100,8 @@ InterpretResult :: enum {
 
 /* Raise a runtime error. */
 vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
-	color_red(os.stderr, "panic: ")
-	fmt.eprintf("%s", fmt.tprintf(format, ..args))
-	fmt.eprintln()
+	fmt.eprint(color_red("panic: "))
+	fmt.eprintfln("%s", fmt.tprintf(format, ..args))
 
 	for i := vm.frame_count - 1; i >= 0; i -= 1 {
 		frame := &vm.frames[i]
@@ -119,11 +117,11 @@ vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
 		}
 	}
 
-	color_yellow(os.stderr, "  (at")
+	fmt.eprint(color_yellow("  (at"))
 	if vm.path == "REPL" {
-		color_yellow(os.stderr, " REPL)\n")
+		fmt.eprint(color_yellow(" REPL)\n"))
 	} else {
-		color_yellow(os.stderr, fmt.tprintf(" file %s)\n", vm.path))
+		fmt.eprint(color_yellow(fmt.tprintf(" file %s)\n", vm.path)))
 	}
 
 	reset_stack(vm)
@@ -300,7 +298,6 @@ numeric_binary_op :: proc(
 			}
 			vm_push(vm, number_val(math.mod(a, b)))
 		case:
-			color_red(os.stderr, "bug: ")
 			fmt.panicf("Invalid numeric binary operation '%s'.\n", op)
 		}
 	case bool:
@@ -311,7 +308,6 @@ numeric_binary_op :: proc(
 			vm_push(vm, bool_val(a < b))
 		}
 	case:
-		color_red(os.stderr, "bug: ")
 		fmt.panicf("Invalid return type for binary operation '%s'.\n", op)
 	}
 
@@ -912,6 +908,10 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
+	// need to clone to ensure no weird behavior when printing a line on errors
+	// ..or so i thought but that doesn't seem to fix the issues?
+	// source_new := strings.clone(strings.trim_space(source))
+	// defer delete(source_new)
 	tokens, lx_ok := lex(source)
 	defer delete(tokens)
 	if !lx_ok {
@@ -930,7 +930,11 @@ interpret :: proc(
 		if config.dump_tokens {
 			fmt.println("TOKENS:")
 			for token in tokens {
-				fmt.printfln("  %v", token)
+				fmt.printf("    %v", token.type)
+				if token.type != .NEWLINE && token.type != .EOF {
+					fmt.printf("(%s)", token.lexeme)
+				}
+				fmt.printfln(" at line %d, column %d", token.position.line, token.position.column)
 			}
 
 			return .INTERPRET_OK
