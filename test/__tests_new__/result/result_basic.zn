@@ -1,0 +1,16 @@
+// Basic Result construction and unwrap on Ok variants
+val k = ok(1)
+
+puts(unwrap(k))           // expect: 1
+puts(unwrap(ok("hello"))) // expect: hello
+
+func safe_div(a, b) {
+    if b == 0 {
+        err("cannot divide by zero")
+    } else {
+        ok(a / b)
+    }
+}
+
+puts(unwrap(safe_div(1, 4))) // expect: 0.250
+puts(unwrap(safe_div(1, 2))) // expect: 0.500

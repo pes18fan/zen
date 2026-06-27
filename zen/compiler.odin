@@ -49,8 +49,6 @@ is also considered an implicit function.
 FunctionType :: enum {
 	LAMBDA,
 	FUNCTION,
-	INITIALIZER,
-	METHOD,
 	SCRIPT,
 }
 
@@ -170,7 +168,7 @@ emit_pop :: proc(cg: ^Codegen) {
 }
 
 @(private = "file")
-emit_popn :: proc(cg: ^Codegen, n: int) {
+emit_popn :: proc(cg: ^Codegen, n: u8) {
 	if n == 0 {return}
 
 	if n == 1 {
@@ -258,11 +256,6 @@ function is an initializer make it return its receiver.
 */
 @(private = "file")
 emit_return :: proc(cg: ^Codegen) {
-	if cg.current_compiler.type == .INITIALIZER {
-		emit_opcode(cg, .OP_GET_LOCAL)
-		emit_byte(cg, 0) /* Since the receiver is always stored in slot zero. */
-	}
-
 	if config.repl && cg.current_compiler.type == .SCRIPT {
 		emit_opcode(cg, .OP_PRINT_REPL)
 	}
@@ -311,7 +304,7 @@ end_scope :: proc(cg: ^Codegen) {
 	curr := cg.current_compiler
 	curr.scope_depth -= 1
 
-	to_pop := 0
+	to_pop: u8 = 0
 	for curr.local_count > 0 && curr.locals[curr.local_count - 1].depth > curr.scope_depth {
 		/* If the local was captured, close its upvalue instead of popping it
 		to allow closures to work. Closing the upvalue requires no operand,
@@ -745,10 +738,6 @@ compile_function :: proc(
 	} else {
 		compile_expression(cg, body) or_return
 	}
-	if cg.current_compiler.type == .INITIALIZER {
-		emit_opcode(cg, .OP_GET_LOCAL)
-		emit_byte(cg, 0)
-	}
 	emit_opcode(cg, .OP_RETURN)
 	cg.current_compiler.function.has_returned = true
 
@@ -984,7 +973,7 @@ compile_for_in_expression :: proc(cg: ^Codegen, e: ^ForInExpr) -> bool {
 
 	emit_opcode(cg, .OP_NIL) // assign it as nil to begin with
 	try(cg, declare_variable(cg, var_name, is_final = true, is_loop_variable = true)) or_return
-	define_variable(cg, 0)
+	mark_initialized(cg)
 	loop_variable_slot := cg.current_compiler.local_count - 1
 
 	// Push the iterable on the stack
@@ -1097,7 +1086,7 @@ compile_while_expression :: proc(cg: ^Codegen, e: ^WhileExpr) -> bool {
 }
 
 @(require_results)
-compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
+compile_break_expression :: proc(cg: ^Codegen, e: ^BreakExpr) -> bool {
 	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
 
 	// Discard correct number of values from the stack.
@@ -1114,7 +1103,7 @@ compile_break_expression :: proc(cg: ^Codegen, s: ^BreakExpr) -> bool {
 }
 
 @(require_results)
-compile_continue_expression :: proc(cg: ^Codegen, s: ^ContinueExpr) -> bool {
+compile_continue_expression :: proc(cg: ^Codegen, e: ^ContinueExpr) -> bool {
 	loop := &cg.current_compiler.loops[cg.current_compiler.loop_count - 1]
 
 	// Discard correct number of values from the stack.
@@ -1130,6 +1119,48 @@ compile_continue_expression :: proc(cg: ^Codegen, s: ^ContinueExpr) -> bool {
 	}
 
 	return try(cg, emit_loop(cg, loop.start))
+}
+
+@(require_results)
+compile_catch_expression :: proc(cg: ^Codegen, e: ^CatchExpr) -> bool {
+	receiver := e.receiver
+	fallback := e.fallback
+	captured := e.captured
+
+	compile_expression(cg, receiver) or_return
+
+	emit_opcode(cg, .OP_CHECK_RESULT_OK)
+	jump := emit_jump(cg, .OP_JUMP_IF_TRUE)
+
+	captures_err := false
+	capture_slot := -1
+	if captured_err, ok := captured.?; ok {
+		captures_err = true
+		emit_pop(cg) // Result check.
+		emit_opcode(cg, .OP_UNWRAP_ERR) // Pops the Err variant and pushes the value in it.
+		begin_scope(cg)
+		try(cg, declare_variable(cg, captured_err, is_final = true)) or_return
+		mark_initialized(cg)
+		capture_slot = cg.current_compiler.local_count - 1
+		emit_instruction(cg, .OP_SET_LOCAL, byte(capture_slot))
+	} else {
+		emit_popn(cg, 2) // Result check and Err variant.
+	}
+	compile_expression(cg, fallback) or_return
+	if captures_err {
+		emit_opcode(cg, .OP_SET_SAVE) // Save fallback result.
+		end_scope(cg)
+		emit_opcode(cg, .OP_GET_SAVE) // Restore fallback result.
+	}
+	exit_jump := emit_jump(cg, .OP_JUMP)
+
+	try(cg, patch_jump(cg, jump)) or_return
+
+	emit_pop(cg) // Result check.
+	emit_opcode(cg, .OP_UNWRAP) // Pops the Ok variant and pushes the value in it.
+
+	try(cg, patch_jump(cg, exit_jump)) or_return
+	return true
 }
 
 @(require_results)
@@ -1241,6 +1272,9 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		case:
 			fmt.panicf("Invalid binary operator '%s'", e.operator.lexeme)
 		}
+	case ^CatchExpr:
+		cg.current_token = e.token
+		compile_catch_expression(cg, e) or_return
 	case ^BreakExpr:
 		cg.current_token = e.token
 		compile_break_expression(cg, e) or_return
@@ -1518,13 +1552,7 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 	local.depth = 0
 	local.is_captured = false /* You cannot capture the slot zero value. */
 
-	/* If the function is a method, the first slot is repurposed to store that
-	 * method's receiver instead. */
-	if type == .METHOD || type == .INITIALIZER {
-		local.name.lexeme = "this"
-	} else {
-		local.name.lexeme = ""
-	}
+	local.name.lexeme = ""
 }
 
 /* Compile the provided abstract syntax tree (expression) into a bytecode chunk. */

@@ -1,0 +1,10 @@
+// ok/err must stay let-polymorphic: a single wrapping function should
+// work across multiple call-site instantiations without the checker
+// unifying them into one concrete type.
+func wrap(x) {
+    ok(x)
+}
+
+puts(unwrap(wrap(1)))    // expect: 1
+puts(unwrap(wrap("hi"))) // expect: hi
+puts(unwrap(wrap(0.25))) // expect: 0.250

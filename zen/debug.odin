@@ -108,8 +108,6 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 
 	instruction := c.code[offset]
 	switch OpCode(instruction) {
-	case .OP_NOOP:
-		return simple_instruction("OP_NOOP", offset)
 	case .OP_CONSTANT:
 		return constant_instruction("OP_CONSTANT", c, offset)
 	case .OP_CONSTANT_LONG:
@@ -251,6 +249,12 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return user_module_instruction("OP_MODULE_USER_LONG", c, offset, long = true)
 	case .OP_ITERATE:
 		return simple_instruction("OP_ITERATE", offset)
+	case .OP_CHECK_RESULT_OK:
+		return simple_instruction("OP_CHECK_RESULT_OK", offset)
+	case .OP_UNWRAP:
+		return simple_instruction("OP_UNWRAP", offset)
+	case .OP_UNWRAP_ERR:
+		return simple_instruction("OP_UNWRAP_ERR", offset)
 	case .OP_EXIT:
 		return simple_instruction("OP_EXIT", offset)
 	case:

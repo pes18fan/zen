@@ -46,6 +46,7 @@ TokenType :: enum {
 	// keywords
 	AND,
 	BREAK,
+	CATCH,
 	CONTINUE,
 	DISCARD,
 	ELSE,
@@ -60,11 +61,13 @@ TokenType :: enum {
 	NIL,
 	NOT,
 	OR,
+	ORELSE,
 	PRINT,
 	PUB,
 	RETURN,
 	SWITCH,
 	TRUE,
+	TRY,
 	USE,
 	WHILE,
 	WHILENT,
@@ -394,7 +397,16 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 	case 'b':
 		return check_keyword(l, 1, 4, "reak", .BREAK)
 	case 'c':
-		return check_keyword(l, 1, 7, "ontinue", .CONTINUE)
+		{
+			if l.current - l.start > 1 {
+				switch utf8.rune_at(l.source, l.start + 1) {
+				case 'o':
+					return check_keyword(l, 2, 6, "ntinue", .CONTINUE)
+				case 'a':
+					return check_keyword(l, 2, 3, "tch", .CATCH)
+				}
+			}
+		}
 	case 'd':
 		return check_keyword(l, 1, 6, "iscard", .DISCARD)
 	case 'e':
@@ -450,7 +462,14 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 			}
 		}
 	case 'o':
-		return check_keyword(l, 1, 1, "r", .OR)
+		if l.current - l.start > 1 {
+			switch utf8.rune_at(l.source, l.start + 1) {
+			case 'r':
+				kw := check_keyword(l, 2, 0, "", .OR)
+				if kw == .OR {return kw}
+				return check_keyword(l, 2, 4, "else", .ORELSE)
+			}
+		}
 	case 'p':
 		{
 			if l.current - l.start > 1 {
@@ -467,7 +486,21 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 	case 's':
 		return check_keyword(l, 1, 5, "witch", .SWITCH)
 	case 't':
-		return check_keyword(l, 1, 3, "rue", .TRUE)
+		{
+			if l.current - l.start > 1 {
+				switch utf8.rune_at(l.source, l.start + 1) {
+				case 'r':
+					if l.current - l.start > 2 {
+						switch utf8.rune_at(l.source, l.start + 2) {
+						case 'u':
+							return check_keyword(l, 3, 1, "e", .TRUE)
+						case 'y':
+							return check_keyword(l, 3, 0, "", .TRY)
+						}
+					}
+				}
+			}
+		}
 	case 'u':
 		return check_keyword(l, 1, 2, "se", .USE)
 	case 'w':

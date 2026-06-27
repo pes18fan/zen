@@ -1,0 +1,2 @@
+// Err takes exactly one argument.
+err(1, 2) // ERR: Expected called function to be of type (a, b) -> c, got (a) -> Result[b, a].

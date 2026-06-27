@@ -1,0 +1,2 @@
+// Ok takes exactly one argument.
+ok() // ERR: Expected called function to be of type () -> a, got (a) -> Result[a, b].

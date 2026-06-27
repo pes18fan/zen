@@ -282,6 +282,12 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 			mark_object(gc, (^Obj)(module.name))
 			mark_table(gc, &module.values)
 		}
+	/* A result contains the value in it. */
+	case .RESULT:
+		{
+			result := (^ObjResult)(object)
+			mark_value(gc, result.value)
+		}
 	/* An upvalue contains a reference to a closed-over value if
         it is closed. */
 	case .UPVALUE:

@@ -1,0 +1,20 @@
+// catch: unwrap-or-fallback for both variants
+puts(ok(1) catch 0)                     // expect: 1
+puts(err("messed up") catch "problems") // expect: problems
+
+func safe_div(a, b) {
+    if b == 0 {
+        err("cannot divide by zero")
+    } else {
+        ok(a / b)
+    }
+}
+
+val invalid = safe_div(1, 0) catch -1
+puts(invalid) // expect: -1
+
+val valid = safe_div(1, 4) catch -1
+puts(valid) // expect: 0.250
+
+// catch should compose fine inside a larger expression
+puts(1 + (safe_div(1, 0) catch 0)) // expect: 1
