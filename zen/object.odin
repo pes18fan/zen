@@ -11,6 +11,7 @@ ObjType :: enum {
 	LIST,
 	MODULE,
 	NATIVE,
+	RESULT,
 	STRING,
 	UPVALUE,
 }
@@ -100,6 +101,13 @@ ObjModule :: struct {
 	values:    Table,
 }
 
+/* The result type. */
+ObjResult :: struct {
+	using obj: Obj,
+	is_ok:     bool,
+	value:     Value,
+}
+
 /* Return the type of an `Obj`. */
 obj_type :: #force_inline proc(value: Value) -> ObjType {
 	return as_obj(value).type
@@ -127,6 +135,10 @@ is_string :: #force_inline proc(value: Value) -> bool {
 
 is_module :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .MODULE)
+}
+
+is_result :: #force_inline proc(value: Value) -> bool {
+	return is_obj_type(value, .RESULT)
 }
 
 as_closure :: #force_inline proc(value: Value) -> ^ObjClosure {
@@ -161,6 +173,10 @@ as_module :: #force_inline proc(value: Value) -> ^ObjModule {
 	return (^ObjModule)(as_obj(value))
 }
 
+as_result :: #force_inline proc(value: Value) -> ^ObjResult {
+	return (^ObjResult)(as_obj(value))
+}
+
 is_obj_type :: #force_inline proc(value: Value, type: ObjType) -> bool {
 	return is_obj(value) && as_obj(value).type == type
 }
@@ -173,13 +189,15 @@ type_of_obj :: proc(obj: ^Obj) -> string {
 		return "list"
 	case .MODULE:
 		return "module"
+	case .RESULT:
+		return "result"
 	case .STRING:
 		return "string"
 	case .UPVALUE:
 		return "upvalue"
 	}
 
-	unreachable()
+	fmt.panicf("invalid object type %s", obj.type)
 }
 
 allocate_obj :: proc(
@@ -247,6 +265,13 @@ new_module :: proc(gc: ^GC, name: ^ObjString) -> ^ObjModule {
 	module.name = name
 	module.values = init_table()
 	return module
+}
+
+new_result :: proc(gc: ^GC, is_ok: bool, value: Value) -> ^ObjResult {
+	result := cast(^ObjResult)(allocate_obj(gc, ObjResult, .RESULT))
+	result.is_ok = is_ok
+	result.value = value
+	return result
 }
 
 new_native :: proc(gc: ^GC, function: NativeFn, arity: int) -> ^ObjNative {
@@ -359,10 +384,18 @@ stringify_object :: proc(obj: ^Obj) -> string {
 		}
 	case .MODULE:
 		return fmt.tprintf("<module %s>", as_module(obj_val(obj)).name.chars)
+	case .RESULT:
+		result := as_result(obj_val(obj))
+		within := stringify_value(result.value)
+		if result.is_ok {
+			return fmt.tprintf("ok(%s)", within)
+		} else {
+			return fmt.tprintf("err(%s)", within)
+		}
 	case .NATIVE:
 		return "<native func>"
 	case .STRING:
-		// return fmt.tprintf("\"%s\"", as_ostring(obj_val(obj))), false
+		// return fmt.tprintf("\"%s\"", as_ostring(obj_val(obj)))
 		return as_ostring(obj_val(obj))
 	case .UPVALUE:
 		return "upvalue"
@@ -399,6 +432,9 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 		module := (^ObjModule)(obj)
 		free_table(&module.values)
 		free(module)
+	case .RESULT:
+		result := (^ObjResult)(obj)
+		free(result)
 	case .NATIVE:
 		fn := (^ObjNative)(obj)
 		free(fn)

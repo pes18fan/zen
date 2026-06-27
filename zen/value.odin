@@ -252,9 +252,9 @@ stringify_value :: proc(value: Value) -> string {
 			return as_bool(value) ? "true" : "false"
 		} else if is_number(value) {
 			if is_integer(as_number(value)) {
-				return (fmt.tprintf("%d", int(as_number(value))))
+				return fmt.tprintf("%d", int(as_number(value)))
 			} else {
-				return (fmt.tprintf("%.3f", as_number(value)))
+				return fmt.tprintf("%.3f", as_number(value))
 			}
 		} else if is_obj(value) {
 			return stringify_object(as_obj(value))
@@ -265,9 +265,9 @@ stringify_value :: proc(value: Value) -> string {
 			return v ? "true" : "false"
 		case f64:
 			if is_integer(v) {
-				return (fmt.tprintf("%d", int(v)))
+				return fmt.tprintf("%d", int(v))
 			} else {
-				return (fmt.tprintf("%.3f", v))
+				return fmt.tprintf("%.3f", v)
 			}
 		case ^Obj:
 			return stringify_object(v)

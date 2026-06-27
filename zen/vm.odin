@@ -346,8 +346,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 		instruction := OpCode(read_byte(frame))
 
 		switch instruction {
-		case .OP_NOOP:
-		// Do nothing.
 		case .OP_CONSTANT:
 			constant := read_constant(frame)
 			vm_push(vm, constant)
@@ -863,6 +861,47 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					vm_panic(vm, "Can only iterate over lists, not %v.", type_of_value(iterable))
 					return .INTERPRET_RUNTIME_ERROR
 				}
+			}
+		case .OP_CHECK_RESULT_OK:
+			a := vm_peek(vm, 0)
+			if is_result(a) {
+				result := as_result(a)
+				if result.is_ok {
+					vm_push(vm, bool_val(true))
+				} else {
+					vm_push(vm, bool_val(false))
+				}
+			} else {
+				vm_panic(
+					vm,
+					"Can only use 'try' or 'catch' on a Result, not %v.",
+					type_of_value(a),
+				)
+				return .INTERPRET_RUNTIME_ERROR
+			}
+		case .OP_UNWRAP:
+			a := vm_pop(vm)
+			if !is_result(a) {
+				fmt.panicf("attempt to unwrap a non-Result")
+			}
+			result := as_result(a)
+
+			if result.is_ok {
+				vm_push(vm, result.value)
+			} else {
+				fmt.panicf("attempt to unwrap an Err variant")
+			}
+		case .OP_UNWRAP_ERR:
+			a := vm_pop(vm)
+			if !is_result(a) {
+				fmt.panicf("attempt to unwrap error out of a non-Result")
+			}
+			result := as_result(a)
+
+			if !result.is_ok {
+				vm_push(vm, result.value)
+			} else {
+				fmt.panicf("attempt to unwrap error out of an Ok variant")
 			}
 		case .OP_EXIT:
 			{

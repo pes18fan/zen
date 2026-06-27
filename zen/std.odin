@@ -119,6 +119,11 @@ GLOBAL_NATIVE_FN_NAMES := [?]string {
 	"copy",
 	"dirname",
 	"filename",
+
+	// result stuff
+	"ok",
+	"err",
+	"unwrap",
 }
 
 @(rodata)
@@ -134,10 +139,15 @@ GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
 	copy_native,
 	dirname_native,
 	filename_native,
+
+	// result stuff
+	ok_native,
+	err_native,
+	unwrap_native,
 }
 
 @(rodata)
-GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}
+GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1}
 
 #assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_NAMES))
 #assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_ARITIES))
@@ -204,15 +214,40 @@ copy_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return copy_value(vm.gc, args[0]), true
 }
 
+/* Return the name of the running program. Returns an empty string if in a REPL. */
+filename_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	return obj_val(copy_string(vm.gc, config.__path)), true
+}
+
 /* Return the directory containing the running program. Returns an empty string
  * if in a REPL. */
 dirname_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	return obj_val(copy_string(vm.gc, config.__dirname)), true
 }
 
-/* Return the name of the running program. Returns an empty string if in a REPL. */
-filename_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return obj_val(copy_string(vm.gc, config.__path)), true
+ok_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	result := new_result(vm.gc, is_ok = true, value = args[0])
+	return obj_val(result), true
+}
+
+err_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	result := new_result(vm.gc, is_ok = false, value = args[0])
+	return obj_val(result), true
+}
+
+unwrap_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_result(args[0]) {
+		vm_panic(vm, "Can only unwrap a Result, not a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	result := as_result(args[0])
+	if !result.is_ok {
+		vm_panic(vm, "Unwrapped an err variant.")
+		return nil_val(), false
+	}
+
+	return result.value, true
 }
 
 /* ---------- TIME ---------- */

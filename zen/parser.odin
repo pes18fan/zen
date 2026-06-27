@@ -14,6 +14,7 @@ Expr :: union #shared_nil {
 	^BinaryExpr,
 	^BlockExpr,
 	^BreakExpr,
+	^CatchExpr,
 	^CallExpr,
 	^ContinueExpr,
 	^DiscardExpr,
@@ -63,6 +64,13 @@ BlockExpr :: struct {
 
 BreakExpr :: struct {
 	token: Token,
+}
+
+CatchExpr :: struct {
+	token:    Token,
+	receiver: Expr,
+	captured: Maybe(Token),
+	fallback: Expr,
 }
 
 CallExpr :: struct {
@@ -260,7 +268,7 @@ Precedence :: enum {
 	NONE,
 	ASSIGNMENT, // =
 	PIPELINE, // |>
-	CONDITIONAL, // if switch
+	CONDITIONAL, // if switch orelse
 	OR, // or
 	AND, // and
 	EQUALITY, // == !=
@@ -652,7 +660,7 @@ parse_print :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_grouping :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	token := parser_previous(p)
 	expr := parse_expression(p)
-	parser_consume(p, .RPAREN, "Expect ')' after expression.")
+	parser_consume(p, .RPAREN, "Expect ')' after grouping expression.")
 	grouping := new(GroupingExpr)
 	grouping.token = token
 	grouping.expression = expr
@@ -834,7 +842,7 @@ parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		// VarDeclExpr
 		expr := new(VarDeclExpr)
 		expr.token = parser_previous(p)
-		expr.is_final = true // func decls are NOT reassignable
+		expr.is_final = false // func decls are reassignable
 		bindings := make([dynamic]VarBinding, 0)
 
 		func_binding: VarBinding
@@ -991,6 +999,22 @@ parse_binary :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	return binary
 }
 
+parse_catch :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+	catch := new(CatchExpr)
+	catch.token = parser_previous(p)
+	catch.receiver = left
+
+	if parser_match(p, .LPAREN) {
+		catch.captured = parser_consume(p, .IDENT, "Expect captured parameter.")
+		parser_consume(p, .RPAREN, "Expect ')' after captured parameter.")
+	} else {
+		catch.captured = nil
+	}
+
+	catch.fallback = parse_expression(p)
+	return catch
+}
+
 parse_call :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	call := new(CallExpr)
 	call.token = parser_previous(p) // The '(' token
@@ -1076,6 +1100,7 @@ rules: [TokenType]ParseRule = {
 	.AND           = {nil, parse_logical, .AND},
 	.BREAK         = {parse_break, nil, .NONE},
 	.CONTINUE      = {parse_continue, nil, .NONE},
+	.CATCH         = {nil, parse_catch, .CONDITIONAL},
 	.DISCARD       = {parse_discard, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
 	.EXIT          = {parse_exit, nil, .NONE},
@@ -1089,11 +1114,13 @@ rules: [TokenType]ParseRule = {
 	.NIL           = {parse_literal, nil, .NONE},
 	.NOT           = {parse_unary, nil, .NONE},
 	.OR            = {nil, parse_logical, .OR},
+	.ORELSE        = {nil, nil, .NONE},
 	.PRINT         = {parse_print, nil, .NONE},
 	.PUB           = {parse_pub, nil, .NONE},
 	.RETURN        = {parse_return, nil, .NONE},
 	.SWITCH        = {parse_switch_expr, nil, .CONDITIONAL},
 	.TRUE          = {parse_literal, nil, .NONE},
+	.TRY           = {nil, nil, .NONE},
 	.USE           = {parse_use_expr, nil, .NONE},
 	.WHILE         = {parse_while, nil, .NONE},
 	.WHILENT       = {parse_while, nil, .NONE},
@@ -1229,6 +1256,10 @@ free_expr :: proc(expr: Expr) {
 		free(e)
 	case ^BlockExpr:
 		free_expr(e.expression)
+		free(e)
+	case ^CatchExpr:
+		free_expr(e.receiver)
+		free_expr(e.fallback)
 		free(e)
 	case ^ContinueExpr:
 		free(e)
@@ -1393,6 +1424,18 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_indent(b, indent)
 		strings.write_string(b, "(block\n")
 		print_expr(b, e.expression, indent + 1)
+		print_indent(b, indent)
+		strings.write_string(b, ")\n")
+	case ^CatchExpr:
+		print_indent(b, indent)
+		strings.write_string(b, "(catch")
+		if captured_err, ok := e.captured.?; ok {
+			fmt.sbprintf(b, " as %s", captured_err.lexeme)
+		}
+		strings.write_string(b, "\n")
+		print_expr(b, e.receiver, indent + 1)
+		strings.write_string(b, "fallback ")
+		print_expr(b, e.fallback, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^CallExpr:

@@ -10,7 +10,6 @@ Note that the operation code is a byte, but the operation itself may consist of
 more than just one byte.
 */
 OpCode :: enum u8 {
-	OP_NOOP,
 	OP_CONSTANT,
 	OP_CONSTANT_LONG,
 	OP_NIL,
@@ -67,6 +66,9 @@ OpCode :: enum u8 {
 	OP_MODULE_USER,
 	OP_MODULE_USER_LONG,
 	OP_ITERATE,
+	OP_CHECK_RESULT_OK,
+	OP_UNWRAP,
+	OP_UNWRAP_ERR,
 	OP_EXIT,
 }
 

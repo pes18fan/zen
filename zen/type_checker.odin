@@ -99,6 +99,7 @@ TypeConstructor :: enum {
 	STRING,
 	FUNCTION,
 	LIST,
+	RESULT,
 	RECORD, // to be added
 }
 
@@ -116,6 +117,8 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 		return "Func"
 	case .LIST:
 		return "List"
+	case .RESULT:
+		return "Result"
 	case .RECORD:
 		return "Record"
 	}
@@ -154,6 +157,10 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionAp
 		assert(args != nil, "cannot have nil type args for a list type")
 		assert(len(args) == 1, "must have one type arg exactly for a list type")
 		return TypeFunctionApplication{constructor = constructor, args = slice.clone(args)}
+	case .RESULT:
+		assert(args != nil, "cannot have nil type args for a result type")
+		assert(len(args) == 2, "must have two type args exactly for a result type")
+		return TypeFunctionApplication{constructor = constructor, args = slice.clone(args)}
 	case .RECORD:
 		unimplemented()
 	}
@@ -169,7 +176,7 @@ free_type :: proc(type: ^Type) {
 	case TypeFunctionApplication:
 		switch t.constructor {
 		case .NUMBER, .STRING, .NIL, .BOOL: // nothing to free
-		case .FUNCTION, .LIST, .RECORD:
+		case .FUNCTION, .LIST, .RESULT, .RECORD:
 			for &arg in t.args {
 				free_type(&arg)
 			}
@@ -1066,6 +1073,47 @@ check_type :: proc(
 		s := try_unify(type, type_never, expected_expression_name) or_return
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
+	case ^CatchExpr:
+		tc.current_token = e.token
+		receiver := e.receiver
+		fallback := e.fallback
+		captured := e.captured
+
+		ok := fresh(tc)
+		err := fresh(tc)
+		result := tapp(.RESULT, {ok, err})
+		s1 := check_type(
+			tc,
+			receiver,
+			result,
+			fmt.tprintf("left operand to '%v'", e.token.lexeme),
+		) or_return
+		apply_substitution(s1, tc.ctx)
+
+		captures_err := false
+		if captured_err, ok := captured.?; ok {
+			captures_err = true
+			push_scope(tc.ctx)
+			bind_type(tc.ctx, captured_err.lexeme, apply_substitution(s1, err))
+		}
+		defer if captures_err {pop_scope(tc.ctx)}
+
+		s2 := check_type(
+			tc,
+			fallback,
+			apply_substitution(s1, ok),
+			fmt.tprintf("fallback value"),
+		) or_return
+		apply_substitution(s2, tc.ctx)
+		sn := try_unify(
+			type,
+			apply_substitution(combine_substitutions(s2, s1), ok),
+			expected_expression_name,
+		) or_return
+
+		s := combine_substitutions(sn, combine_substitutions(s2, s1))
+		add_to_typemap_after_substitution(tc, expr, s, type)
+		return s, nil
 	case ^CallExpr:
 		tc.current_token = e.token
 		callee := e.callee
@@ -1899,6 +1947,18 @@ get_builtin_function_signature :: proc(tc: ^TypeChecker, name: string) -> TypeSc
 		return tapp(.FUNCTION, {string_t})
 	case "filename":
 		return tapp(.FUNCTION, {string_t})
+	case "ok":
+		t := fresh(tc)
+		e := fresh(tc)
+		return tquant({t, e}, tapp(.FUNCTION, {t, tapp(.RESULT, {t, e})}))
+	case "err":
+		e := fresh(tc)
+		t := fresh(tc)
+		return tquant({t, e}, tapp(.FUNCTION, {e, tapp(.RESULT, {t, e})}))
+	case "unwrap":
+		t := fresh(tc)
+		e := fresh(tc)
+		return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), t}))
 	}
 
 	fmt.panicf("undefined global-scoped native function '%v'", name)

@@ -447,6 +447,65 @@ puts(normal())      //=> 1
 puts(discarder())   //=> nil
 ```
 
+## Error handling
+
+zen uses the builtin `Result` type for error handling. It is a type with one
+of two variants: `ok` or `err`.
+
+Either of these variants can be created using the builtin functions `ok`
+and `err`.
+
+```zen
+var k = ok(1)
+var e = err("some error")
+```
+
+The `unwrap` native function takes in a result and returns the value inside it
+if it is an `Ok` variant. If it is a `Err` variant, the function will panic.
+
+```
+unwrap(ok(1))   //=> 1
+unwrap(err("uh oh"))   //=> panic: Unwrapped an Err variant.
+```
+
+Of course, you wouldn't wanna panic everytime an error happens! Therefore,
+zen also provides the `catch` operator which either unwraps the value inside
+the variant if it is `ok`, or returns a fallback value if the variant is `err`.
+The fallback value must be the same as the value within the `ok` variant.
+
+```zen
+ok(1) catch 0  //=> 1
+err("messed up") catch "problems"  //=> "problems"
+```
+
+You can also add a capture parameter after `catch` to capture the value `err`
+inside an error. The parameter can be referenced inside the fallback expression
+so that you can do custom handling for the error.
+
+```zen
+err("problem happened") catch(e) {
+    val str = "had error: " .. e
+    puts(str)
+}
+```
+
+Here is an example of a safe division function implemented using results.
+
+```zen
+func safe_div(a, b) {
+    if b == 0 {
+        err("cannot divide by zero")
+    } else {
+        ok(a / b)
+    }
+}
+
+val invalid = safe_div(1, 0) catch(e) { 
+    puts("division error: " .. e)
+    0
+}
+```
+
 ## Standard library
 
 zen's standard library contains various modules and some globally available functions

@@ -1,0 +1,3 @@
+// catch's left-hand side must be a Result[a, b], not a bare value.
+val x = 5
+x catch 10 // ERR: Expected left operand to 'catch' to be of type Result[a, b], got Number.

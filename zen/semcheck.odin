@@ -111,6 +111,16 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			semantic_error(sm, "Cannot break outside a loop.")
 			return false
 		}
+	case ^CatchExpr:
+		sm.current_token = e.token
+		semcheck_expr(sm, e.receiver) or_return
+		if e.captured != nil {
+			begin_semantic_scope(sm)
+		}
+		semcheck_expr(sm, e.fallback) or_return
+		if e.captured != nil {
+			end_semantic_scope(sm)
+		}
 	case ^CallExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.callee) or_return
@@ -236,11 +246,6 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		sm.current_token = e.token
 		if sm.current_compiler.func_type == .SCRIPT {
 			semantic_error(sm, "Cannot return from the top level.")
-			return false
-		}
-
-		if e.value != nil && sm.current_compiler.func_type == .INITIALIZER {
-			semantic_error(sm, "Cannot return a value from an initializer.")
 			return false
 		}
 

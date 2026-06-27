@@ -8,7 +8,7 @@ if exists("b:current_syntax")
 endif
 
 " Keywords
-syn keyword zenKeyword use var val print func return pub exit discard in
+syn keyword zenKeyword use var val print func return pub exit discard in try catch
 syn keyword zenConditional if else switch
 syn keyword zenRepeat while for break continue
 syn keyword zenRepeat for
