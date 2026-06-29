@@ -722,11 +722,14 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 UnificationError :: enum {
 	INFINITE_TYPE,
 	MISMATCH,
+	NEVER_MISMATCH,
 }
 
 // tries to unify an expected type with another given one
 // done to provide nicer error messages as just applying unify() makes it
 // unclear which is the expected type
+// also handles the Never type which needs to know what is the expected type
+// to work soundly
 // NOTE: try_unify() is directional and NOT commutative, unlike unify() which is
 @(require_results)
 try_unify :: proc(
@@ -737,14 +740,21 @@ try_unify :: proc(
 	Substitution,
 	ErrorMessage,
 ) {
-	// this needs to be done at this level because `Never` should ideally unify with
-	// anything unless it is an expected type
-	if is_type_never(expected) && !is_type_never(checking) && !is_type_variable(checking) {
-		return nil, fmt.tprintf(
-			"Expected a diverging expression of type %v, got %v.",
-			type_string(expected, false),
-			type_string(checking, false),
-		)
+	// allow Never to unify with anything if it is the type we're checking
+	// for conformation; but disallow that if we are expecting it as a
+	// result
+	if is_type_never(checking) {
+		when ODIN_DEBUG {
+			if config.log_type {
+				fmt.eprintfln(
+					"-- unify %v with %v trivially",
+					type_string(expected, true),
+					type_string(checking, true),
+				)
+			}
+		}
+
+		return nil, nil
 	}
 
 	subst, err := unify(expected, checking)
@@ -763,16 +773,61 @@ try_unify :: proc(
 				type_string(expected, false),
 				type_string(checking, false),
 			)
+		case .NEVER_MISMATCH:
+			return nil, fmt.tprintf(
+				"Expected %v to be a diverging expression of type %v, got %v.",
+				expected_expression_name if expected_expression_name != "" else "expression",
+				type_string(expected, false),
+				type_string(checking, false),
+			)
 		}
 	}
 
 	return subst, nil
 }
 
+/* Wrapper for `unify` used for branching constructs like `if` and `switch`,
+allows for the Never type to stand in any of those branches. */
+join :: proc(
+	a: Type,
+	b: Type,
+	expected_expression_name: string,
+) -> (
+	subst: Substitution,
+	type: Type,
+	err: ErrorMessage,
+) {
+	if is_type_never(a) {
+		return nil, b, nil
+	}
+
+	if is_type_never(b) {
+		return nil, a, nil
+	}
+
+	s, uni_err := unify(a, b)
+	if uni_err != nil {
+		switch uni_err {
+		case .INFINITE_TYPE:
+			return nil, {}, fmt.tprintf("Cannot unify type %v with %v as that would require an infinite type.", type_string(a, false), type_string(b, false))
+		case .MISMATCH:
+			return nil, {}, fmt.tprintf("Type %v in %v is not compatible with type %v.", type_string(b, false), expected_expression_name if expected_expression_name != "" else "expression", type_string(a, false))
+		case .NEVER_MISMATCH:
+			fmt.panicf("got a never mismatch in join()")
+		}
+	}
+	return s, apply_substitution(s, a), nil
+}
+
 // allocates a map
 @(require_results)
 unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationError)) {
 	if is_type_any(a) {
+		// The only thing Any cannot unify with is Never.
+		if is_type_never(b) {
+			return nil, .NEVER_MISMATCH
+		}
+
 		when ODIN_DEBUG {
 			if config.log_type {
 				fmt.eprintfln(
@@ -797,36 +852,6 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 	}
 
 	if is_type_any(b) {
-		return unify(b, a)
-	}
-
-	if is_type_never(a) {
-		when ODIN_DEBUG {
-			if config.log_type {
-				fmt.eprintfln(
-					"-- unify %v with %v trivially",
-					type_string(a, true),
-					type_string(b, true),
-				)
-			}
-		}
-
-		// Never also unifies with anything, but it does NOT turn the other
-		// type into never itself.
-		// TODO: one problem with this approach is that it is actually a bit
-		// of a hack. Because `Never` does not ever get into the context because
-		// it doesn't turn anything into itself, we lose the information of a
-		// type being `Never`. This is actually fine for correctness because
-		// the thing will diverge anyways; but this loss of type info means
-		// that potential compile-time optimizations based on branches and
-		// function return values being `Never` cannot be done unless someone
-		// explicitly annotates something as `Never`, which few will probably do.
-		// The fix to this conundrum is proper subtyping, but that is a nontrivial
-		// extension to base Hindley-Milner. A project for later on.
-		return nil, nil
-	}
-
-	if is_type_never(b) {
 		return unify(b, a)
 	}
 
@@ -870,6 +895,30 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		return unify(b, a)
 	}
 
+	if is_type_never(a) {
+		// Never is treated the exact same way as a nullary type function
+		// application in commutative/non-directional unification.
+		if !is_type_never(b) {
+			return nil, .NEVER_MISMATCH
+		}
+
+		when ODIN_DEBUG {
+			if config.log_type {
+				fmt.eprintfln(
+					"-- unify %v with %v trivially",
+					type_string(a, true),
+					type_string(b, true),
+				)
+			}
+		}
+
+		return nil, nil
+	}
+
+	if is_type_never(b) {
+		return unify(b, a)
+	}
+
 	if is_type_function_application(a) && is_type_function_application(b) {
 		t1 := as_type_function_application(a)
 		t2 := as_type_function_application(b)
@@ -905,14 +954,6 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 	}
 
 	panic("unreachable point in unify()")
-}
-
-type_mismatch_string :: proc(want: Type, got: Type) -> string {
-	return fmt.tprintf(
-		"Expected expression of type %v, got %v",
-		type_string(want, false),
-		type_string(got, false),
-	)
 }
 
 typecheck_error :: proc(tc: ^TypeChecker, message: string) {
@@ -1232,15 +1273,17 @@ check_type :: proc(
 
 		if e.else_branch != nil {
 			// both branches must return same type
-			s3 := check_type(tc, e.else_branch.expression, then_type, "else branch") or_return
+			s3, else_type := infer_type(tc, e.else_branch.expression) or_return
 			apply_substitution(s3, tc.ctx)
 			s = combine_substitutions(s3, s)
-			s4 := try_unify(
-				type,
+			s4, joined := join(
 				apply_substitution(s, then_type),
-				expected_expression_name,
+				else_type,
+				"if expression branch",
 			) or_return
 			s = combine_substitutions(s4, s)
+			sn := try_unify(type, joined, expected_expression_name) or_return
+			s = combine_substitutions(sn, s)
 		} else {
 			// evaluate to nil if no else branch
 			sn := try_unify(
@@ -1540,6 +1583,7 @@ check_type :: proc(
 			cond_type = tapp(.BOOL)
 		}
 
+		switch_result_type: Type = fresh(tc)
 		apply_substitution(s, tc.ctx)
 		for c in e.cases {
 			s1 := check_type(
@@ -1550,18 +1594,17 @@ check_type :: proc(
 			) or_return
 			s = combine_substitutions(s1, s)
 			apply_substitution(s, tc.ctx)
-			s2 := check_type(tc, c.body, apply_substitution(s, type), "switch result") or_return
+			s2, case_type := infer_type(tc, c.body) or_return
 			s = combine_substitutions(s2, s)
+			s3, joined := join(switch_result_type, case_type, "switch result") or_return
+			switch_result_type = joined
+			s = combine_substitutions(s3, s)
 			apply_substitution(s, tc.ctx)
 		}
-		s_else := check_type(
-			tc,
-			e.else_branch,
-			apply_substitution(s, type),
-			"else branch",
-		) or_return
-
+		s_else, type_else := infer_type(tc, e.else_branch) or_return
 		s = combine_substitutions(s_else, s)
+		sn, _ := join(switch_result_type, type_else, "else branch") or_return
+		s = combine_substitutions(sn, s)
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^UnaryExpr:

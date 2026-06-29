@@ -1,1 +1,1 @@
-func(k): Never => 1     // ERR: Expected a diverging expression of type Never, got Number.
+func(k): Never => 1     // ERR: Expected function body to be a diverging expression of type Never, got Number.

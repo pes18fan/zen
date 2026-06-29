@@ -561,6 +561,8 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 
 		constructor := parser_advance(p)
 		switch constructor.lexeme {
+		case "Never":
+			type = type_never
 		case "Nil":
 			type = tapp(.NIL)
 		case "Bool":
@@ -576,8 +578,6 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 			type = tapp(.LIST, {inner_type})
 		case "Any":
 			type = type_any
-		case "Never":
-			type = type_never
 		case:
 			parser_error(p, parser_previous(p), "Invalid type annotation.")
 			return {}

@@ -1,1 +1,1 @@
-func(): Never => puts("hi")     // ERR: Expected a diverging expression of type Never, got Nil.
+func(): Never => puts("hi")     // ERR: Expected function body to be a diverging expression of type Never, got Nil.
