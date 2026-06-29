@@ -1118,7 +1118,6 @@ check_type :: proc(
 		tc.current_token = e.token
 		receiver := e.receiver
 		fallback := e.fallback
-		captured := e.captured
 
 		ok := fresh(tc)
 		err := fresh(tc)
@@ -1131,14 +1130,6 @@ check_type :: proc(
 		) or_return
 		apply_substitution(s1, tc.ctx)
 
-		captures_err := false
-		if captured_err, ok := captured.?; ok {
-			captures_err = true
-			push_scope(tc.ctx)
-			bind_type(tc.ctx, captured_err.lexeme, apply_substitution(s1, err))
-		}
-		defer if captures_err {pop_scope(tc.ctx)}
-
 		s2 := check_type(
 			tc,
 			fallback,
@@ -1146,12 +1137,12 @@ check_type :: proc(
 			fmt.tprintf("fallback value"),
 		) or_return
 		apply_substitution(s2, tc.ctx)
+
 		sn := try_unify(
 			type,
 			apply_substitution(combine_substitutions(s2, s1), ok),
 			expected_expression_name,
 		) or_return
-
 		s := combine_substitutions(sn, combine_substitutions(s2, s1))
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
