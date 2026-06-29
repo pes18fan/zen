@@ -111,10 +111,6 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			semantic_error(sm, "Cannot break outside a loop.")
 			return false
 		}
-	case ^CatchExpr:
-		sm.current_token = e.token
-		semcheck_expr(sm, e.receiver) or_return
-		semcheck_expr(sm, e.fallback) or_return
 	case ^CallExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.callee) or_return

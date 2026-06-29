@@ -14,7 +14,6 @@ Expr :: union #shared_nil {
 	^BinaryExpr,
 	^BlockExpr,
 	^BreakExpr,
-	^CatchExpr,
 	^CallExpr,
 	^ContinueExpr,
 	^DiscardExpr,
@@ -64,12 +63,6 @@ BlockExpr :: struct {
 
 BreakExpr :: struct {
 	token: Token,
-}
-
-CatchExpr :: struct {
-	token:    Token,
-	receiver: Expr,
-	fallback: Expr,
 }
 
 CallExpr :: struct {
@@ -998,14 +991,6 @@ parse_binary :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	return binary
 }
 
-parse_catch :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
-	catch := new(CatchExpr)
-	catch.token = parser_previous(p)
-	catch.receiver = left
-	catch.fallback = parse_expression(p)
-	return catch
-}
-
 parse_call :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	call := new(CallExpr)
 	call.token = parser_previous(p) // The '(' token
@@ -1091,7 +1076,7 @@ rules: [TokenType]ParseRule = {
 	.AND           = {nil, parse_logical, .AND},
 	.BREAK         = {parse_break, nil, .NONE},
 	.CONTINUE      = {parse_continue, nil, .NONE},
-	.CATCH         = {nil, parse_catch, .CONDITIONAL},
+	.CATCH         = {nil, nil, .CONDITIONAL},
 	.DISCARD       = {parse_discard, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
 	.EXIT          = {parse_exit, nil, .NONE},
@@ -1247,10 +1232,6 @@ free_expr :: proc(expr: Expr) {
 		free(e)
 	case ^BlockExpr:
 		free_expr(e.expression)
-		free(e)
-	case ^CatchExpr:
-		free_expr(e.receiver)
-		free_expr(e.fallback)
 		free(e)
 	case ^ContinueExpr:
 		free(e)
@@ -1415,14 +1396,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_indent(b, indent)
 		strings.write_string(b, "(block\n")
 		print_expr(b, e.expression, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^CatchExpr:
-		print_indent(b, indent)
-		strings.write_string(b, "(catch\n")
-		print_expr(b, e.receiver, indent + 1)
-		strings.write_string(b, "fallback ")
-		print_expr(b, e.fallback, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^CallExpr:

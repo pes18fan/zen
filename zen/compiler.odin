@@ -1122,28 +1122,6 @@ compile_continue_expression :: proc(cg: ^Codegen, e: ^ContinueExpr) -> bool {
 }
 
 @(require_results)
-compile_catch_expression :: proc(cg: ^Codegen, e: ^CatchExpr) -> bool {
-	receiver := e.receiver
-	fallback := e.fallback
-
-	compile_expression(cg, receiver) or_return
-
-	emit_opcode(cg, .OP_CHECK_RESULT_OK)
-	ok_jump := emit_jump(cg, .OP_JUMP_IF_TRUE)
-
-	emit_pop(cg) // Result check.
-	emit_pop(cg) // `err` variant.
-	compile_expression(cg, fallback) or_return
-	exit_jump := emit_jump(cg, .OP_JUMP)
-
-	try(cg, patch_jump(cg, ok_jump)) or_return
-	emit_pop(cg) // Result check.
-	emit_opcode(cg, .OP_UNWRAP) // Pops the Ok variant and pushes the value in it.
-	try(cg, patch_jump(cg, exit_jump)) or_return
-	return true
-}
-
-@(require_results)
 compile_var_declaration :: proc(
 	cg: ^Codegen,
 	e: ^VarDeclExpr,
@@ -1252,9 +1230,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		case:
 			fmt.panicf("Invalid binary operator '%s'", e.operator.lexeme)
 		}
-	case ^CatchExpr:
-		cg.current_token = e.token
-		compile_catch_expression(cg, e) or_return
 	case ^BreakExpr:
 		cg.current_token = e.token
 		compile_break_expression(cg, e) or_return
