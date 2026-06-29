@@ -11,7 +11,7 @@ boundaries to respect.
 | Branch | Purpose |
 |---|---|
 | `main` | Stable: no type inference |
-| `typechecker` | Active: HM type inference (`TYPE_CHECK :: true` at `zen/vm.odin:1062`), classes & OOP fully removed from language |
+| `typechecker` | Active: HM type inference (`TYPE_CHECK :: true` at `zen/vm.odin:1042`), classes & OOP fully removed from language |
 
 ## Build
 
@@ -95,7 +95,8 @@ Man page: `pandoc -s -t man ./etc/zen.1.md -o zen.1`
 
 - Type inference is **gated on user-defined modules**: if a program uses
   `use` with a `.USER` module, the typechecker is skipped entirely
-  (`has_user_modules` in `zen/semcheck.odin:356` — forced by the lack of a
-  module resolution pass after parsing). This is the next thing to fix.
+  (`has_user_modules` proc at `zen/semcheck.odin:350`, called at
+  `zen/vm.odin:1038-1046` — forced by the lack of a module resolution pass
+  after parsing). This is the next thing to fix.
 - The `plans.md` file in the repo root has concrete next steps for module
   resolution and codegen refactoring.

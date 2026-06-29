@@ -1,0 +1,1 @@
+puts(not 42) // ERR: Expected operand to 'not' to be of type Bool, got Number.
