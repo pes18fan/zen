@@ -275,10 +275,6 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.expression) or_return
 	case ^BreakExpr:
 		rs.current_token = e.token
-	case ^CatchExpr:
-		rs.current_token = e.token
-		resolve_with_resolver(rs, e.receiver) or_return
-		resolve_with_resolver(rs, e.fallback) or_return
 	case ^CallExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.callee) or_return
