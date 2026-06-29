@@ -89,12 +89,12 @@ print_error :: #force_inline proc(token: Token, message: string) {
 	}
 
 	source_line := token_line(token)
-	fmt.eprintln(color_blue("  | "))
+	fmt.eprintln(color_blue(" |\t"))
 
-	fmt.eprintf(color_blue("%d | "), token.position.line)
+	fmt.eprintf(color_blue(" %d\t"), token.position.line)
 	fmt.eprintfln("%s", source_line)
 
-	fmt.eprint(color_blue("  | "))
+	fmt.eprint(color_blue(" |\t"))
 	for _ in 0 ..< token.position.column - 1 {
 		fmt.eprint(" ")
 	}

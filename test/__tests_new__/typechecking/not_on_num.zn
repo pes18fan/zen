@@ -1,1 +1,0 @@
-puts(not 42) // expect: false

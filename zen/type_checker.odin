@@ -1256,7 +1256,7 @@ check_type :: proc(
 		return s, nil
 	case ^IfExpr:
 		tc.current_token = e.token
-		s1, _ := infer_type(tc, e.condition) or_return // the condition can be any value
+		s1 := check_type(tc, e.condition, tapp(.BOOL), "if condition") or_return // the condition can be any value
 		apply_substitution(s1, tc.ctx)
 		s2, then_type := infer_type(tc, e.then_branch.expression) or_return
 		apply_substitution(s2, tc.ctx)
@@ -1333,12 +1333,22 @@ check_type :: proc(
 		return s, nil
 	case ^LogicalExpr:
 		tc.current_token = e.token
-		s1, _ := infer_type(tc, e.left) or_return
+		bool_ := tapp(.BOOL)
+		s1 := check_type(
+			tc,
+			e.left,
+			bool_,
+			fmt.tprintf("left operand to '%v'", e.operator.lexeme),
+		) or_return
 		apply_substitution(s1, tc.ctx)
-		s2, _ := infer_type(tc, e.right) or_return
+		s2 := check_type(
+			tc,
+			e.right,
+			bool_,
+			fmt.tprintf("right operand to '%v'", e.operator.lexeme),
+		) or_return
 		apply_substitution(s2, tc.ctx)
-		sn := try_unify(type, tapp(.BOOL), expected_expression_name) or_return
-
+		sn := try_unify(type, bool_, expected_expression_name) or_return
 		s := combine_substitutions(sn, combine_substitutions(s2, s1))
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
@@ -1608,7 +1618,7 @@ check_type :: proc(
 			sn := try_unify(type, tapp(.NUMBER), expected_expression_name) or_return
 			s = combine_substitutions(sn, s)
 		case .NOT:
-			s, _ = infer_type(tc, e.right) or_return
+			s = check_type(tc, e.right, tapp(.BOOL), "operand to 'not'") or_return
 			sn := try_unify(type, tapp(.BOOL), expected_expression_name) or_return
 			s = combine_substitutions(sn, s)
 		case:
