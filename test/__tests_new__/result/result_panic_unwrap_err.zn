@@ -1,3 +1,5 @@
 // unwrap on an err variant should panic rather than return a value.
-val e = err("some error")
-unwrap(e) // ERR: Unwrapped an err variant
+use "result"
+
+val e = result.err("some error")
+result.unwrap(e) // ERR: Unwrapped an err variant

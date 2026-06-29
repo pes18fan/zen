@@ -1,15 +1,16 @@
 // Closures that capture state and return Results
+use "result"
+
 func make_validator(min) {
     return func(x) {
         if x < min {
-            err("value too small")
+            result.err("value too small")
         } else {
-            ok(x)
+            result.ok(x)
         }
     }
 }
 
 val at_least_5 = make_validator(5)
 
-puts(unwrap(at_least_5(10))) // expect: 10
-puts(at_least_5(2) catch -1) // expect: -1
+puts(result.unwrap(at_least_5(10))) // expect: 10

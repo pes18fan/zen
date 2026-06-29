@@ -1,3 +1,5 @@
 // unwrap should only accept a Result[a, b], not a bare value.
+use "result"
+
 val x = 5
-unwrap(x) // ERR: Expected argument to be of type Result[a, b], got Number.
+result.unwrap(x) // ERR: Expected argument to be of type Result[a, b], got Number.
