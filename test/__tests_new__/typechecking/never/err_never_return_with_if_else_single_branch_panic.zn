@@ -1,1 +1,1 @@
-func(): Never => if true { 1 } else { panic("b") }  // ERR: Expected a diverging expression of type Never, got Number.
+func(): Never => if true { 1 } else { panic("b") }  // ERR: Expected function body to be a diverging expression of type Never, got Number.
