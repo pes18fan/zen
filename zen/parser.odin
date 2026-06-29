@@ -69,7 +69,6 @@ BreakExpr :: struct {
 CatchExpr :: struct {
 	token:    Token,
 	receiver: Expr,
-	captured: Maybe(Token),
 	fallback: Expr,
 }
 
@@ -1003,14 +1002,6 @@ parse_catch :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	catch := new(CatchExpr)
 	catch.token = parser_previous(p)
 	catch.receiver = left
-
-	if parser_match(p, .LPAREN) {
-		catch.captured = parser_consume(p, .IDENT, "Expect captured parameter.")
-		parser_consume(p, .RPAREN, "Expect ')' after captured parameter.")
-	} else {
-		catch.captured = nil
-	}
-
 	catch.fallback = parse_expression(p)
 	return catch
 }
@@ -1428,11 +1419,7 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^CatchExpr:
 		print_indent(b, indent)
-		strings.write_string(b, "(catch")
-		if captured_err, ok := e.captured.?; ok {
-			fmt.sbprintf(b, " as %s", captured_err.lexeme)
-		}
-		strings.write_string(b, "\n")
+		strings.write_string(b, "(catch\n")
 		print_expr(b, e.receiver, indent + 1)
 		strings.write_string(b, "fallback ")
 		print_expr(b, e.fallback, indent + 1)

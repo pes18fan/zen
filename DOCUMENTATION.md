@@ -478,17 +478,6 @@ ok(1) catch 0  //=> 1
 err("messed up") catch "problems"  //=> "problems"
 ```
 
-You can also add a capture parameter after `catch` to capture the value `err`
-inside an error. The parameter can be referenced inside the fallback expression
-so that you can do custom handling for the error.
-
-```zen
-err("problem happened") catch(e) {
-    val str = "had error: " .. e
-    puts(str)
-}
-```
-
 Here is an example of a safe division function implemented using results.
 
 ```zen
@@ -500,10 +489,7 @@ func safe_div(a, b) {
     }
 }
 
-val invalid = safe_div(1, 0) catch(e) { 
-    puts("division error: " .. e)
-    0
-}
+val invalid = safe_div(1, 0) catch(e) -1
 ```
 
 ## Standard library

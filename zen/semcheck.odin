@@ -114,13 +114,7 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 	case ^CatchExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.receiver) or_return
-		if e.captured != nil {
-			begin_semantic_scope(sm)
-		}
 		semcheck_expr(sm, e.fallback) or_return
-		if e.captured != nil {
-			end_semantic_scope(sm)
-		}
 	case ^CallExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.callee) or_return

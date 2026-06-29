@@ -1125,40 +1125,20 @@ compile_continue_expression :: proc(cg: ^Codegen, e: ^ContinueExpr) -> bool {
 compile_catch_expression :: proc(cg: ^Codegen, e: ^CatchExpr) -> bool {
 	receiver := e.receiver
 	fallback := e.fallback
-	captured := e.captured
 
 	compile_expression(cg, receiver) or_return
 
 	emit_opcode(cg, .OP_CHECK_RESULT_OK)
-	jump := emit_jump(cg, .OP_JUMP_IF_TRUE)
-
-	captures_err := false
-	capture_slot := -1
-	if captured_err, ok := captured.?; ok {
-		captures_err = true
-		emit_pop(cg) // Result check.
-		emit_opcode(cg, .OP_UNWRAP_ERR) // Pops the Err variant and pushes the value in it.
-		begin_scope(cg)
-		try(cg, declare_variable(cg, captured_err, is_final = true)) or_return
-		mark_initialized(cg)
-		capture_slot = cg.current_compiler.local_count - 1
-		emit_instruction(cg, .OP_SET_LOCAL, byte(capture_slot))
-	} else {
-		emit_popn(cg, 2) // Result check and Err variant.
-	}
-	compile_expression(cg, fallback) or_return
-	if captures_err {
-		emit_opcode(cg, .OP_SET_SAVE) // Save fallback result.
-		end_scope(cg)
-		emit_opcode(cg, .OP_GET_SAVE) // Restore fallback result.
-	}
-	exit_jump := emit_jump(cg, .OP_JUMP)
-
-	try(cg, patch_jump(cg, jump)) or_return
+	ok_jump := emit_jump(cg, .OP_JUMP_IF_TRUE)
 
 	emit_pop(cg) // Result check.
-	emit_opcode(cg, .OP_UNWRAP) // Pops the Ok variant and pushes the value in it.
+	emit_pop(cg) // `err` variant.
+	compile_expression(cg, fallback) or_return
+	exit_jump := emit_jump(cg, .OP_JUMP)
 
+	try(cg, patch_jump(cg, ok_jump)) or_return
+	emit_pop(cg) // Result check.
+	emit_opcode(cg, .OP_UNWRAP) // Pops the Ok variant and pushes the value in it.
 	try(cg, patch_jump(cg, exit_jump)) or_return
 	return true
 }
