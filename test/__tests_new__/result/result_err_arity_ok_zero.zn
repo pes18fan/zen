@@ -1,2 +1,4 @@
-// Ok takes exactly one argument.
-ok() // ERR: Expected called function to be of type () -> a, got (a) -> Result[a, b].
+// ok takes exactly one argument.
+use "result"
+
+result.ok() // ERR: Expected 1 argument for 'ok' but got 0.
