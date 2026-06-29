@@ -722,7 +722,6 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 UnificationError :: enum {
 	INFINITE_TYPE,
 	MISMATCH,
-	NEVER_MISMATCH,
 }
 
 // tries to unify an expected type with another given one
@@ -767,17 +766,35 @@ try_unify :: proc(
 				type_string(expected, false),
 			)
 		case .MISMATCH:
+			if is_type_function_application(expected) && is_type_function_application(checking) {
+				t1 := as_type_function_application(expected)
+				t2 := as_type_function_application(checking)
+
+				if t1.constructor == .FUNCTION &&
+				   t2.constructor == .FUNCTION &&
+				   len(t1.args) != len(t2.args) {
+					expected_count := len(t1.args) - 1
+					checking_count := len(t2.args) - 1
+					name :=
+						expected_expression_name if expected_expression_name != "" else "function"
+
+					return nil, fmt.tprintf(
+						"Expected %d argument%s for %v but got %d.",
+						checking_count,
+						"" if checking_count == 1 else "s",
+						name,
+						expected_count,
+					)
+				}
+			}
+
+			never_string := type_string(type_never, false)
+			expected_type_string := type_string(expected, false)
+
 			return nil, fmt.tprintf(
-				"Expected %v to be of type %v, got %v.",
+				"Expected %v to be %v, got %v.",
 				expected_expression_name if expected_expression_name != "" else "expression",
-				type_string(expected, false),
-				type_string(checking, false),
-			)
-		case .NEVER_MISMATCH:
-			return nil, fmt.tprintf(
-				"Expected %v to be a diverging expression of type %v, got %v.",
-				expected_expression_name if expected_expression_name != "" else "expression",
-				type_string(expected, false),
+				fmt.tprintf("a diverging expression of type %v", never_string) if expected_type_string == never_string else fmt.tprintf("of type %v", expected_type_string),
 				type_string(checking, false),
 			)
 		}
@@ -812,8 +829,6 @@ join :: proc(
 			return nil, {}, fmt.tprintf("Cannot unify type %v with %v as that would require an infinite type.", type_string(a, false), type_string(b, false))
 		case .MISMATCH:
 			return nil, {}, fmt.tprintf("Type %v in %v is not compatible with type %v.", type_string(b, false), expected_expression_name if expected_expression_name != "" else "expression", type_string(a, false))
-		case .NEVER_MISMATCH:
-			fmt.panicf("got a never mismatch in join()")
 		}
 	}
 	return s, apply_substitution(s, a), nil
@@ -825,7 +840,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 	if is_type_any(a) {
 		// The only thing Any cannot unify with is Never.
 		if is_type_never(b) {
-			return nil, .NEVER_MISMATCH
+			return nil, .MISMATCH
 		}
 
 		when ODIN_DEBUG {
@@ -899,7 +914,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		// Never is treated the exact same way as a nullary type function
 		// application in commutative/non-directional unification.
 		if !is_type_never(b) {
-			return nil, .NEVER_MISMATCH
+			return nil, .MISMATCH
 		}
 
 		when ODIN_DEBUG {
@@ -966,7 +981,7 @@ is_value :: proc(expr: Expr) -> bool {
 	if expr == nil {return false}
 
 	#partial switch e in expr {
-	case ^LiteralExpr, ^FunctionExpr, ^VariableExpr:
+	case ^LiteralExpr, ^FunctionExpr, ^VariableExpr, ^GetExpr:
 		return true
 	case ^ListExpr:
 		// technically a value but due to its mutability, it is kept as a non-value
@@ -1114,38 +1129,6 @@ check_type :: proc(
 		s := try_unify(type, type_never, expected_expression_name) or_return
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
-	case ^CatchExpr:
-		tc.current_token = e.token
-		receiver := e.receiver
-		fallback := e.fallback
-
-		ok := fresh(tc)
-		err := fresh(tc)
-		result := tapp(.RESULT, {ok, err})
-		s1 := check_type(
-			tc,
-			receiver,
-			result,
-			fmt.tprintf("left operand to '%v'", e.token.lexeme),
-		) or_return
-		apply_substitution(s1, tc.ctx)
-
-		s2 := check_type(
-			tc,
-			fallback,
-			apply_substitution(s1, ok),
-			fmt.tprintf("fallback value"),
-		) or_return
-		apply_substitution(s2, tc.ctx)
-
-		sn := try_unify(
-			type,
-			apply_substitution(combine_substitutions(s2, s1), ok),
-			expected_expression_name,
-		) or_return
-		s := combine_substitutions(sn, combine_substitutions(s2, s1))
-		add_to_typemap_after_substitution(tc, expr, s, type)
-		return s, nil
 	case ^CallExpr:
 		tc.current_token = e.token
 		callee := e.callee
@@ -1170,7 +1153,18 @@ check_type :: proc(
 		s := make(Substitution)
 
 		// check called function's type
-		s_callee := check_type(tc, callee, func_type, "called function") or_return
+		callee_name := "called value"
+		#partial switch e in callee {
+		case ^VariableExpr:
+			callee_name = fmt.tprintf("'%s'", e.name.lexeme)
+		case ^FunctionExpr:
+			if fn_name, ok := e.bound_to.?; ok {
+				callee_name = fmt.tprintf("function '%s'", fn_name.lexeme)
+			}
+		case ^GetExpr:
+			callee_name = fmt.tprintf("'%s'", e.property.lexeme)
+		}
+		s_callee := check_type(tc, callee, func_type, callee_name) or_return
 		apply_substitution(s_callee, tc.ctx)
 		s = combine_substitutions(s_callee, s)
 
@@ -1945,6 +1939,21 @@ get_module_function_signature :: proc(
 		case "asciinum":
 			return tapp(.FUNCTION, {string_t, number_t}), nil
 		}
+	case .RESULT:
+		switch fn_name {
+		case "ok":
+			t := fresh(tc)
+			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {t, tapp(.RESULT, {t, e})})), nil
+		case "err":
+			e := fresh(tc)
+			t := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {e, tapp(.RESULT, {t, e})})), nil
+		case "unwrap":
+			t := fresh(tc)
+			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), t})), nil
+		}
 	}
 
 	return {}, fmt.tprintf("Function '%v' does not exist in builtin module '%v'.", fn_name, builtin_module_name_from_value(module))
@@ -1991,18 +2000,6 @@ get_builtin_function_signature :: proc(tc: ^TypeChecker, name: string) -> TypeSc
 		return tapp(.FUNCTION, {string_t})
 	case "filename":
 		return tapp(.FUNCTION, {string_t})
-	case "ok":
-		t := fresh(tc)
-		e := fresh(tc)
-		return tquant({t, e}, tapp(.FUNCTION, {t, tapp(.RESULT, {t, e})}))
-	case "err":
-		e := fresh(tc)
-		t := fresh(tc)
-		return tquant({t, e}, tapp(.FUNCTION, {e, tapp(.RESULT, {t, e})}))
-	case "unwrap":
-		t := fresh(tc)
-		e := fresh(tc)
-		return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), t}))
 	}
 
 	fmt.panicf("undefined global-scoped native function '%v'", name)
