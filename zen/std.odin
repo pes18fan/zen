@@ -16,6 +16,7 @@ BuiltinModule :: enum {
 	OS,
 	STRING,
 	LIST,
+	RESULT,
 }
 
 builtin_module_name_from_value :: #force_inline proc(m: BuiltinModule) -> string {
@@ -30,6 +31,8 @@ builtin_module_name_from_value :: #force_inline proc(m: BuiltinModule) -> string
 		return "string"
 	case .LIST:
 		return "list"
+	case .RESULT:
+		return "result"
 	}
 
 	fmt.panicf("invalid builtin module type '%v'", m)
@@ -94,6 +97,12 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 			append(&module_functions, ModuleFunction{"asciichar", asciichar_native, 1})
 			append(&module_functions, ModuleFunction{"asciinum", asciinum_native, 1})
 		}
+	case .RESULT:
+		{
+			append(&module_functions, ModuleFunction{"ok", ok_native, 1})
+			append(&module_functions, ModuleFunction{"err", err_native, 1})
+			append(&module_functions, ModuleFunction{"unwrap", unwrap_native, 1})
+		}
 	}
 
 	return module_functions[:]
@@ -101,8 +110,9 @@ get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunct
 
 /* The list of standard modules built into the language. */
 @(rodata)
-STD_MODULES := [?]string{"time", "math", "os", "string", "list"}
+STD_MODULES := [?]string{"time", "math", "os", "string", "list", "result"}
 
+#assert(len(BuiltinModule) == len(STD_MODULES))
 
 /* These are the functions available in the global scope. The rest are in their
 corresponding modules. */
@@ -119,11 +129,6 @@ GLOBAL_NATIVE_FN_NAMES := [?]string {
 	"copy",
 	"dirname",
 	"filename",
-
-	// result stuff
-	"ok",
-	"err",
-	"unwrap",
 }
 
 @(rodata)
@@ -139,15 +144,10 @@ GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
 	copy_native,
 	dirname_native,
 	filename_native,
-
-	// result stuff
-	ok_native,
-	err_native,
-	unwrap_native,
 }
 
 @(rodata)
-GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1}
+GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}
 
 #assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_NAMES))
 #assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_ARITIES))
