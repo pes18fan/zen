@@ -1,4 +1,0 @@
-// err takes exactly one argument.
-use "result";
-
-result.err(1, 2) // ERR: Expected 1 argument for 'err' but got 2.

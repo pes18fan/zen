@@ -1,16 +1,14 @@
 // Basic Result construction and unwrap on Ok variants
 use "result";
 
-val k = result.ok(1);
-
-puts(result.unwrap(k))          ; // expect: 1
-puts(result.unwrap(result.ok("hello"))); // expect: hello
+puts(result.unwrap(ok(1))); // expect: 1
+puts(result.unwrap(ok("hello"))); // expect: hello
 
 func safe_div(a, b) {
     if b == 0 {
-        result.err("cannot divide by zero")
+        err("cannot divide by zero")
     } else {
-        result.ok(a / b)
+        ok(a / b)
     }
 };
 

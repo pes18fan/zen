@@ -1,0 +1,6 @@
+func id[T](x: T): T {
+    x
+};
+
+puts(id(true)); // expect: true
+puts(id(3.5)); // expect: 3.500

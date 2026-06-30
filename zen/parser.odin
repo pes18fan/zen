@@ -536,11 +536,16 @@ parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
 // on the general-purpose allocator used for the overall AST (unlike the
 // typechecker which uses its own arena) and therefore the types
 // created here MUST be freed when the AST nodes are being freed
-parse_type_annotation :: proc(p: ^Parser) -> Type {
+parse_type_annotation :: proc(p: ^Parser, type_variable_map: map[string]int = nil) -> Type {
 	if parser_check(p, .IDENT) {
 		type: Type
 
 		constructor := parser_advance(p)
+
+		if idx, ok := type_variable_map[constructor.lexeme]; ok {
+			return TypeVariable{idx = idx}
+		}
+
 		switch constructor.lexeme {
 		case "Never":
 			type = type_never
@@ -554,9 +559,16 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 			type = tapp(.STRING)
 		case "List":
 			parser_consume(p, .LSQUARE, "Expect '[' after 'List'.")
-			inner_type := parse_type_annotation(p)
+			inner_type := parse_type_annotation(p, type_variable_map)
 			parser_consume(p, .RSQUARE, "Expect ']' after list type argument.")
 			type = tapp(.LIST, {inner_type})
+		case "Result":
+			parser_consume(p, .LSQUARE, "Expect '[' after 'Result'.")
+			ok_type := parse_type_annotation(p, type_variable_map)
+			parser_consume(p, .COMMA, "Expect ',' after 'ok' type.")
+			err_type := parse_type_annotation(p, type_variable_map)
+			parser_consume(p, .RSQUARE, "Expect ']' after result variants.")
+			type = tapp(.RESULT, {ok_type, err_type})
 		case "Any":
 			type = type_any
 		case:
@@ -574,7 +586,7 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 		defer delete(arg_types)
 		if !parser_check(p, .RPAREN) {
 			for {
-				append(&arg_types, parse_type_annotation(p))
+				append(&arg_types, parse_type_annotation(p, type_variable_map))
 				parser_match(p, .COMMA) or_break
 			}
 		}
@@ -582,7 +594,7 @@ parse_type_annotation :: proc(p: ^Parser) -> Type {
 		parser_consume(p, .RPAREN, "Expect ')' after function type parameters.")
 		parser_consume(p, .ARROW, "Expect '->' after function type parameter list.")
 
-		return_type := parse_type_annotation(p)
+		return_type := parse_type_annotation(p, type_variable_map)
 
 		all_args := make([]Type, len(arg_types) + 1)
 		defer delete(all_args)
@@ -691,6 +703,7 @@ add_escape_sequences :: proc(str: string) -> string {
 	sequences := make(map[byte]byte)
 	sequences['n'] = '\n'
 	sequences['t'] = '\t'
+	sequences['"'] = '\"'
 	defer delete(sequences)
 
 	sb := strings.builder_make()
@@ -834,7 +847,23 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 	lambda.bound_to = bound_to
 	params := make([dynamic]FunctionParam, 0)
 
-	// TODO: improve this error message
+	// parse type parameters
+	type_params := make(map[string]int)
+	defer delete(type_params)
+	if parser_match(p, .LSQUARE) {
+		last_index := -1
+		for {
+			tvar_name := parser_consume(p, .IDENT, "Expect type variable name.")
+			if tvar_name.lexeme in type_params {
+				parser_error(p, parser_peek(p), "Duplicate type parameter.")
+			}
+			type_params[tvar_name.lexeme] = last_index
+			last_index -= 1
+			parser_match(p, .COMMA) or_break
+		}
+		parser_consume(p, .RSQUARE, "Expect ']' after type parameters.")
+	}
+
 	parser_consume(
 		p,
 		.LPAREN,
@@ -846,7 +875,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 			param: FunctionParam
 			param.name = parser_consume(p, .IDENT, "Expect parameter name.")
 			if parser_match(p, .COLON) {
-				param.type = parse_type_annotation(p)
+				param.type = parse_type_annotation(p, type_params)
 			}
 			append(&params, param)
 			parser_match(p, .COMMA) or_break
@@ -855,7 +884,7 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 	lambda.params = params[:]
 	parser_consume(p, .RPAREN, "Expect ')' after function parameters.")
 	if parser_match(p, .COLON) {
-		lambda.return_type = parse_type_annotation(p)
+		lambda.return_type = parse_type_annotation(p, type_params)
 	}
 
 	if parser_match(p, .FAT_ARROW) {

@@ -395,8 +395,8 @@ stringify_object :: proc(obj: ^Obj) -> string {
 	case .NATIVE:
 		return "<native func>"
 	case .STRING:
-		// return fmt.tprintf("\"%s\"", as_ostring(obj_val(obj)))
 		return as_ostring(obj_val(obj))
+	// return fmt.tprintf("\"%s\"", as_ostring(obj_val(obj)))
 	case .UPVALUE:
 		return "upvalue"
 	}

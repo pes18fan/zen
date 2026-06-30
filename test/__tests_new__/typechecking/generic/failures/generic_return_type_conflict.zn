@@ -1,0 +1,9 @@
+func id[T](x: T): T {
+    x
+};
+
+func bad[T](x: T): T {
+    1
+};
+
+bad("hello") // ERR: Expected argument to be of type Number, got String.

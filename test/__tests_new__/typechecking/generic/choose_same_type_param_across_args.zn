@@ -1,0 +1,10 @@
+func choose[T](cond, a: T, b: T): T {
+    if cond {
+        a
+    } else {
+        b
+    }
+};
+
+puts(choose(true, 1, 2)); // expect: 1
+puts(choose(false, "a", "b")); // expect: b

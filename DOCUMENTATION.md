@@ -70,6 +70,16 @@ nice = 68 // ERROR!
 With `val` however, only the binding is final; objects like lists and instances
 can still be mutated.
 
+Variable names can include any letter in the English alphabet, underscores,
+numbers and question marks. However, a variable must begin with a letter or
+underscore.
+
+```zen
+var _ = "something";
+val truthy? = true;
+var name123 = "some name"
+```
+
 Multiple variables can be declared together using comma separation on the same
 line or spanning multiple lines. A `var` or `val` declaration returns `nil`.
 
@@ -442,12 +452,37 @@ var k = ok(1);
 var e = err("some error")
 ```
 
-The `unwrap` native function takes in a result and returns the value inside it
+The `result` builtin module has a couple of functions for working with results.
+
+You can check if a result is an `ok` variant or an `err` variant using the
+`result.ok?` and `result.err?` predicates.
+
+```zen
+use "result";
+
+result.ok?(ok(1));                  //=> true
+result.ok?(err("something bad"));   //=> false
+result.err?(ok("all good"));        //=> false
+result.err?(err(-1))                //=> true
+```
+
+The `result.unwrap` native function takes in a result and returns the value inside it
 if it is an `Ok` variant. If it is a `Err` variant, the function will panic.
 
+```zen
+use "result"
+
+result.unwrap(ok(1));         //=> 1
+result.unwrap(err("uh oh"))   //=> panic: Unwrapped an Err variant.
 ```
-unwrap(ok(1));         //=> 1
-unwrap(err("uh oh"))   //=> panic: Unwrapped an Err variant.
+
+To avoid panicking, you can use the `unwrap_or` function to provide a fallback.
+
+```zen
+use "result"
+
+result.unwrap_or(ok(1), 2);          //=> 1
+result.unwrap_or(err("uh oh"), -1)   //=> -1
 ```
 
 ## Standard library
@@ -472,6 +507,8 @@ for you to use.
     string if running a REPL.
 - `filename()`: Return the name of the running program, or an empty string if 
     running a REPL.
+- `ok(x)`: Return the `ok` variant of `Result` wrapping the value `x`.
+- `err(x)`: Return the `err` variant of `Result` wrapping the value `x`.
 
 ### module `time`
 
@@ -536,6 +573,13 @@ for you to use.
 > All these functions mutate the list in-place and return the mutated list.
 
 - `sum(l)`: Reduce a list of numbers to its sum.
+
+### module `result`
+
+- `unwrap(r)`: Get the wrapped value of the result `r` if it is the `ok` variant,
+    and panic if it is the `err` variant.
+- `unwrap_or(r, x)`: Get the wrapped value of the result `r` if it is the `ok` variant,
+    or the fallback value `x` if it is the `err` variant.
 
 ## Features that used to exist
 

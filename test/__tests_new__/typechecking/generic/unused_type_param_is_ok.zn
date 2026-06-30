@@ -1,0 +1,6 @@
+func const_one[T](x: T) {
+    1
+};
+
+puts(const_one("anything")); // expect: 1
+puts(const_one(999)); // expect: 1
