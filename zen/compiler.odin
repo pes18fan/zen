@@ -671,6 +671,35 @@ emit_named_variable_set :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 	return nil
 }
 
+@(require_results)
+compile_var_declaration :: proc(
+	cg: ^Codegen,
+	e: ^VarDeclExpr,
+	is_loop_variable: bool = false,
+) -> bool {
+	bindings := e.bindings
+	is_final := e.is_final
+
+	for binding in bindings {
+		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
+		if binding.initializer == nil {
+			emit_opcode(cg, .OP_NIL)
+		} else {
+			/* Allow anonymous functions to recurse by referring to the name they've
+			 * been bound to. */
+			if _, ok := binding.initializer.(^FunctionExpr); ok {
+				mark_initialized(cg)
+			}
+			compile_expression(cg, binding.initializer) or_return
+		}
+
+		define_variable(cg, global)
+	}
+
+	emit_opcode(cg, .OP_NIL) // return value of a var declaration
+	return true
+}
+
 /* Compile a variable binding. */
 @(require_results)
 compile_binding :: proc(
@@ -728,16 +757,7 @@ compile_function :: proc(
 		define_variable(cg, constant)
 	}
 
-	if block, ok := body.(^BlockExpr); ok {
-		cg.current_token = block.token
-		if block.expression == nil {
-			emit_opcode(cg, .OP_NIL)
-		} else {
-			compile_expression(cg, block.expression) or_return
-		}
-	} else {
-		compile_expression(cg, body) or_return
-	}
+	compile_expression(cg, body) or_return
 	emit_opcode(cg, .OP_RETURN)
 	cg.current_compiler.function.has_returned = true
 
@@ -799,7 +819,9 @@ compile_module_declaration :: proc(cg: ^Codegen, e: ^UseExpr) -> bool {
 	define_variable(cg, name_constant)
 
 	table_set(cg.globals, copy_string(cg.gc, name), bool_val(true))
+
 	emit_opcode(cg, .OP_NIL)
+
 	return true
 }
 
@@ -838,6 +860,7 @@ compile_if_expression :: proc(cg: ^Codegen, e: ^IfExpr) -> bool {
 		return try(cg, patch_jump(cg, else_jump))
 	} else {
 		try(cg, patch_jump(cg, else_jump)) or_return
+
 		emit_opcode(cg, .OP_NIL)
 		return true
 	}
@@ -959,7 +982,9 @@ compile_for_expression :: proc(cg: ^Codegen, e: ^ForExpr) -> bool {
 
 	end_scope(cg)
 	try(cg, end_loop(cg)) or_return
+
 	emit_opcode(cg, .OP_NIL) // for expressions evaluate to nil
+
 	return true
 }
 
@@ -1045,7 +1070,9 @@ compile_for_in_expression :: proc(cg: ^Codegen, e: ^ForInExpr) -> bool {
 
 	end_scope(cg)
 	try(cg, end_loop(cg)) or_return
+
 	emit_opcode(cg, .OP_NIL) // for-in expressions evaluate to nil
+
 	return true
 }
 
@@ -1081,7 +1108,9 @@ compile_while_expression :: proc(cg: ^Codegen, e: ^WhileExpr) -> bool {
 
 	end_scope(cg)
 	try(cg, end_loop(cg)) or_return
+
 	emit_opcode(cg, .OP_NIL) // return value of the while expression
+
 	return true
 }
 
@@ -1122,44 +1151,13 @@ compile_continue_expression :: proc(cg: ^Codegen, e: ^ContinueExpr) -> bool {
 }
 
 @(require_results)
-compile_var_declaration :: proc(
-	cg: ^Codegen,
-	e: ^VarDeclExpr,
-	is_loop_variable: bool = false,
-) -> bool {
-	bindings := e.bindings
-	is_final := e.is_final
-
-	for binding in bindings {
-		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
-		if binding.initializer == nil {
-			emit_opcode(cg, .OP_NIL)
-		} else {
-			/* Allow anonymous functions to recurse by referring to the name they've
-			 * been bound to. */
-			if _, ok := binding.initializer.(^FunctionExpr); ok {
-				mark_initialized(cg)
-			}
-			compile_expression(cg, binding.initializer) or_return
-		}
-
-		define_variable(cg, global)
-	}
-
-	emit_opcode(cg, .OP_NIL) // return value of a var declaration
-	return true
-}
-
-@(require_results)
 compile_return_expression :: proc(cg: ^Codegen, e: ^ReturnExpr) -> bool {
 	value := e.value
 
 	if e.value != nil {
 		compile_expression(cg, value) or_return
-		emit_opcode(cg, .OP_RETURN)
-	} else {
-		emit_return(cg)
 	}
+	emit_return(cg)
 
 	/* Set a flag to true if the function returns in its outermost scope.
 	This flag is to check if the function needs an implicit return in the end. */
@@ -1235,15 +1233,16 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_break_expression(cg, e) or_return
 	case ^BlockExpr:
 		cg.current_token = e.token
-		begin_scope(cg)
 		if e.expression == nil {
 			emit_opcode(cg, .OP_NIL)
 		} else {
+			begin_scope(cg)
 			compile_expression(cg, e.expression) or_return
+
+			emit_opcode(cg, .OP_SET_SAVE) // save the return value in vm register
+			end_scope(cg) // pop off all local variables
+			emit_opcode(cg, .OP_GET_SAVE) // retrieve the return value
 		}
-		emit_opcode(cg, .OP_SET_SAVE) // save the return value in vm register
-		end_scope(cg) // pop off all local variables
-		emit_opcode(cg, .OP_GET_SAVE) // retrieve the return value
 	case ^CallExpr:
 		cg.current_token = e.token
 		arguments := e.arguments
@@ -1302,11 +1301,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ItExpr:
 		cg.current_token = e.token
 		emit_opcode(cg, .OP_GET_IT)
-	case ^DiscardExpr:
-		cg.current_token = e.token
-		compile_expression(cg, e.expression) or_return
-		emit_pop(cg)
-		emit_opcode(cg, .OP_NIL)
 	case ^FunctionExpr:
 		cg.current_token = e.token
 		params := e.params
@@ -1388,9 +1382,11 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^SequenceExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
+		emit_opcode(cg, .OP_POP) // discard the result
 		if e.right != nil {
-			emit_opcode(cg, .OP_POP) // discard the result
 			compile_expression(cg, e.right) or_return
+		} else {
+			emit_opcode(cg, .OP_NIL)
 		}
 	case ^SubscriptExpr:
 		cg.current_token = e.token
@@ -1519,8 +1515,8 @@ codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, succ
 
 	/* Add all the native function names to the global table, for variable
      * existence checks. */
-	#unroll for fn_name in GLOBAL_NATIVE_FN_NAMES {
-		table_set(globals, copy_string(gc, fn_name), bool_val(true))
+	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
+		table_set(globals, copy_string(gc, fn.name), bool_val(true))
 	}
 
 	cg := Codegen {
@@ -1570,8 +1566,8 @@ collect_expr_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
 /* Collect all global functions declared in the file and put them into the
 `globals` table. */
 collect_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
-	#unroll for fn_name in GLOBAL_NATIVE_FN_NAMES {
-		table_set(globals, copy_string(gc, fn_name), bool_val(true))
+	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
+		table_set(globals, copy_string(gc, fn.name), bool_val(true))
 	}
 
 	collect_expr_globals(globals, gc, expr)

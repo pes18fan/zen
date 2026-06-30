@@ -1,4 +1,4 @@
-use "b.zn"
+use "b.zn";
 
 print b.a()
     |> b.b()

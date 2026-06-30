@@ -1,21 +1,21 @@
-use "string"
+use "string";
 
-var sum = 0
+var sum = 0;
 for var i = 0; i < 5; i = i + 1 {
     sum = sum + i
-}
-puts(sum) // expect: 10
+};
+puts(sum); // expect: 10
 
-var count = 0
+var count = 0;
 for ch in string.chars("abc") {
     count = count + 1
-}
-puts(count) // expect: 3
+};
+puts(count); // expect: 3
 
-var total = 0
+var total = 0;
 for outer in [1, 2] {
     for inner in [10, 20] {
         total = total + outer + inner
     }
-}
-puts(total) // expect: 66
+};
+puts(total); // expect: 66

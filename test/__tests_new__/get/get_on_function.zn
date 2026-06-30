@@ -1,3 +1,3 @@
-func foo() {}
+func foo() {};
 
 foo.bar // ERR: Expected dot-accessed value to be a module, got () -> Nil.

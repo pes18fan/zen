@@ -11,7 +11,7 @@ NAN_BOXING :: true
 
 when NAN_BOXING {
 	/* Every value can be represented by a unsigned 64-bit integer. */
-	Value :: u64
+	Value :: distinct u64
 
 	/* 
 	Converting a f64 to a NaN-boxed value is as simple as transmuting it.
@@ -28,21 +28,21 @@ when NAN_BOXING {
 	*/
 
 	/* A u64 with only the highest bit (the sign bit) set. */
-	SIGN_BIT :: cast(u64)0x8000000000000000
+	SIGN_BIT :: 0x8000000000000000
 
 	/*
 	A NaN value with the highest mantissa bit as well as the second highest 
 	mantissa bit (the Intel QNaN bit) set.
 	*/
-	QNAN :: cast(u64)0x7ffc000000000000
+	QNAN :: 0x7ffc000000000000
 
 	TAG_NIL :: 1 // 01.
 	TAG_FALSE :: 2 // 10.
 	TAG_TRUE :: 3 // 11.
 
-	NIL_VAL :: QNAN | TAG_NIL
-	FALSE_VAL :: QNAN | TAG_FALSE
-	TRUE_VAL :: QNAN | TAG_TRUE
+	NIL_VAL: Value : QNAN | TAG_NIL
+	FALSE_VAL: Value : QNAN | TAG_FALSE
+	TRUE_VAL: Value : QNAN | TAG_TRUE
 
 	/*
 	ORing FALSE_VAL (10 in binary) with 1 simply gives 11 in binary, which
@@ -61,7 +61,7 @@ when NAN_BOXING {
     QNAN itself since well, that's a NaN.
 	*/
 	is_number :: #force_inline proc(value: Value) -> bool {
-		return (value & QNAN) != QNAN
+		return (u64(value) & QNAN) != QNAN
 	}
 
 	/*
@@ -69,7 +69,7 @@ when NAN_BOXING {
     zen's NaN boxing convention.
 	*/
 	is_obj :: #force_inline proc(value: Value) -> bool {
-		return (value & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT)
+		return (u64(value) & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT)
 	}
 
 	as_number :: #force_inline proc(value: Value) -> f64 {
@@ -113,7 +113,7 @@ when NAN_BOXING {
 	TAG_INT :: 4 // 100.
 
 	int_val :: #force_inline proc(n: i32) -> Value {
-		return QNAN | TAG_INT | (cast(u64)cast(u32)n << 3)
+		return QNAN | TAG_INT | (cast(Value)cast(u32)n << 3)
 	}
 
 	is_int :: #force_inline proc(value: Value) -> bool {
@@ -121,7 +121,7 @@ when NAN_BOXING {
 		return (value & (QNAN | SIGN_BIT | 0x7)) == (QNAN | TAG_INT)
 	}
 
-	INT_MASK :: cast(u64)0x00000000FFFFFFFF
+	INT_MASK :: 0x00000000FFFFFFFF
 
 	as_int :: #force_inline proc(value: Value) -> i32 {
 		return cast(i32)cast(u32)((value >> 3) & INT_MASK)

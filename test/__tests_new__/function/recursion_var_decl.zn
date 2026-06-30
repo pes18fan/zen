@@ -1,2 +1,2 @@
-val fac = func(n) => if n == 0 { 1 } else { n * fac(n - 1) }
-puts(fac(5))  // expect: 120
+val fac = func(n) => if n == 0 { 1 } else { n * fac(n - 1) };
+puts(fac(5)) ; // expect: 120

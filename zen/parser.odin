@@ -3,7 +3,6 @@ package zen
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
-import "core:slice"
 import "core:strconv"
 import "core:strings"
 
@@ -16,7 +15,6 @@ Expr :: union #shared_nil {
 	^BreakExpr,
 	^CallExpr,
 	^ContinueExpr,
-	^DiscardExpr,
 	^ExitExpr,
 	^ForExpr,
 	^ForInExpr,
@@ -74,15 +72,6 @@ CallExpr :: struct {
 
 ContinueExpr :: struct {
 	token: Token,
-}
-
-// sometimes we want to run an expression for its side effects but discard
-// its value itself, in this case the `DiscardExpr` is perfect. It evaluates
-// the expression inside of it and returns nil (which will become unit in the
-// future)
-DiscardExpr :: struct {
-	token:      Token,
-	expression: Expr,
 }
 
 ExitExpr :: struct {
@@ -350,7 +339,7 @@ parse_expression_top :: proc(p: ^Parser) -> Expr {
 	if p.panic_mode {
 		parser_synchronize(p)
 	} else {
-		parser_consume_any(p, "Expect newline or ';' after expression.", .NEWLINE, .SEMI)
+		parser_consume_semi(p, "expression")
 	}
 
 	seq := new(SequenceExpr)
@@ -408,7 +397,6 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			has_else_clause = true
 			parser_consume(p, .FAT_ARROW, "Expect '=>' after 'else'.")
 			expr.else_branch = parse_expression(p)
-			if parser_match(p, .NEWLINE) {}
 			parser_consume(p, .RSQUIRLY, "'else' must be the last case.")
 			break
 		}
@@ -417,8 +405,8 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		case_node.condition = parse_expression(p)
 		parser_consume(p, .FAT_ARROW, "Expect '=>' after case.")
 		case_node.body = parse_expression(p)
-		if parser_match(p, .NEWLINE) {}
 		append(&cases, case_node)
+		if !parser_match(p, .COMMA) {break}
 	}
 
 	if !has_else_clause {
@@ -461,15 +449,15 @@ parse_for :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		stmt.initializer = nil
 	} else if parser_match(p, .VAR, .VAL) {
 		stmt.initializer = parse_var_decl_expression(p, can_assign)
-		parser_consume(p, .SEMI, "Expect ';' after initializer.")
+		parser_consume_semi(p, "initializer")
 	} else {
 		stmt.initializer = parse_expression(p)
-		parser_consume(p, .SEMI, "Expect ';' after initializer.")
+		parser_consume_semi(p, "initializer")
 	}
 
 	if !parser_match(p, .SEMI) {
 		stmt.condition = parse_expression(p)
-		parser_consume(p, .SEMI, "Expect ';' after loop condition.")
+		parser_consume_semi(p, "loop condition")
 	}
 
 	if !parser_match(p, .LSQUIRLY) {
@@ -507,7 +495,8 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	}
 	mod_name: string
 	type: ModuleType
-	if slice.contains(STD_MODULES[:], relative_path) {
+
+	if _, ok := as_builtin_module(relative_path); ok {
 		mod_name = relative_path
 		type = .BUILTIN
 	} else if os.exists(abs_path) {
@@ -816,13 +805,6 @@ parse_it :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	return it_expr
 }
 
-parse_discard :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	discard := new(DiscardExpr)
-	discard.token = parser_previous(p)
-	discard.expression = parse_expression(p)
-	return discard
-}
-
 /* Handles both anonymous functions (FunctionExpr) and function declarations,
 which are interpreted as a syntactic sugar on top of a VarDeclExpr */
 parse_function :: proc(p: ^Parser, can_assign: bool) -> Expr {
@@ -892,7 +874,6 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 parse_block_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(BlockExpr)
 	expr.token = parser_previous(p) // the '{'
-	for parser_match(p, .NEWLINE) {}
 	if !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
 		expr.expression = parse_expression_top(p)
 	}
@@ -915,7 +896,7 @@ parse_continue :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ReturnExpr)
 	expr.token = parser_previous(p)
-	if !parser_check_any(p, .NEWLINE, .SEMI, .RSQUIRLY) && !parser_is_at_end(p) {
+	if !parser_check_any(p, .SEMI, .RSQUIRLY) && !parser_is_at_end(p) {
 		expr.value = parse_expression(p)
 	}
 	return expr
@@ -924,7 +905,7 @@ parse_return :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_exit :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(ExitExpr)
 	expr.token = parser_previous(p)
-	if !parser_check_any(p, .NEWLINE, .SEMI, .RSQUIRLY) && !parser_is_at_end(p) {
+	if !parser_check_any(p, .SEMI, .RSQUIRLY) && !parser_is_at_end(p) {
 		expr.code = parse_expression(p)
 	}
 	return expr
@@ -1059,7 +1040,6 @@ rules: [TokenType]ParseRule = {
 	.SLASH         = {nil, parse_binary, .FACTOR},
 	.STAR          = {nil, parse_binary, .FACTOR},
 	.PERCENT       = {nil, parse_binary, .FACTOR},
-	.NEWLINE       = {nil, nil, .NONE},
 	.BANG_EQUAL    = {nil, parse_binary, .EQUALITY},
 	.BAR_GREATER   = {nil, parse_pipe, .PIPELINE},
 	.EQUAL         = {nil, nil, .NONE},
@@ -1077,7 +1057,6 @@ rules: [TokenType]ParseRule = {
 	.BREAK         = {parse_break, nil, .NONE},
 	.CONTINUE      = {parse_continue, nil, .NONE},
 	.CATCH         = {nil, nil, .CONDITIONAL},
-	.DISCARD       = {parse_discard, nil, .NONE},
 	.ELSE          = {nil, nil, .NONE},
 	.EXIT          = {parse_exit, nil, .NONE},
 	.FALSE         = {parse_literal, nil, .NONE},
@@ -1177,6 +1156,12 @@ parser_consume :: proc(p: ^Parser, type: TokenType, message: string) -> Token {
 	return parser_peek(p)
 }
 
+parser_consume_semi :: proc(p: ^Parser, after: string) -> Token {
+	if parser_check(p, .SEMI) {return parser_advance(p)}
+	parser_error(p, parser_previous(p), fmt.tprintf("Expect ';' after %v.", after))
+	return parser_peek(p)
+}
+
 parser_consume_any :: proc(p: ^Parser, message: string, types: ..TokenType) -> Token {
 	if parser_check_any(p, ..types) {return parser_advance(p)}
 	parser_error(p, parser_peek(p), message)
@@ -1187,7 +1172,7 @@ parser_synchronize :: proc(p: ^Parser) {
 	p.panic_mode = false
 
 	for !parser_is_at_end(p) {
-		if parser_previous(p).type == .NEWLINE || parser_previous(p).type == .SEMI {return}
+		if parser_previous(p).type == .SEMI {return}
 
 		#partial switch parser_peek(p).type {
 		case .BREAK,
@@ -1241,9 +1226,6 @@ free_expr :: proc(expr: Expr) {
 		}
 		delete(e.arguments)
 		free_expr(e.callee)
-		free(e)
-	case ^DiscardExpr:
-		free_expr(e.expression)
 		free(e)
 	case ^ExitExpr:
 		free_expr(e.code)
@@ -1405,12 +1387,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		for arg in e.arguments {
 			print_expr(b, arg, indent + 1)
 		}
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
-	case ^DiscardExpr:
-		print_indent(b, indent)
-		strings.write_string(b, "(discard\n")
-		print_expr(b, e.expression, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case ^ContinueExpr:

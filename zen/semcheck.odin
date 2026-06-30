@@ -135,9 +135,6 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			semantic_error(sm, "Cannot use 'continue' outside a loop.")
 			return false
 		}
-	case ^DiscardExpr:
-		sm.current_token = e.token
-		semcheck_expr(sm, e.expression) or_return
 	case ^ExitExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.code) or_return

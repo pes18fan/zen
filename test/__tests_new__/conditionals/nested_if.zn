@@ -12,9 +12,9 @@ func classify(n) {
             }
         }
     }
-}
+};
 
-puts(classify(-5))  // expect: negative
-puts(classify(0))   // expect: zero
-puts(classify(5))   // expect: small
-puts(classify(100)) // expect: large
+puts(classify(-5));  // expect: negative
+puts(classify(0));   // expect: zero
+puts(classify(5));   // expect: small
+puts(classify(100)); // expect: large

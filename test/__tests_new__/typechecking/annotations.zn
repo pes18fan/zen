@@ -1,20 +1,20 @@
-var n: Number = 10
-val s: String = "zen"
-val b: Bool = false
-val any_value: Any = 123
+var n: Number = 10;
+val s: String = "zen";
+val b: Bool = false;
+val any_value: Any = 123;
 
 func inc(x: Number): Number {
     x + 1
-}
+};
 
-func negate(x: Bool): Bool => not x
+func negate(x: Bool): Bool => not x;
 
-func shout(x: String): String => x .. "!"
+func shout(x: String): String => x .. "!";
 
-puts(n) // expect: 10
-puts(s) // expect: zen
-puts(b) // expect: false
-puts(any_value) // expect: 123
-puts(inc(41)) // expect: 42
-puts(negate(true)) // expect: false
-puts(shout("hi")) // expect: hi!
+puts(n); // expect: 10
+puts(s); // expect: zen
+puts(b); // expect: false
+puts(any_value); // expect: 123
+puts(inc(41)); // expect: 42
+puts(negate(true)); // expect: false
+puts(shout("hi")); // expect: hi!

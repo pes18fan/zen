@@ -5,6 +5,7 @@ import "core:math"
 import "core:math/rand"
 import "core:os"
 import "core:path/filepath"
+import "core:reflect"
 import "core:strconv"
 import "core:strings"
 import "core:time"
@@ -19,147 +20,113 @@ BuiltinModule :: enum {
 	RESULT,
 }
 
-builtin_module_name_from_value :: #force_inline proc(m: BuiltinModule) -> string {
-	switch m {
-	case .TIME:
-		return "time"
-	case .MATH:
-		return "math"
-	case .OS:
-		return "os"
-	case .STRING:
-		return "string"
-	case .LIST:
-		return "list"
-	case .RESULT:
-		return "result"
-	}
-
-	fmt.panicf("invalid builtin module type '%v'", m)
-}
-
-
-ModuleFunction :: struct {
+BuiltinFunction :: struct {
 	name:     string,
 	function: NativeFn,
 	arity:    int,
 }
 
-/* Get all the information required to import a builtin module into the global
- * scope. */
-get_builtin_module :: proc(gc: ^GC, module_name: BuiltinModule) -> []ModuleFunction {
-	module_functions := make([dynamic]ModuleFunction)
+as_builtin_module :: proc(name: string) -> (BuiltinModule, bool) {
+	upper := strings.to_upper(name)
+	defer delete(upper)
 
-	#partial switch module_name {
-	case .TIME:
-		{
-			append(&module_functions, ModuleFunction{"clock", clock_native, 0})
-			append(&module_functions, ModuleFunction{"clock_ms", clock_ms_native, 0})
-		}
-	case .MATH:
-		{
-			append(&module_functions, ModuleFunction{"sin", sin_native, 1})
-			append(&module_functions, ModuleFunction{"cos", cos_native, 1})
-			append(&module_functions, ModuleFunction{"tan", tan_native, 1})
-			append(&module_functions, ModuleFunction{"sqrt", sqrt_native, 1})
-			append(&module_functions, ModuleFunction{"ln", ln_native, 1})
-			append(&module_functions, ModuleFunction{"pow", pow_native, 2})
-			append(&module_functions, ModuleFunction{"floor", floor_native, 1})
-			append(&module_functions, ModuleFunction{"ceil", ceil_native, 1})
-			append(&module_functions, ModuleFunction{"round", round_native, 1})
-			append(&module_functions, ModuleFunction{"abs", abs_native, 1})
-			append(&module_functions, ModuleFunction{"rand", rand_native, 0})
-		}
-	case .OS:
-		{
-			append(&module_functions, ModuleFunction{"read", read_native, 1})
-			append(&module_functions, ModuleFunction{"write", write_native, 3})
-			append(&module_functions, ModuleFunction{"args", args_native, 0})
-		}
-	case .LIST:
-		{
-			append(&module_functions, ModuleFunction{"push", push_native, 2})
-			append(&module_functions, ModuleFunction{"pop", pop_native, 1})
-			append(&module_functions, ModuleFunction{"remove_last", remove_last_native, 1})
-			append(&module_functions, ModuleFunction{"sort", sort_native, 1})
-			append(&module_functions, ModuleFunction{"sum", sum_native, 1})
-		}
-	case .STRING:
-		{
-			append(&module_functions, ModuleFunction{"chomp", chomp_native, 1})
-			append(&module_functions, ModuleFunction{"replace", replace_native, 3})
-			append(&module_functions, ModuleFunction{"slice", slice_native, 3})
-			append(&module_functions, ModuleFunction{"index", index_native, 2})
-			append(&module_functions, ModuleFunction{"chars", chars_native, 1})
-			append(&module_functions, ModuleFunction{"upcase", upcase_native, 1})
-			append(&module_functions, ModuleFunction{"downcase", downcase_native, 1})
-			append(&module_functions, ModuleFunction{"reverse", reverse_native, 1})
-			append(&module_functions, ModuleFunction{"asciichar", asciichar_native, 1})
-			append(&module_functions, ModuleFunction{"asciinum", asciinum_native, 1})
-		}
-	case .RESULT:
-		{
-			append(&module_functions, ModuleFunction{"ok", ok_native, 1})
-			append(&module_functions, ModuleFunction{"err", err_native, 1})
-			append(&module_functions, ModuleFunction{"unwrap", unwrap_native, 1})
-		}
+	m, ok := reflect.enum_from_name(BuiltinModule, upper)
+	if !ok {
+		return nil, false
 	}
-
-	return module_functions[:]
+	return m, true
 }
 
-/* The list of standard modules built into the language. */
 @(rodata)
-STD_MODULES := [?]string{"time", "math", "os", "string", "list", "result"}
+STD_MODULE_FUNCTIONS: [BuiltinModule][]BuiltinFunction = {
+	.TIME   = {{"clock", clock_native, 0}, {"clock_ms", clock_ms_native, 0}},
+	.MATH   = {
+		{"sin", sin_native, 1},
+		{"cos", cos_native, 1},
+		{"tan", tan_native, 1},
+		{"sqrt", sqrt_native, 1},
+		{"ln", ln_native, 1},
+		{"pow", pow_native, 2},
+		{"floor", floor_native, 1},
+		{"ceil", ceil_native, 1},
+		{"round", round_native, 1},
+		{"abs", abs_native, 1},
+		{"rand", rand_native, 0},
+	},
+	.OS     = {{"read", read_native, 1}, {"write", write_native, 3}, {"args", args_native, 0}},
+	.STRING = {
+		{"chomp", chomp_native, 1},
+		{"replace", replace_native, 3},
+		{"slice", slice_native, 3},
+		{"index", index_native, 2},
+		{"chars", chars_native, 1},
+		{"upcase", upcase_native, 1},
+		{"downcase", downcase_native, 1},
+		{"reverse", reverse_native, 1},
+		{"asciichar", asciichar_native, 1},
+		{"asciinum", asciinum_native, 1},
+	},
+	.LIST   = {
+		{"push", push_native, 2},
+		{"pop", pop_native, 1},
+		{"remove_last", remove_last_native, 1},
+		{"sort", sort_native, 1},
+		{"sum", sum_native, 1},
+	},
+	.RESULT = {{"ok", ok_native, 1}, {"err", err_native, 1}, {"unwrap", unwrap_native, 1}},
+}
 
-#assert(len(BuiltinModule) == len(STD_MODULES))
+/* Get all the information required to import a builtin module into the global
+ * scope. */
+get_builtin_module :: #force_inline proc(gc: ^GC, module: BuiltinModule) -> []BuiltinFunction {
+	return STD_MODULE_FUNCTIONS[module]
+}
 
 /* These are the functions available in the global scope. The rest are in their
 corresponding modules. */
-@(rodata)
-GLOBAL_NATIVE_FN_NAMES := [?]string {
-	"puts",
-	"gets",
-	"panic",
-	"assert",
-	"len",
-	"str",
-	"parse",
-	"typeof",
-	"copy",
-	"dirname",
-	"filename",
+GlobalBuiltinFunction :: enum {
+	PUTS,
+	GETS,
+	PANIC,
+	ASSERT,
+	LEN,
+	STR,
+	PARSE,
+	TYPEOF,
+	COPY,
+	DIRNAME,
+	FILENAME,
+}
+
+as_global_builtin_function :: proc(name: string) -> (GlobalBuiltinFunction, bool) {
+	upper := strings.to_upper(name)
+	defer delete(upper)
+
+	m, ok := reflect.enum_from_name(GlobalBuiltinFunction, upper)
+	if !ok {
+		return nil, false
+	}
+	return m, true
 }
 
 @(rodata)
-GLOBAL_NATIVE_FN_PROCS := [?]NativeFn {
-	puts_native,
-	gets_native,
-	panic_native,
-	assert_native,
-	len_native,
-	str_native,
-	parse_native,
-	typeof_native,
-	copy_native,
-	dirname_native,
-	filename_native,
+GLOBAL_BUILTIN_FUNCTIONS: [GlobalBuiltinFunction]BuiltinFunction = {
+	.PUTS     = {"puts", puts_native, 1},
+	.GETS     = {"gets", gets_native, 0},
+	.PANIC    = {"panic", panic_native, 1},
+	.ASSERT   = {"assert", assert_native, 1},
+	.LEN      = {"len", len_native, 1},
+	.STR      = {"str", str_native, 1},
+	.PARSE    = {"parse", parse_native, 1},
+	.TYPEOF   = {"typeof", typeof_native, 1},
+	.COPY     = {"copy", copy_native, 1},
+	.DIRNAME  = {"dirname", dirname_native, 0},
+	.FILENAME = {"filename", filename_native, 0},
 }
-
-@(rodata)
-GLOBAL_NATIVE_FN_ARITIES := [?]int{1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0}
-
-#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_NAMES))
-#assert(len(GLOBAL_NATIVE_FN_PROCS) == len(GLOBAL_NATIVE_FN_ARITIES))
-#assert(len(GLOBAL_NATIVE_FN_NAMES) == len(GLOBAL_NATIVE_FN_ARITIES))
 
 init_natives :: proc(gc: ^GC) {
-	for v in soa_zip(
-		GLOBAL_NATIVE_FN_NAMES[:],
-		GLOBAL_NATIVE_FN_PROCS[:],
-		GLOBAL_NATIVE_FN_ARITIES[:],
-	) {
-		define_native(gc, v._0, v._1, v._2)
+	for fn in GLOBAL_BUILTIN_FUNCTIONS {
+		define_native(gc, fn.name, fn.function, fn.arity)
 	}
 }
 

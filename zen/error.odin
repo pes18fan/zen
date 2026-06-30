@@ -82,8 +82,6 @@ print_error :: #force_inline proc(token: Token, message: string) {
 	fmt.eprintf(style_bold("%s"), "REPL" if config.repl else filepath.base(config.__path))
 	if token.type == .EOF {
 		fmt.eprintln(" at end of file")
-	} else if token.type == .NEWLINE {
-		fmt.eprintln(" at end of line %d", token.position.line)
 	} else {
 		fmt.eprintfln(" at %d:%d", token.position.line, token.position.column)
 	}

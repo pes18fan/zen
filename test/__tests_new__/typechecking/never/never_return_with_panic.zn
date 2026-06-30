@@ -1,2 +1,2 @@
-func(): Never => panic("bye")
-puts("ok")      // expect: ok
+func(): Never => panic("bye");
+puts("ok")     ; // expect: ok

@@ -1,14 +1,17 @@
 // Nested Results should unwrap cleanly through multiple layers,
 // exercising generic instantiation of Result[a, b] where a itself
 // is another Result.
-use "result"
+use "result";
 
-val nested = result.ok(result.ok(5))
+val ok = result.ok;
+val unwrap = result.unwrap;
 
-puts(unwrap(unwrap(nested))) // expect: 5
+val nested = ok(ok(5));
+
+puts(unwrap(unwrap(nested))); // expect: 5
 
 func wrap_twice(x) {
     ok(ok(x))
-}
+};
 
-puts(unwrap(unwrap(wrap_twice("deep")))) // expect: deep
+puts(unwrap(unwrap(wrap_twice("deep")))); // expect: deep

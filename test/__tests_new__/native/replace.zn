@@ -1,5 +1,5 @@
-use "string"
+use "string";
 
-puts(string.replace("Hello, world!", "world", "universe")) // expect: Hello, universe!
-puts(string.replace("1 + 1 = 2", "=", "-")) // expect: 1 + 1 - 2
+puts(string.replace("Hello, world!", "world", "universe")); // expect: Hello, universe!
+puts(string.replace("1 + 1 = 2", "=", "-")); // expect: 1 + 1 - 2
 puts(string.replace("Testing 123!", "123", "456")) // expect: Testing 456!

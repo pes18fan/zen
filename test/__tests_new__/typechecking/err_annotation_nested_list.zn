@@ -1,4 +1,4 @@
-use "list"
+use "list";
 
-var a: List[List[Number]] = []
+var a: List[List[Number]] = [];
 list.push(a, ["a"]) // ERR: Expected argument to be of type List[Number], got List[String].

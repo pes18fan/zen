@@ -1,6 +1,6 @@
-use "string"
+use "string";
 
 var x = ""
     |> string.chomp()
-    |> string.replace("hello", "hi")
+    |> string.replace("hello", "hi");
 print x // expect:

@@ -1,1 +1,1 @@
-unknown = "what"; // ERR: Undefined variable
+unknown = "what" // ERR: Undefined variable

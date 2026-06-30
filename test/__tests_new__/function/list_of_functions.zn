@@ -1,8 +1,8 @@
-use "list"
+use "list";
 
-func double(x) => x * 2
-func square(x) => x * x
+func double(x) => x * 2;
+func square(x) => x * x;
 
-var fns = [double, square]
-puts(fns[0](4)) // expect: 8
-puts(fns[1](4)) // expect: 16
+var fns = [double, square];
+puts(fns[0](4)); // expect: 8
+puts(fns[1](4)); // expect: 16
