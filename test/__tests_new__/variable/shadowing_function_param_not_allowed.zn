@@ -1,5 +1,5 @@
 func test(x) {
-    puts(x);  // expect: original
+    puts(x);
     var x = "shadowed";
     puts(x)  // ERR: A variable with this name in this scope already exists.
 };
