@@ -444,20 +444,18 @@ tok_number :: proc(l: ^Lexer) -> Maybe(Token) {
 @(private = "file")
 tok_string :: proc(l: ^Lexer, starts_with: rune) -> Maybe(Token) {
 	// Consume characters until the closing quote.
-	if starts_with == '"' {
-		for peek(l) != '"' && !is_at_end(l) {
-			if peek(l) == '\n' {
-				l.position.line += 1
-			}
+	for peek(l) != starts_with && !is_at_end(l) {
+		if peek(l) == '\n' {
+			l.position.line += 1
+			l.position.column = 1
+		}
+
+		// don't end at escaped quotes
+		if peek(l) == '\\' && peek_next(l) == starts_with {
 			advance(l)
 		}
-	} else {
-		for peek(l) != '\'' && !is_at_end(l) {
-			if peek(l) == '\n' {
-				l.position.line += 1
-			}
-			advance(l)
-		}
+
+		advance(l)
 	}
 
 	if is_at_end(l) {

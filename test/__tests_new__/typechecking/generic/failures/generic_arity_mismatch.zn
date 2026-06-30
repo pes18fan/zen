@@ -1,0 +1,5 @@
+func wrap[T](x: T): T {
+    x
+};
+
+wrap() // ERR: Expected 1 argument for 'wrap' but got 0.

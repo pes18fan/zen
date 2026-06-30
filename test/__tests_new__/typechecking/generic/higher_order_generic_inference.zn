@@ -1,0 +1,14 @@
+func apply(x, f) {
+    f(x)
+};
+
+func inc(n) {
+    n + 1
+};
+
+func dup(s) {
+    s .. s
+};
+
+puts(apply(2, inc)); // expect: 3
+puts(apply("ha", dup)); // expect: haha

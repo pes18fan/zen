@@ -1,0 +1,5 @@
+func first[T](a: T, b: T): T {
+    a
+};
+
+first(true, 0) // ERR: Expected argument to be of type Bool, got Number.

@@ -1,0 +1,10 @@
+func outer[T](x: T) {
+    func inner[T](y: T): T {
+        y
+    };
+
+    inner(x)
+};
+
+puts(outer(123)); // expect: 123
+puts(outer("abc")); // expect: abc

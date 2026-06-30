@@ -1,0 +1,5 @@
+func sentinel[T]() {
+    123
+};
+
+puts(sentinel()); // expect: 123

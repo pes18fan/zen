@@ -1,0 +1,9 @@
+use "result";
+
+func fallback_wrap(x) {
+    result.unwrap_or(err("nope"), x)
+};
+
+puts(fallback_wrap(1)); // expect: 1
+puts(fallback_wrap("hello")); // expect: hello
+puts(fallback_wrap(0.25)); // expect: 0.250

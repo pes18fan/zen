@@ -3,11 +3,9 @@
 // is another Result.
 use "result";
 
-val ok = result.ok;
 val unwrap = result.unwrap;
 
 val nested = ok(ok(5));
-
 puts(unwrap(unwrap(nested))); // expect: 5
 
 func wrap_twice(x) {

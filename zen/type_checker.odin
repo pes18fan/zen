@@ -1483,16 +1483,54 @@ check_type :: proc(
 		body := e.body
 		return_type := e.return_type
 
+		annotation_types_to_fresh_vars := make(map[TypeVariable]TypeVariable)
+		defer delete(annotation_types_to_fresh_vars)
+
 		param_types: []Type
 		if len(params) != 0 {
 			param_types = make([]Type, len(params))
 
 			for param, idx in params {
-				param_types[idx] = param.type.? or_else fresh(tc)
+				if _, ok := param.type.?; !ok {
+					param_types[idx] = fresh(tc)
+					continue
+				}
+				t := param.type.?
+
+				if is_type_variable(t) {
+					annotation_tvar := as_type_variable(t)
+					if existing, ok := annotation_types_to_fresh_vars[annotation_tvar]; ok {
+						param_types[idx] = existing
+						continue
+					}
+
+					freshified := fresh(tc)
+					annotation_types_to_fresh_vars[annotation_tvar] = freshified
+					param_types[idx] = freshified
+				} else {
+					param_types[idx] = t
+				}
 			}
 		}
 
-		ret_type := return_type.? or_else fresh(tc)
+		ret_type: Type
+		if ret, ok := return_type.?; ok {
+			if is_type_variable(ret) {
+				annotation_tvar := as_type_variable(ret)
+				if existing, annot_ok := annotation_types_to_fresh_vars[annotation_tvar];
+				   annot_ok {
+					ret_type = existing
+				} else {
+					freshified := fresh(tc)
+					annotation_types_to_fresh_vars[annotation_tvar] = freshified
+					ret_type = freshified
+				}
+			} else {
+				ret_type = ret
+			}
+		} else {
+			ret_type = fresh(tc)
+		}
 
 		// last arg is return type
 		all_args := make([]Type, len(param_types) + 1)
@@ -1848,6 +1886,7 @@ get_module_function_signature :: proc(
 ) {
 	string_t := tapp(.STRING)
 	number_t := tapp(.NUMBER)
+	bool_t := tapp(.BOOL)
 
 	switch module {
 	case .TIME:
@@ -1933,18 +1972,22 @@ get_module_function_signature :: proc(
 		}
 	case .RESULT:
 		switch fn_name {
-		case "ok":
+		case "ok?":
 			t := fresh(tc)
 			e := fresh(tc)
-			return tquant({t, e}, tapp(.FUNCTION, {t, tapp(.RESULT, {t, e})})), nil
-		case "err":
-			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), bool_t})), nil
+		case "err?":
 			t := fresh(tc)
-			return tquant({t, e}, tapp(.FUNCTION, {e, tapp(.RESULT, {t, e})})), nil
+			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), bool_t})), nil
 		case "unwrap":
 			t := fresh(tc)
 			e := fresh(tc)
 			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), t})), nil
+		case "unwrap_or":
+			t := fresh(tc)
+			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), t, t})), nil
 		}
 	}
 
@@ -2002,6 +2045,14 @@ get_global_builtin_function_signature :: proc(
 		return tapp(.FUNCTION, {string_t})
 	case .FILENAME:
 		return tapp(.FUNCTION, {string_t})
+	case .OK:
+		t := fresh(tc)
+		e := fresh(tc)
+		return tquant({t, e}, tapp(.FUNCTION, {t, tapp(.RESULT, {t, e})}))
+	case .ERR:
+		e := fresh(tc)
+		t := fresh(tc)
+		return tquant({t, e}, tapp(.FUNCTION, {e, tapp(.RESULT, {t, e})}))
 	}
 
 	fmt.panicf("undefined global-scoped native function '%v'", fn)

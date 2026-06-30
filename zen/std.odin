@@ -73,7 +73,12 @@ STD_MODULE_FUNCTIONS: [BuiltinModule][]BuiltinFunction = {
 		{"sort", sort_native, 1},
 		{"sum", sum_native, 1},
 	},
-	.RESULT = {{"ok", ok_native, 1}, {"err", err_native, 1}, {"unwrap", unwrap_native, 1}},
+	.RESULT = {
+		{"ok?", is_ok_native, 1},
+		{"err?", is_err_native, 1},
+		{"unwrap", unwrap_native, 1},
+		{"unwrap_or", unwrap_or_native, 2},
+	},
 }
 
 /* Get all the information required to import a builtin module into the global
@@ -96,6 +101,8 @@ GlobalBuiltinFunction :: enum {
 	COPY,
 	DIRNAME,
 	FILENAME,
+	OK,
+	ERR,
 }
 
 as_global_builtin_function :: proc(name: string) -> (GlobalBuiltinFunction, bool) {
@@ -122,6 +129,8 @@ GLOBAL_BUILTIN_FUNCTIONS: [GlobalBuiltinFunction]BuiltinFunction = {
 	.COPY     = {"copy", copy_native, 1},
 	.DIRNAME  = {"dirname", dirname_native, 0},
 	.FILENAME = {"filename", filename_native, 0},
+	.OK       = {"ok", ok_native, 1},
+	.ERR      = {"err", err_native, 1},
 }
 
 init_natives :: proc(gc: ^GC) {
@@ -192,29 +201,16 @@ dirname_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) 
 	return obj_val(copy_string(vm.gc, config.__dirname)), true
 }
 
+/* Return the `ok` variant of a result that wraps the argument. */
 ok_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	result := new_result(vm.gc, is_ok = true, value = args[0])
 	return obj_val(result), true
 }
 
+/* Return the `err` variant of a result that wraps the argument. */
 err_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	result := new_result(vm.gc, is_ok = false, value = args[0])
 	return obj_val(result), true
-}
-
-unwrap_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if !is_result(args[0]) {
-		vm_panic(vm, "Can only unwrap a Result, not a %v.", type_of_value(args[0]))
-		return nil_val(), false
-	}
-
-	result := as_result(args[0])
-	if !result.is_ok {
-		vm_panic(vm, "Unwrapped an err variant.")
-		return nil_val(), false
-	}
-
-	return result.value, true
 }
 
 /* ---------- TIME ---------- */
@@ -831,4 +827,61 @@ sum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	return number_val(sum), true
+}
+
+/* ------- RESULT ------- */
+
+/* Actual name: "ok?"
+Check if a provided result is the `ok` variant. */
+is_ok_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_result(args[0]) {
+		vm_panic(vm, "'ok?' only works on results, not %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	return bool_val(as_result(args[0]).is_ok), true
+}
+
+/* Actual name: "err?"
+Check if a provided result is the `err` variant. */
+is_err_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_result(args[0]) {
+		vm_panic(vm, "'err?' only works on results, not %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	return bool_val(!as_result(args[0]).is_ok), true
+}
+
+/* Return the value wrapped in the first argument (a result) if it is the `ok` 
+variant, and panic if it is the `err` variant. */
+unwrap_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_result(args[0]) {
+		vm_panic(vm, "Can only unwrap a Result, not a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	result := as_result(args[0])
+	if !result.is_ok {
+		vm_panic(vm, "Unwrapped an err variant.")
+		return nil_val(), false
+	}
+
+	return result.value, true
+}
+
+/* Return a value wrapped in the first argument (a result) if it is the `ok` 
+variant, and return the fallback second argument if it is the `err` variant. */
+unwrap_or_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_result(args[0]) {
+		vm_panic(vm, "Can only unwrap a Result, not a %v.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	result := as_result(args[0])
+	if !result.is_ok {
+		return args[1], true
+	}
+
+	return result.value, true
 }

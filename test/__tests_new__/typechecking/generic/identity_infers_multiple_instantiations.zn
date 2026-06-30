@@ -1,0 +1,6 @@
+func id(x) {
+    x
+};
+
+puts(id(42)); // expect: 42
+puts(id("hello")); // expect: hello

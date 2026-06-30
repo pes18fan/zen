@@ -1,0 +1,7 @@
+func bad_pair[T](x: T) {
+    var y = x;
+    y + 1;
+    y .. "!"    // ERR: Expected left operand to '..' to be of type String, got Number.
+};
+
+bad_pair(10)

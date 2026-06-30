@@ -1,0 +1,6 @@
+func first[A, B](a: A, b: B): A {
+    a
+};
+
+puts(first(1, "x")); // expect: 1
+puts(first("x", 1)); // expect: x

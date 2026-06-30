@@ -4,9 +4,9 @@ use "result";
 func make_validator(min) {
     return func(x) {
         if x < min {
-            result.err("value too small")
+            err("value too small")
         } else {
-            result.ok(x)
+            ok(x)
         }
     }
 };

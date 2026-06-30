@@ -1,5 +1,5 @@
 // unwrap on an err variant should panic rather than return a value.
 use "result";
 
-val e = result.err("some error");
+val e = err("some error");
 result.unwrap(e) // ERR: Unwrapped an err variant

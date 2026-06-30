@@ -1,0 +1,5 @@
+func same[T](a: T, b: T) {
+    a
+};
+
+same(1, "x") // ERR: Expected argument to be of type Number, got String.

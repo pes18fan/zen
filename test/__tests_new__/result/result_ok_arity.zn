@@ -1,0 +1,1 @@
+ok() // ERR: Expected 1 argument for 'ok' but got 0.
