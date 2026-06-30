@@ -1,25 +1,31 @@
-use 'string'
-var q = string.asciichar(34)
+// This program prints itself as its output.
+use 'string';
+var q = string.asciichar(34);
 var l = [
-"use 'string'",
-"var q = string.asciichar(34)",
-"var l = [",
-"",
-"]",
-"puts(l[i])",
-"for var i = 0; i < len(l); i = i + 1 {",
-"puts(q .. l[i] .. q)",
-"}",
-"for var i = 0; i < len(l); i = i + 1 {",
-"puts(l[i])",
-"}"
-]
-for var i = 0; i < 3; i = i + 1 {
-puts(l[i])
-}
+    "// This program prints itself as its output.",
+    "use 'string';",
+    "var q = string.asciichar(34);",
+    "var l = [",
+    "",
+    "];",
+    "for var i = 0; i < 4; i = i + 1 {",
+    "    puts(l[i])",
+    "};",
+    "for var i = 0; i < len(l); i = i + 1 {",
+    "    if i == len(l) - 1 { puts('    ' .. q .. l[i] .. q) }",
+    "    else { puts('    ' .. q .. l[i] .. q .. ',') }",
+    "};",
+    "for var i = 5; i < len(l); i = i + 1 {",
+    "    puts(l[i])",
+    "}"
+];
+for var i = 0; i < 4; i = i + 1 {
+    puts(l[i])
+};
 for var i = 0; i < len(l); i = i + 1 {
-puts(q .. l[i] .. q)
-}
-for var i = 4; i < len(l); i = i + 1 {
-puts(l[i])
+    if i == len(l) - 1 { puts('    ' .. q .. l[i] .. q) }
+    else { puts('    ' .. q .. l[i] .. q .. ',') }
+};
+for var i = 5; i < len(l); i = i + 1 {
+    puts(l[i])
 }
