@@ -757,7 +757,16 @@ compile_function :: proc(
 		define_variable(cg, constant)
 	}
 
-	compile_expression(cg, body) or_return
+	if block, ok := body.(^BlockExpr); ok {
+		cg.current_token = block.token
+		if block.expression == nil {
+			emit_opcode(cg, .OP_NIL)
+		} else {
+			compile_expression(cg, block.expression) or_return
+		}
+	} else {
+		compile_expression(cg, body) or_return
+	}
 	emit_opcode(cg, .OP_RETURN)
 	cg.current_compiler.function.has_returned = true
 

@@ -98,5 +98,3 @@ Man page: `pandoc -s -t man ./etc/zen.1.md -o zen.1`
   (`has_user_modules` proc at `zen/semcheck.odin:350`, called at
   `zen/vm.odin:1038-1046` — forced by the lack of a module resolution pass
   after parsing). This is the next thing to fix.
-- The `plans.md` file in the repo root has concrete next steps for module
-  resolution and codegen refactoring.
