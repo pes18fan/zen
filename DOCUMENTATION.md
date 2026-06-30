@@ -11,15 +11,25 @@ print "Hello, world!\n" //=> Hello, world!
 Note that the `print` expression does not append a newline. You can use the
 `puts()` function if you want that.
 
-Expressions are seperated by newlines. Semicolons can be used to separate
-expressions on a single line. Newlines are suppressed when inside parentheses,
-within lists, and when the next token continues the expression (e.g. after `+`,
-`,`, `|>`, etc.).
-
 Every piece of code in zen is an **expression** that produces a value. Statements
 like `if`, `while`, `for`, `switch`, blocks `{ ... }`, and variable declarations
 `var`/`val` all produce values and can be composed together. In fact, a zen
 program is in itself one large expression.
+
+## Semicolons
+
+Expressions are chained together by semicolons. The semicolon, in addition to
+providing visual separation between expressions, also acts as an expression 
+discarding operator; `1` evaluates to the number 1 but `1;` evaluates to `nil`
+by discarding the number value.
+
+A collection of expressions joined by semicolons is called a **sequence**. A
+sequence can either end with an expression or a semicolon. A sequence itself 
+is an expression; it evaluates to whatever expression is at its end, or to `nil`
+if it ends with a semicolon.
+
+Sequences can only exist at the top level of the file or at the top level of
+a block.
 
 ## Datatypes
 
@@ -53,7 +63,7 @@ var name = "Sam"
 Use `val` to make the name single-assign.
 
 ```
-val nice = 69
+val nice = 69;
 nice = 68 // ERROR!
 ```
 
@@ -86,8 +96,8 @@ Uninitialized variables default to `nil`.
 You can use the `exit` expression to exit a program early.
 
 ```
-puts "hello"
-exit
+puts "hello";
+exit;
 puts "world"
 ```
 
@@ -104,9 +114,9 @@ that variables declared inside a block are not visible outside it.
 
 ```
 var x = {
-    var y = 2
+    var y = 2;
     y * 10
-}
+};
 puts(x) //=> 20
 ```
 
@@ -147,17 +157,17 @@ and an assortment of cases, from top to bottom. If a case matches, the expressio
 associated with it is evaluated and returned as the value of the entire expression.
 
 ```
-use "math"
+use "math";
 
-var a = math.rand() * 10 |> math.floor()
+var a = math.rand() * 10 |> math.floor();
 
 switch a {
-    0 => print "zero!"
-    1 => print "one."
+    0 => print "zero!",
+    1 => print "one.",
     2 => {
-        var y = 2
+        var y = 2;
         print y
-    }
+    },
     else => print "not between 0 and 2"
 }
 ```
@@ -169,8 +179,8 @@ A `switch true` can be used to easily emulate an `else if` expression:
 
 ```zen
 switch {
-    0 == 0 => puts "zero is zero!"
-    0 == 1 => puts "zero is on- wait what?"
+    0 == 0 => puts "zero is zero!",
+    0 == 1 => puts "zero is on- wait what?",
     else => puts "ok I don't even know anymore"
 }
 ```
@@ -180,10 +190,10 @@ switch {
 zen has the traditional `while` and `for` loops. All loops produce `nil`.
 
 ```
-var awesome = true
+var awesome = true;
 while awesome {
     print "you're awesome!"
-}
+};
 
 for var i = 0; i < 10; i = i + 1 {
     print "you're awesome " .. i .. "!"
@@ -202,7 +212,7 @@ for i in [1, 2, 3] {
 You can also iterate over strings by converting them into lists:
 
 ```
-use "string"
+use "string";
 
 for x in string.chars("hello") {
     puts(x)
@@ -228,7 +238,7 @@ A named function declaration like `func name() { ... }` is syntactic sugar over
 ```
 func a_function() {
     print "this is a function!"
-}
+};
 a_function() //=> this is a function!
 ```
 
@@ -239,24 +249,24 @@ If a function only returns a value, it can be shortened using JS-like
 arrow notation:
 
 ```
-func double(n) => n * 2
+func double(n) => n * 2;
 ```
 
 Closures are also supported.
 
 ```
 func outer() {
-    var x = "outside"
+    var x = "outside";
     func inner() {
+        print x;
+        x = "inside";
         print x
-        x = "inside"
-        print x
-    }
+    };
 
     return inner
-}
+};
 
-val in = outer()
+val in = outer();
 in() // prints "outside" then "inside"
 ```
 
@@ -266,7 +276,7 @@ functions around.
 ```
 func apply(value, fn) {
     return fn(value)
-}
+};
 
 print apply(2, func(n) { return n * 2 }) //=> 4
 ```
@@ -291,10 +301,10 @@ the pipe operator. This operator allow one to pass expressions to other expressi
 or pass values to functions; in chains known as pipelines.
 
 ```zen
-use "string"
+use "string";
 
 // These two are equivalent:
-print string.upcase("hello")
+print string.upcase("hello");
 print "hello" |> string.upcase()
 ```
 
@@ -337,8 +347,8 @@ You can set a value at a specific index of the list by using the subscript synta
 alongside an assignment.
 
 ```zen
-var list = [1, 2, 3]
-list[0] = 4
+var list = [1, 2, 3];
+list[0] = 4;
 puts(list)  //=> [4, 2, 3]
 ```
 
@@ -360,8 +370,8 @@ Lists work well with pipelines as well!
 > pipeline stage, which would be very expensive.
 >
 > ```zen
-> var a = [1, 2, 3]
-> var b = a |> list.push(4)
+> var a = [1, 2, 3];
+> var b = a |> list.push(4);
 > puts(a)   //=> [1, 2, 3, 4]
 > ```
 > 
@@ -369,8 +379,8 @@ Lists work well with pipelines as well!
 > pipeline.
 >
 > ```zen
-> var a = [1, 2, 3]
-> var b = copy(a) |> list.push(4)
+> var a = [1, 2, 3];
+> var b = copy(a) |> list.push(4);
 > puts(a)   //=> [1, 2, 3]
 > ```
 
@@ -387,7 +397,7 @@ where `mod` is the name of the module. Any function in the builtin module can be
 accessed and called using dot notation like with instances.
 
 ```zen
-use "time"
+use "time";
 
 puts(time.clock())
 ```
@@ -403,7 +413,7 @@ be called `foo` if the imported file is `foo.zn`.)
 
 ```zen
 // a.zn
-use "./b.zn"
+use "./b.zn";
 
 b.foo()
 ```
@@ -419,34 +429,6 @@ Running `a.zn` will print out "bar".
 
 Functions without the `pub` keyword will NOT be imported when a file is `use`d.
 
-## Discard
-
-The `discard` keyword turns the expression following it into `nil`.
-
-```zen
-discard 1               //=> nil
-discard "hi"            //=> nil
-discard func(x) => x    //=> nil
-```
-
-This is especially useful when you don't want to return an explicit value from
-a block or a function.
-
-```zen
-var x = 0
-
-func normal() {
-    x = 1
-}
-
-func discarder() {
-    discard x = 1
-}
-
-puts(normal())      //=> 1
-puts(discarder())   //=> nil
-```
-
 ## Error handling
 
 zen uses the builtin `Result` type for error handling. It is a type with one
@@ -456,7 +438,7 @@ Either of these variants can be created using the builtin functions `ok`
 and `err`.
 
 ```zen
-var k = ok(1)
+var k = ok(1);
 var e = err("some error")
 ```
 
@@ -464,32 +446,8 @@ The `unwrap` native function takes in a result and returns the value inside it
 if it is an `Ok` variant. If it is a `Err` variant, the function will panic.
 
 ```
-unwrap(ok(1))   //=> 1
+unwrap(ok(1));         //=> 1
 unwrap(err("uh oh"))   //=> panic: Unwrapped an Err variant.
-```
-
-Of course, you wouldn't wanna panic everytime an error happens! Therefore,
-zen also provides the `catch` operator which either unwraps the value inside
-the variant if it is `ok`, or returns a fallback value if the variant is `err`.
-The fallback value must be the same as the value within the `ok` variant.
-
-```zen
-ok(1) catch 0  //=> 1
-err("messed up") catch "problems"  //=> "problems"
-```
-
-Here is an example of a safe division function implemented using results.
-
-```zen
-func safe_div(a, b) {
-    if b == 0 {
-        err("cannot divide by zero")
-    } else {
-        ok(a / b)
-    }
-}
-
-val invalid = safe_div(1, 0) catch(e) -1
 ```
 
 ## Standard library
