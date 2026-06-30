@@ -18,10 +18,10 @@ program is in itself one large expression.
 
 ## Semicolons
 
-Expressions are chained together by semicolons. The semicolon, in addition to
-providing visual separation between expressions, also acts as an expression 
-discarding operator; `1` evaluates to the number 1 but `1;` evaluates to `nil`
-by discarding the number value.
+Expressions are chained together by semicolons. The semicolon also discards the
+value of the expression before it, causing it to evaluate to `nil` within the
+surrounding sequence. For instance, `1` evaluates to the number 1 but `1;` 
+evaluates to `nil` by discarding the number value.
 
 A collection of expressions joined by semicolons is called a **sequence**. A
 sequence can either end with an expression or a semicolon. A sequence itself 
@@ -35,26 +35,24 @@ a block.
 
 zen has the following primitive datatypes:
 
-- `number`: A real number represented as a 64-bit floating point. Numbers also
+- `Number`: A real number represented as a 64-bit floating point. Numbers also
     support exponential notation (e.g `1e2` for `100`).
-- `bool`: A boolean value i.e. true or false.
-- `string`: A sequence of text, enclosed by either double or single quotes.
+- `Bool`: A boolean value i.e. true or false.
+- `String`: A sequence of text, enclosed by either double or single quotes.
     Strings are immutable in zen.
-- `nil`: A value that represents the absence of a value. It is the default
+- `Nil`: A value that represents the absence of a value. It is the default
     value for uninitialized variables and the implicit return value for functions
     that do not return anything.
 
-## Operators
+## Type system
 
-zen has all of the common operators, including `+`, `-`, `*`, `/` and `%` for 
-numeric operations,  `==`, `!=`, `>`, `<`, `>=`, `<=` for comparisons, `and`, 
-`or` and `not` for boolean operations, as well as the `..` for string 
-concatenation, and the  pipe operator `|>` described in more detail later in 
-this file.
+zen is statically typed. It uses Hindley-Milner type inference, allowing it
+to automatically infer types of expressions. However, type annotations may
+still be provided where desired for readability or to constrain inference.
 
 ## Variables
 
-Bind a value to a name with `var`.
+Create a new variable using `var`.
 
 ```
 var name = "Sam"
@@ -69,6 +67,8 @@ nice = 68 // ERROR!
 
 With `val` however, only the binding is final; objects like lists and instances
 can still be mutated.
+
+Variables are lexically scoped.
 
 Variable names can include any letter in the English alphabet, underscores,
 numbers and question marks. However, a variable must begin with a letter or
@@ -100,21 +100,6 @@ Uninitialized variables default to `nil`.
 >
 > Aliasing can cause unexpected results, specifically in the case
 > of lists which are mutable. For more information, see the section on lists.
-
-## Exiting early
-
-You can use the `exit` expression to exit a program early.
-
-```
-puts "hello";
-exit;
-puts "world"
-```
-
-This will print "hello" and exit.
-
-You can add a number after `exit` to exit with that status code. Without any
-number, it defaults to a status code of 0 (success).
 
 ## Blocks
 
@@ -185,7 +170,8 @@ switch a {
 An `else` clause at the end is mandatory, and is evaluated if none of the other
 clauses match.
 
-A `switch true` can be used to easily emulate an `else if` expression:
+Omitting the value after `switch` is shorthand for `switch true`. This can be
+used to easily emulate an `else if` expression:
 
 ```zen
 switch {
@@ -195,9 +181,9 @@ switch {
 }
 ```
 
-## Looping
+## Loops
 
-zen has the traditional `while` and `for` loops. All loops produce `nil`.
+zen has the traditional `while` and `for` loops.
 
 ```
 var awesome = true;
@@ -236,10 +222,12 @@ There are two expressions used for loop control:
 
 Both can only be used inside a loop.
 
+All loops in zen evaluate to `nil`.
+
 ## Functions
 
 zen has powerful and flexible functions. All functions are first-class, so they can
-be assigned to variables and passed to other functions.
+be assigned to variables, passed to other functions and returned from functions.
 
 Define a function with the `func` keyword, and call it with the `()` syntax.
 A named function declaration like `func name() { ... }` is syntactic sugar over
@@ -304,6 +292,96 @@ the parentheses.
 puts "hey, no parens!"
 ```
 
+Named functions (including both declaration syntactic sugar and named lambdas) 
+are hoisted when defined in the global scope. This means that a function in the
+global scope can be used before it is defined, which is incredibly useful for
+free ordering of declarations as well as for mutual recursion purposes.
+
+```zen
+func is_even(n) => if n == 0 { true } else { is_odd(n - 1) }
+func is_odd(n) => if n == 0 { false } else { is_even(n - 1) }
+
+puts(is_even(4)) //=> true
+puts(is_odd(4))  //=> false
+```
+
+### Generic functions
+
+zen also supports generic functions based on its Hindley-Milner-style type 
+inference.
+
+You can introduce type parameters after the function name:
+
+```zen
+func name[T, U](arg1: T, arg2: U): T {
+    arg1
+}
+```
+
+All type annotations are optional. The type parameters themselves are optional
+too, because zen can often infer them automatically.
+
+```zen
+func id(x) {
+    x
+}
+
+func id[T](x: T): T {
+    x
+}
+```
+
+A generic function can use its type parameters in argument types, return types,
+or both. Type parameters can also be unused if the function does not need them
+directly.
+
+```zen
+func first[A, B](a: A, b: B): A {
+    a
+}
+
+func ignore[T](x: T) {
+    1
+}
+```
+
+Type parameters may be inferred from call sites, so the same function can be used
+at multiple concrete types without needing separate overloads.
+
+```zen
+func wrap(x) {
+    x
+};
+
+puts(wrap(1))     //=> 1
+puts(wrap("hi"))   //=> hi
+puts(wrap(0.25))  //=> 0.250
+```
+
+Generic functions may also be nested, and inner type parameters follow normal
+lexical scoping rules.
+
+```zen
+func outer[T](x: T) {
+    func inner[T](y: T): T {
+        y
+    };
+
+    inner(x)
+};
+```
+
+If a generic constraint cannot be satisfied, the compiler reports a type error
+as usual.
+
+## Operators
+
+zen has all of the common operators, including `+`, `-`, `*`, `/` and `%` for 
+numeric operations,  `==`, `!=`, `>`, `<`, `>=`, `<=` for comparisons, `and`, 
+`or` and `not` for boolean operations, as well as the `..` for string 
+concatenation, and the pipe operator `|>` described in more detail in the next
+section.
+
 ## Pipelines
 
 zen supports a unique feature inspired by the Elixir programming language called
@@ -335,6 +413,10 @@ pipe produces a compile error.
 ## Lists
 
 A list is a ordered, indexable sequence of values.
+
+Lists have the type `List[a]`, where the `a` represents the type of the
+values in the list. This means that lists in zen are homogenous; only one type
+of value is allowed in a list.
 
 Lists can be created using a list literal:
 
@@ -484,6 +566,21 @@ use "result"
 result.unwrap_or(ok(1), 2);          //=> 1
 result.unwrap_or(err("uh oh"), -1)   //=> -1
 ```
+
+## Exiting early
+
+You can use the `exit` expression to exit a program early.
+
+```
+puts "hello";
+exit;
+puts "world"
+```
+
+This will print "hello" and exit.
+
+You can add a number after `exit` to exit with that status code. Without any
+number, it defaults to a status code of 0 (success).
 
 ## Standard library
 

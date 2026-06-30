@@ -1,14 +1,14 @@
 func fizz_buzz(n) {
-    val fizz = n % 3 == 0
-    val buzz = n % 5 == 0
+    val fizz = n % 3 == 0;
+    val buzz = n % 5 == 0;
 
     switch {
-        fizz and buzz => "fizzbuzz"
-        fizz          => "fizz"
-        buzz          => "buzz"
+        fizz and buzz => "fizzbuzz",
+        fizz          => "fizz",
+        buzz          => "buzz",
         else          => str(n)
     }
-}
+};
 
 for var i = 1; i <= 15; i = i + 1 {
     puts(fizz_buzz(i))
