@@ -1,7 +1,7 @@
-use "list"
+use "list";
 
-var a = [1, 2, 3]
-var b = copy(a)
-list.push(b, 4)
-puts(a) // expect: [1, 2, 3]
+var a = [1, 2, 3];
+var b = copy(a);
+list.push(b, 4);
+puts(a); // expect: [1, 2, 3]
 puts(b) // expect: [1, 2, 3, 4]

@@ -1,25 +1,25 @@
-var count = 5
+var count = 5;
 while count < 10 {
-    puts(count)
+    puts(count);
     count = count + 1
-}
+};
 // expect: 5
 // expect: 6
 // expect: 7
 // expect: 8
 // expect: 9
 
-var run = false
+var run = false;
 while run {
     puts("nope")
-}
-puts("after")
+};
+puts("after");
 // expect: after
 
 // for-in with list
 for x in [10, 20, 30] {
     puts(x)
-}
+};
 // expect: 10
 // expect: 20
 // expect: 30

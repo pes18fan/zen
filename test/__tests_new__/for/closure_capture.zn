@@ -1,9 +1,9 @@
-use "list"
+use "list";
 
-var fns = []
+var fns = [];
 for var i = 0; i < 3; i = i + 1 {
     list.push(fns, func() => i)
-}
+};
 // Each closure should capture its own i
 for f in fns {
     puts(f())

@@ -1,16 +1,16 @@
 // simple function
 func greet() {
     puts "hello"
-}
-greet()
+};
+greet();
 // expect: hello
 
 // arrow function
-func double(x) => x * 2
-puts(double(6))
+func double(x) => x * 2;
+puts(double(6));
 // expect: 12
 
 // anonymous function
-var mul: (Number, Number) -> Number = func(a, b) { a * b }
-puts(mul(4, 5))
+var mul: (Number, Number) -> Number = func(a, b) { a * b };
+puts(mul(4, 5));
 // expect: 20

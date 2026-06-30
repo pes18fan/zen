@@ -1,5 +1,5 @@
 // unwrap should only accept a Result[a, b], not a bare value.
-use "result"
+use "result";
 
-val x = 5
+val x = 5;
 result.unwrap(x) // ERR: Expected argument to be of type Result[a, b], got Number.

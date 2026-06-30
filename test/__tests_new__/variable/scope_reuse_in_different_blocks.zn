@@ -1,11 +1,11 @@
 {
-    var a = "first"
-    print a // expect: first
+    var a = "first";
+    print a; // expect: first
     print "\n"
-}
+};
 
 {
-    var a = "second"
-    print a // expect: second
+    var a = "second";
+    print a; // expect: second
     print "\n"
 }

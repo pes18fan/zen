@@ -1,10 +1,10 @@
 // Basic Result construction and unwrap on Ok variants
-use "result"
+use "result";
 
-val k = result.ok(1)
+val k = result.ok(1);
 
-puts(result.unwrap(k))           // expect: 1
-puts(result.unwrap(result.ok("hello"))) // expect: hello
+puts(result.unwrap(k))          ; // expect: 1
+puts(result.unwrap(result.ok("hello"))); // expect: hello
 
 func safe_div(a, b) {
     if b == 0 {
@@ -12,7 +12,7 @@ func safe_div(a, b) {
     } else {
         result.ok(a / b)
     }
-}
+};
 
-puts(result.unwrap(safe_div(1, 4))) // expect: 0.250
-puts(result.unwrap(safe_div(1, 2))) // expect: 0.500
+puts(result.unwrap(safe_div(1, 4))); // expect: 0.250
+puts(result.unwrap(safe_div(1, 2))); // expect: 0.500

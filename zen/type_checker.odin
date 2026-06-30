@@ -292,8 +292,8 @@ resolve_type_with_module_info :: proc(
 	// bound to the context only when they're called
 	// we can do this safely at the top of this procedure because the native
 	// functions cannot be reassigned
-	if slice.contains(GLOBAL_NATIVE_FN_NAMES[:], name) {
-		return get_builtin_function_signature(tc, name), false
+	if fn, ok := as_global_builtin_function(name); ok {
+		return get_global_builtin_function_signature(tc, fn), false
 	}
 
 	ctx := tc.ctx
@@ -1185,13 +1185,6 @@ check_type :: proc(
 		s := try_unify(type, type_never, expected_expression_name) or_return
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
-	case ^DiscardExpr:
-		tc.current_token = e.token
-		s1, _ := infer_type(tc, e.expression) or_return // infer inner and discard it
-		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
-		s := combine_substitutions(sn, s1)
-		add_to_typemap_after_substitution(tc, expr, s, type)
-		return s, nil
 	case ^ExitExpr:
 		tc.current_token = e.token
 		s1 := check_type(tc, e.code, tapp(.NUMBER), "exit code") or_return
@@ -1298,12 +1291,11 @@ check_type :: proc(
 				)
 			}
 
-			up := strings.to_upper(v.name.lexeme)
-			defer delete(up)
-			module, reflect_ok := reflect.enum_from_name(BuiltinModule, up)
-			if !reflect_ok {
-				fmt.panicf("couldn't find %v in builtin module", up)
+			module, ok2 := as_builtin_module(v.name.lexeme)
+			if !ok2 {
+				fmt.panicf("couldn't find %v in builtin module", v.name.lexeme)
 			}
+
 			// the type is lazily resolved from within the module
 			poly_sig := get_module_function_signature(tc, module, property.lexeme) or_return
 			sig := instantiate(tc, poly_sig) // instantiate the function; cuz it can be polymorphic
@@ -1956,53 +1948,63 @@ get_module_function_signature :: proc(
 		}
 	}
 
-	return {}, fmt.tprintf("Function '%v' does not exist in builtin module '%v'.", fn_name, builtin_module_name_from_value(module))
+	name, ok := reflect.enum_name_from_value(module)
+	if !ok {
+		fmt.panicf("unknown builtin module %v", module)
+	}
+	lower := strings.to_lower(name)
+	defer delete(lower)
+
+	return {}, fmt.tprintf("Function '%v' does not exist in builtin module '%v'.", fn_name, lower)
 }
 
-get_builtin_function_signature :: proc(tc: ^TypeChecker, name: string) -> TypeScheme {
+get_global_builtin_function_signature :: proc(
+	tc: ^TypeChecker,
+	fn: GlobalBuiltinFunction,
+) -> TypeScheme {
 	nil_t := tapp(.NIL)
 	string_t := tapp(.STRING)
 	number_t := tapp(.NUMBER)
 	never_t := type_never
 
-	switch name {
-	case "puts":
+	switch fn {
+	case .PUTS:
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
-	case "gets":
+	case .GETS:
 		return tapp(.FUNCTION, {string_t})
-	case "panic":
+	case .PANIC:
 		return tapp(.FUNCTION, {string_t, never_t})
-	case "assert":
+	case .ASSERT:
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
-	case "len":
+	case .LEN:
 		// NOTE: this should be only for strings and lists, not everything;
 		// but right now i have no way to differentiate them with standard HM.
 		// Someday if I add typeclasses that would be doable
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, number_t}))
-	case "typeof":
-		// NOTE: i might turn typeof into an operator, so that i can use
+	case .TYPEOF:
+		// NOTE: I might turn typeof into an operator, so that i can use
 		// type_string() to create a string representation of the type directly
 		// at compile time
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, string_t}))
-	case "str":
+	case .STR:
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, string_t}))
-	case "parse":
+	case .PARSE:
 		return tapp(.FUNCTION, {string_t, number_t})
-	case "copy":
+	case .COPY:
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, a}))
-	case "dirname":
+	case .DIRNAME:
 		return tapp(.FUNCTION, {string_t})
-	case "filename":
+	case .FILENAME:
 		return tapp(.FUNCTION, {string_t})
 	}
 
-	fmt.panicf("undefined global-scoped native function '%v'", name)
+	fmt.panicf("undefined global-scoped native function '%v'", fn)
 }
 
 typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bool) {

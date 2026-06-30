@@ -1,2 +1,2 @@
-if true { 1 } else { panic("a") }
-puts("ok")      // expect: ok
+if true { 1 } else { panic("a") };
+puts("ok")     ; // expect: ok

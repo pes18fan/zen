@@ -2,11 +2,11 @@
 // weird bug where the result is [0, 0, 0]
 // on looking into it, the loop variable is being popped off when it shouldn't
 // or something like that idk
-use "list"
+use "list";
 
-var results = []
+var results = [];
 for var i = 0; i < 3; i = i + 1 {
-    val x = i * 2
+    val x = i * 2;
     list.push(results, x)
-}
-puts(results) // expect: [0, 2, 4]
+};
+puts(results); // expect: [0, 2, 4]

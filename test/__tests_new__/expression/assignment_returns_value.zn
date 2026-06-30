@@ -1,11 +1,9 @@
-var a
-var b
-var c = (a = 5)
-print c // expect: 5
-print "\n"
+var a;
+var b;
+var c = (a = 5);
+puts(c); // expect: 5
 
 // chained assignment
-b = a = 10
-print a // expect: 10
-print "\n"
-print b // expect: 10
+b = a = 10;
+puts(a); // expect: 10
+puts(b); // expect: 10

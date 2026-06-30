@@ -1,4 +1,3 @@
-// NOTE: this will be invalid once CoW is introduced
 use "list"
 
 var a = [1, 2, 3]

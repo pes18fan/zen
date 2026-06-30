@@ -1,5 +1,5 @@
 // Closures that capture state and return Results
-use "result"
+use "result";
 
 func make_validator(min) {
     return func(x) {
@@ -9,8 +9,8 @@ func make_validator(min) {
             result.ok(x)
         }
     }
-}
+};
 
-val at_least_5 = make_validator(5)
+val at_least_5 = make_validator(5);
 
-puts(result.unwrap(at_least_5(10))) // expect: 10
+puts(result.unwrap(at_least_5(10))); // expect: 10

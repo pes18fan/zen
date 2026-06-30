@@ -23,7 +23,6 @@ TokenType :: enum {
 	SLASH,
 	STAR,
 	PERCENT,
-	NEWLINE,
 
 	// one or two character tokens
 	BANG_EQUAL,
@@ -48,7 +47,6 @@ TokenType :: enum {
 	BREAK,
 	CATCH,
 	CONTINUE,
-	DISCARD,
 	ELSE,
 	EXIT,
 	FALSE,
@@ -194,158 +192,6 @@ make_token :: proc(l: ^Lexer, type: TokenType) -> Token {
 }
 
 /*
-Insert a expression separator (newline) appropriately at the end of expressions
-and statements.
-Somewhat of a similar concept to automatic semicolon insertion (ASI), but it
-actually removes newlines when they cause problems and ensures they only
-separate full expressions.
-*/
-@(private = "file")
-set_separators :: proc(tokens: []Token) -> []Token {
-	defer delete(tokens)
-	result := make([dynamic]Token)
-
-	Enclosure :: enum {
-		LIST,
-		PAREN,
-		BLOCK,
-	}
-
-	list_stack := make([dynamic]byte)
-	paren_stack := make([dynamic]byte)
-	block_stack := make([dynamic]byte)
-	enclosure_stack := make([dynamic]Enclosure)
-	defer {
-		delete(list_stack)
-		delete(paren_stack)
-		delete(block_stack)
-		delete(enclosure_stack)
-	}
-
-	for token, idx in tokens {
-		#partial switch token.type {
-		case .NEWLINE:
-			{
-				/* If the very first token is a newline, ignore it and continue. */
-				if idx == 0 {
-					continue
-				}
-
-				/* No need to check if idx is too big for us to do a tokens[idx + 1],
-			    since the last token will always be EOF and a newline will be at
-			    most the second to last token. */
-
-				/* Check the first and last points; append only if the previous
-			    token IS one of some particular types AND if the next token IS 
-			    NOT one of some particular types. */
-				#partial switch tokens[idx - 1].type {
-				// if the previous token was a newline, skip it; we want to
-				// collapse multiple newlines into one
-				case .NEWLINE:
-					continue
-				case .IDENT,
-				     .STRING,
-				     .NUMBER,
-				     .TRUE,
-				     .FALSE,
-				     .NIL,
-				     .BREAK,
-				     .CONTINUE,
-				     .RETURN,
-				     .RPAREN,
-				     .RSQUIRLY,
-				     .RSQUARE,
-				     .EXIT,
-				     .IT:
-					#partial switch tokens[idx + 1].type {
-					case .IN,
-					     .ELSE,
-					     .OR,
-					     .AND,
-					     .DOT,
-					     .DOT_DOT,
-					     .PLUS,
-					     .MINUS,
-					     .STAR,
-					     .SLASH,
-					     .PERCENT,
-					     .EQUAL,
-					     .EQUAL_EQUAL,
-					     .BANG_EQUAL,
-					     .LESS,
-					     .LESS_EQUAL,
-					     .GREATER,
-					     .GREATER_EQUAL,
-					     .BAR_GREATER,
-					     .COMMA,
-					     .ARROW,
-					     .FAT_ARROW:
-						continue
-					case:
-						/* 
-                        Don't add a separator when inside a list or parenthesis
-                        grouping.
-                        This prevents a separator from being added after the last
-                        element in a situation like this:
-                        
-                        var lst = [
-                            "a",
-                            "b"
-                        ]
-                        */
-						if len(list_stack) > 0 || len(paren_stack) > 0 {
-							// BUT both lists and parens can enclose blocks,
-							// which do need separators! So, only avoid if the
-							// topmost enclosure is not a block.
-							if enclosure_stack[len(enclosure_stack) - 1] != .BLOCK {
-								continue
-							}
-						}
-
-						/* Do NOT insert a semi after the end of the expression 
-                        in a block, as blocks return it. */
-						if len(block_stack) > 0 && tokens[idx + 1].type == .RSQUIRLY {
-							continue
-						}
-
-						// Add the newline separator
-						append(&result, token)
-					}
-				}
-			}
-		case .LSQUARE:
-			append(&list_stack, 1)
-			append(&enclosure_stack, Enclosure.LIST)
-			append(&result, token)
-		case .LSQUIRLY:
-			append(&block_stack, 1)
-			append(&enclosure_stack, Enclosure.BLOCK)
-			append(&result, token)
-		case .LPAREN:
-			append(&paren_stack, 1)
-			append(&enclosure_stack, Enclosure.PAREN)
-			append(&result, token)
-		case .RSQUARE:
-			if len(list_stack) > 0 {pop(&list_stack)}
-			if len(enclosure_stack) > 0 {pop(&enclosure_stack)}
-			append(&result, token)
-		case .RSQUIRLY:
-			if len(block_stack) > 0 {pop(&block_stack)}
-			if len(enclosure_stack) > 0 {pop(&enclosure_stack)}
-			append(&result, token)
-		case .RPAREN:
-			if len(paren_stack) > 0 {pop(&paren_stack)}
-			if len(enclosure_stack) > 0 {pop(&enclosure_stack)}
-			append(&result, token)
-		case:
-			append(&result, token)
-		}
-	}
-
-	return result[:]
-}
-
-/*
 Ignore any whitespace character (and comment) encountered. Newlines do not
 fall in this category, they are handled separately, as they are used for
 automatic semicolon insertion.
@@ -359,6 +205,10 @@ skip_whitespace :: proc(l: ^Lexer) {
 		switch c {
 		case '\t', '\v', '\f', '\r', ' ':
 			advance(l)
+		case '\n':
+			advance(l)
+			l.position.line += 1
+			l.position.column = 1
 		case '/':
 			if peek_next(l) == '/' {
 				for peek(l) != '\n' && !is_at_end(l) {
@@ -407,8 +257,6 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 				}
 			}
 		}
-	case 'd':
-		return check_keyword(l, 1, 6, "iscard", .DISCARD)
 	case 'e':
 		{
 			if l.current - l.start > 1 {
@@ -689,14 +537,6 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 		return tok_string(l, starts_with = '"')
 	case '\'':
 		return tok_string(l, starts_with = '\'')
-	case '\n':
-		/* Line increment deferred, because otherwise the newline will be 
-		 * counted as being on the next line. */
-		defer {
-			l.position.line += 1
-			l.position.column = 1
-		}
-		return make_token(l, .NEWLINE)
 	}
 
 	syntax_error(l, fmt.tprintf("Unexpected character '%c'.", previous(l)))
@@ -706,7 +546,7 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 /*
 Lex the tokens. If an error occurs, `success` is false.
 */
-lex :: proc(source: string) -> (tokens: []Token, success: bool) {
+lex :: proc(source: string) -> ([]Token, bool) {
 	l := Lexer {
 		source         = source,
 		start          = 0,
@@ -715,21 +555,19 @@ lex :: proc(source: string) -> (tokens: []Token, success: bool) {
 		position       = {1, 1},
 	}
 
-	toks := make([dynamic]Token)
+	tokens := make([dynamic]Token)
 
 	for {
 		token, ok := lex_token(&l).?
 		if !ok {
-			delete(toks)
+			delete(tokens)
 			return nil, false
 		}
 
-		append(&toks, token)
+		append(&tokens, token)
 
 		if token.type == TokenType.EOF {break}
 	}
 
-	tokens = set_separators(toks[:])
-
-	return tokens, true
+	return tokens[:], true
 }

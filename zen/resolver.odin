@@ -283,9 +283,6 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		}
 	case ^ContinueExpr:
 		rs.current_token = e.token
-	case ^DiscardExpr:
-		rs.current_token = e.token
-		resolve_with_resolver(rs, e.expression) or_return
 	case ^ExitExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.code) or_return
@@ -536,11 +533,11 @@ resolve :: proc(
 	}
 
 	if setup_native_fns {
-		#unroll for fn_name in GLOBAL_NATIVE_FN_NAMES {
+		#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
 			native_var := new(UntypedVariable)
 			native_var^ = {
 				shadower         = nil,
-				name             = fmt.tprint(fn_name),
+				name             = fmt.tprint(fn.name),
 				kind             = .GLOBAL,
 				is_final         = true,
 				is_loop_variable = false,
@@ -550,7 +547,7 @@ resolve :: proc(
 				scope_depth      = 0,
 				local_index      = 0,
 			}
-			globals^[fn_name] = native_var
+			globals^[fn.name] = native_var
 		}
 	}
 
@@ -599,11 +596,11 @@ resolve_full :: proc(vm: ^VM, expr: Expr) -> (ResolutionMap, bool) {
 	if config.repl && !vm.resolver_init {
 		vm.resolver_globals = make(map[string]^UntypedVariable)
 		vm.resolver_init = true
-		#unroll for fn_name in GLOBAL_NATIVE_FN_NAMES {
+		#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
 			native_var := new(UntypedVariable)
 			native_var^ = {
 				shadower         = nil,
-				name             = fmt.tprint(fn_name),
+				name             = fmt.tprint(fn.name),
 				kind             = .GLOBAL,
 				is_final         = true,
 				is_loop_variable = false,
@@ -613,7 +610,7 @@ resolve_full :: proc(vm: ^VM, expr: Expr) -> (ResolutionMap, bool) {
 				scope_depth      = 0,
 				local_index      = 0,
 			}
-			vm.resolver_globals[fn_name] = native_var
+			vm.resolver_globals[fn.name] = native_var
 		}
 	}
 

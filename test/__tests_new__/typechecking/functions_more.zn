@@ -1,5 +1,5 @@
-func noop() {}
-puts(noop()) // expect: nil
+func noop() {};
+puts(noop()); // expect: nil
 
 func fact(n: Number): Number {
     if n <= 1 {
@@ -7,12 +7,12 @@ func fact(n: Number): Number {
     } else {
         n * fact(n - 1)
     }
-}
-puts(fact(5)) // expect: 120
+};
+puts(fact(5)); // expect: 120
 
-func twice(f, x) => f(f(x))
-func inc(n: Number): Number => n + 1
-puts(twice(inc, 3)) // expect: 5
+func twice(f, x) => f(f(x));
+func inc(n: Number): Number => n + 1;
+puts(twice(inc, 3)); // expect: 5
 
-var add = func(a: Number, b: Number): Number { a + b }
-puts(add(2, 3)) // expect: 5
+var add = func(a: Number, b: Number): Number { a + b };
+puts(add(2, 3)); // expect: 5

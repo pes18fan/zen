@@ -1,5 +1,5 @@
-puts("hello" .. " " .. "world") // expect: hello world
-puts("" .. "a")                // expect: a
-puts("a" .. "")                // expect: a
-puts("" .. "")                 // expect:
+puts("hello" .. " " .. "world"); // expect: hello world
+puts("" .. "a")               ; // expect: a
+puts("a" .. "")               ; // expect: a
+puts("" .. "")                ; // expect:
 

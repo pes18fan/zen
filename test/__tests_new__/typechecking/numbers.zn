@@ -1,12 +1,12 @@
 // arithmetic
-puts(1 + 2) // expect: 3
-puts(9 - 4) // expect: 5
-puts(3 * 4) // expect: 12
-puts(8 / 2) // expect: 4
-puts(7 % 4) // expect: 3
+puts(1 + 2); // expect: 3
+puts(9 - 4); // expect: 5
+puts(3 * 4); // expect: 12
+puts(8 / 2); // expect: 4
+puts(7 % 4); // expect: 3
 
 // comparison
-puts(1 < 2)  // expect: true
-puts(2 <= 2) // expect: true
-puts(3 > 2)  // expect: true
-puts(3 >= 4) // expect: false
+puts(1 < 2) ; // expect: true
+puts(2 <= 2); // expect: true
+puts(3 > 2) ; // expect: true
+puts(3 >= 4); // expect: false

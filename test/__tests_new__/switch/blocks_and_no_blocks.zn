@@ -1,14 +1,14 @@
-var x = 2
-var result = ""
+var x = 2;
+var result = "";
 switch x {
     1 => {
-        result = "one"
+        result = "one";
         result = result .. "!"
-    }
+    },
     2 => {
-        result = "two"
+        result = "two";
         result = result .. "!"
-    }
+    },
     else => result = "other"
-}
-puts(result) // expect: two!
+};
+puts(result); // expect: two!

@@ -42,16 +42,16 @@ test_lexer_default :: proc(t: ^tt.T) {
 	source := `// this is a comment
 func foo() {
     if not false {
-        print str
+        print str;
     }
-}
+};
 
-func add(a, b) => a + b
+func add(a, b) => a + b;
 
 func test() {
-    foo("just a little lexer exercise")
-    println(add(1, 2))
-}`
+    foo("just a little lexer exercise");
+    println(add(1, 2));
+};`
 
 	got, ok := lex(source)
 	defer delete(got)
@@ -70,9 +70,10 @@ func test() {
 		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{3, 18}},
 		Token{type = .PRINT, lexeme = "print", position = Pos{4, 9}},
 		Token{type = .IDENT, lexeme = "str", position = Pos{4, 15}},
+		Token{type = .SEMI, lexeme = ";", position = Pos{4, 18}},
 		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{5, 5}},
 		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{6, 1}},
-		Token{type = .NEWLINE, lexeme = "\n", position = Pos{6, 2}},
+		Token{type = .SEMI, lexeme = ";", position = Pos{6, 2}},
 		Token{type = .FUNC, lexeme = "func", position = Pos{8, 1}},
 		Token{type = .IDENT, lexeme = "add", position = Pos{8, 6}},
 		Token{type = .LPAREN, lexeme = "(", position = Pos{8, 9}},
@@ -84,7 +85,7 @@ func test() {
 		Token{type = .IDENT, lexeme = "a", position = Pos{8, 19}},
 		Token{type = .PLUS, lexeme = "+", position = Pos{8, 21}},
 		Token{type = .IDENT, lexeme = "b", position = Pos{8, 23}},
-		Token{type = .NEWLINE, lexeme = "\n", position = Pos{8, 24}},
+		Token{type = .SEMI, lexeme = ";", position = Pos{8, 24}},
 		Token{type = .FUNC, lexeme = "func", position = Pos{10, 1}},
 		Token{type = .IDENT, lexeme = "test", position = Pos{10, 6}},
 		Token{type = .LPAREN, lexeme = "(", position = Pos{10, 10}},
@@ -94,7 +95,7 @@ func test() {
 		Token{type = .LPAREN, lexeme = "(", position = Pos{11, 8}},
 		Token{type = .STRING, lexeme = "\"just a little lexer exercise\"", position = Pos{11, 9}},
 		Token{type = .RPAREN, lexeme = ")", position = Pos{11, 39}},
-		Token{type = .NEWLINE, lexeme = "\n", position = Pos{11, 40}},
+		Token{type = .SEMI, lexeme = ";", position = Pos{11, 40}},
 		Token{type = .IDENT, lexeme = "println", position = Pos{12, 5}},
 		Token{type = .LPAREN, lexeme = "(", position = Pos{12, 12}},
 		Token{type = .IDENT, lexeme = "add", position = Pos{12, 13}},
@@ -104,68 +105,10 @@ func test() {
 		Token{type = .NUMBER, lexeme = "2", position = Pos{12, 20}},
 		Token{type = .RPAREN, lexeme = ")", position = Pos{12, 21}},
 		Token{type = .RPAREN, lexeme = ")", position = Pos{12, 22}},
+		Token{type = .SEMI, lexeme = ";", position = Pos{12, 23}},
 		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{13, 1}},
-		Token{type = .EOF, lexeme = "", position = Pos{13, 2}},
-	}
-
-	are_equal, wanted, recieved := expect_tokens_equal(want, got)
-	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
-}
-
-/* Test chained multiline method calls for the lexer. */
-@(test)
-test_lexer_chained_calls :: proc(t: ^tt.T) {
-	source := `some_string
-    .reverse()
-    .capitalize()
-    `
-
-	got, ok := lex(source)
-	defer delete(got)
-
-	if !tt.expect(t, ok, "lexer error") {return}
-
-	want := []Token {
-		Token{type = .IDENT, lexeme = "some_string", position = Pos{1, 1}},
-		Token{type = .DOT, lexeme = ".", position = Pos{2, 5}},
-		Token{type = .IDENT, lexeme = "reverse", position = Pos{2, 6}},
-		Token{type = .LPAREN, lexeme = "(", position = Pos{2, 13}},
-		Token{type = .RPAREN, lexeme = ")", position = Pos{2, 14}},
-		Token{type = .DOT, lexeme = ".", position = Pos{3, 5}},
-		Token{type = .IDENT, lexeme = "capitalize", position = Pos{3, 6}},
-		Token{type = .LPAREN, lexeme = "(", position = Pos{3, 16}},
-		Token{type = .RPAREN, lexeme = ")", position = Pos{3, 17}},
-		Token{type = .NEWLINE, lexeme = "\n", position = Pos{3, 18}},
-		Token{type = .EOF, lexeme = "", position = Pos{4, 5}},
-	}
-
-	are_equal, wanted, recieved := expect_tokens_equal(want, got)
-	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
-}
-
-/* Test single-line block ASI for the lexer. */
-@(test)
-test_lexer_oneline_block :: proc(t: ^tt.T) {
-	source := `func a(x) { return x * 2 }`
-
-	got, ok := lex(source)
-	defer delete(got)
-
-	if !tt.expect(t, ok, "lexer error") {return}
-
-	want := []Token {
-		Token{type = .FUNC, lexeme = "func", position = Pos{1, 1}},
-		Token{type = .IDENT, lexeme = "a", position = Pos{1, 6}},
-		Token{type = .LPAREN, lexeme = "(", position = Pos{1, 7}},
-		Token{type = .IDENT, lexeme = "x", position = Pos{1, 8}},
-		Token{type = .RPAREN, lexeme = ")", position = Pos{1, 9}},
-		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{1, 11}},
-		Token{type = .RETURN, lexeme = "return", position = Pos{1, 13}},
-		Token{type = .IDENT, lexeme = "x", position = Pos{1, 20}},
-		Token{type = .STAR, lexeme = "*", position = Pos{1, 22}},
-		Token{type = .NUMBER, lexeme = "2", position = Pos{1, 24}},
-		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{1, 26}},
-		Token{type = .EOF, lexeme = "", position = Pos{1, 27}},
+		Token{type = .SEMI, lexeme = ";", position = Pos{13, 2}},
+		Token{type = .EOF, lexeme = "", position = Pos{13, 3}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)
@@ -256,105 +199,6 @@ test_lexer_operators :: proc(t: ^tt.T) {
 		Token{type = .BAR_GREATER, lexeme = "|>", position = Pos{1, 54}},
 		Token{type = .FAT_ARROW, lexeme = "=>", position = Pos{1, 57}},
 		Token{type = .EOF, lexeme = "", position = Pos{1, 59}},
-	}
-
-	are_equal, wanted, recieved := expect_tokens_equal(want, got)
-	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
-}
-
-/* Test ASI: newline after identifier isn't stripped. */
-@(test)
-test_lexer_asi_identifier :: proc(t: ^tt.T) {
-	got, ok := lex("a\nb")
-	defer delete(got)
-
-	if !tt.expect(t, ok, "lexer error") {return}
-
-	want := []Token {
-		Token{type = .IDENT, lexeme = "a", position = Pos{1, 1}},
-		Token{type = .NEWLINE, lexeme = "\n", position = Pos{1, 2}},
-		Token{type = .IDENT, lexeme = "b", position = Pos{2, 1}},
-		Token{type = .EOF, lexeme = "", position = Pos{2, 2}},
-	}
-
-	are_equal, wanted, recieved := expect_tokens_equal(want, got)
-	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
-}
-
-/* Test that ASI is suppressed inside brackets for lists. */
-@(test)
-test_lexer_asi_suppressed_in_list :: proc(t: ^tt.T) {
-	got, ok := lex("[\na\n]")
-	defer delete(got)
-
-	if !tt.expect(t, ok, "lexer error") {return}
-
-	want := []Token {
-		Token{type = .LSQUARE, lexeme = "[", position = Pos{1, 1}},
-		Token{type = .IDENT, lexeme = "a", position = Pos{2, 1}},
-		Token{type = .RSQUARE, lexeme = "]", position = Pos{3, 1}},
-		Token{type = .EOF, lexeme = "", position = Pos{3, 2}},
-	}
-
-	are_equal, wanted, recieved := expect_tokens_equal(want, got)
-	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
-}
-
-/* Test that ASI is NOT suppressed inside blocks within lists/parentheses. */
-@(test)
-test_lexer_asi_suppressed_in_block_in_list_and_parens :: proc(t: ^tt.T) {
-	got, ok := lex("[\n{\na\nb\n}\n]")
-	defer delete(got)
-
-	if !tt.expect(t, ok, "lexer error") {return}
-
-	want := []Token {
-		Token{type = .LSQUARE, lexeme = "[", position = Pos{1, 1}},
-		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{2, 1}},
-		Token{type = .IDENT, lexeme = "a", position = Pos{3, 1}},
-		Token{type = .NEWLINE, lexeme = "\n", position = Pos{3, 2}},
-		Token{type = .IDENT, lexeme = "b", position = Pos{4, 1}},
-		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{5, 1}},
-		Token{type = .RSQUARE, lexeme = "]", position = Pos{6, 1}},
-		Token{type = .EOF, lexeme = "", position = Pos{6, 2}},
-	}
-
-	are_equal, wanted, recieved := expect_tokens_equal(want, got)
-	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
-}
-
-/* Test that the 'in' keyword suppresses ASI (for for-in loops). */
-@(test)
-test_lexer_asi_suppressed_in :: proc(t: ^tt.T) {
-	got, ok := lex("a\nin b")
-	defer delete(got)
-
-	if !tt.expect(t, ok, "lexer error") {return}
-
-	want := []Token {
-		Token{type = .IDENT, lexeme = "a", position = Pos{1, 1}},
-		Token{type = .IN, lexeme = "in", position = Pos{2, 1}},
-		Token{type = .IDENT, lexeme = "b", position = Pos{2, 4}},
-		Token{type = .EOF, lexeme = "", position = Pos{2, 5}},
-	}
-
-	are_equal, wanted, recieved := expect_tokens_equal(want, got)
-	tt.expectf(t, are_equal, "want %v, got %v", wanted, recieved)
-}
-
-/* Test ASI: newline after closing brace inserts semicolon. */
-@(test)
-test_lexer_asi_r_squirly :: proc(t: ^tt.T) {
-	got, ok := lex("}\nprint")
-	defer delete(got)
-
-	if !tt.expect(t, ok, "lexer error") {return}
-
-	want := []Token {
-		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{1, 1}},
-		Token{type = .NEWLINE, lexeme = "\n", position = Pos{1, 2}},
-		Token{type = .PRINT, lexeme = "print", position = Pos{2, 1}},
-		Token{type = .EOF, lexeme = "", position = Pos{2, 6}},
 	}
 
 	are_equal, wanted, recieved := expect_tokens_equal(want, got)

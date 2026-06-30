@@ -5,9 +5,7 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import vmem "core:mem/virtual"
-import "core:reflect"
 import "core:slice"
-import "core:strings"
 import "core:time"
 
 FRAMES_MAX :: 96
@@ -153,7 +151,6 @@ define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 	vm_push(vm, obj_val(obj_module)) // keep it on the stack so that gc doesn't collect
 
 	module_functions := get_builtin_module(gc, module)
-	defer delete(module_functions)
 
 	for function in module_functions {
 		vm_push(vm, obj_val(copy_string(gc, function.name)))
@@ -748,34 +745,23 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 			vm_push(vm, result) // Push the return value back to the stack.
 			frame = &vm.frames[vm.frame_count - 1]
 		case .OP_MODULE_BUILTIN:
-			{
-				module_str := strings.to_upper(read_string(frame).chars)
-				defer delete(module_str)
+			module_str := read_string(frame).chars
 
-				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
-				if !ok {
-					// panic the whole program because this is never supposed to happen
-					fmt.panicf("unknown builtin module '%v", module_str)
-				}
-
-				module_str_lower := strings.to_lower(module_str)
-				defer delete(module_str_lower)
-				define_builtin_module(vm.gc, module_str_lower, module)
+			module, ok := as_builtin_module(module_str)
+			if !ok {
+				fmt.panicf("unknown builtin module '%v", module_str)
 			}
+
+			define_builtin_module(vm.gc, module_str, module)
 		case .OP_MODULE_BUILTIN_LONG:
-			{
-				module_str := strings.to_upper(read_string_long(frame).chars)
-				defer delete(module_str)
+			module_str := read_string_long(frame).chars
 
-				module, ok := reflect.enum_from_name(BuiltinModule, module_str)
-				if !ok {
-					fmt.panicf("unknown builtin module '%v", module_str)
-				}
-
-				module_str_lower := strings.to_lower(module_str)
-				defer delete(module_str_lower)
-				define_builtin_module(vm.gc, module_str_lower, module)
+			module, ok := as_builtin_module(module_str)
+			if !ok {
+				fmt.panicf("unknown builtin module '%v", module_str)
 			}
+
+			define_builtin_module(vm.gc, module_str, module)
 		case .OP_MODULE_USER:
 			{
 				module_name := read_string(frame)
@@ -906,10 +892,6 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	// need to clone to ensure no weird behavior when printing a line on errors
-	// ..or so i thought but that doesn't seem to fix the issues?
-	// source_new := strings.clone(strings.trim_space(source))
-	// defer delete(source_new)
 	tokens, lx_ok := lex(source)
 	defer delete(tokens)
 	if !lx_ok {
@@ -929,7 +911,7 @@ interpret :: proc(
 			fmt.println("TOKENS:")
 			for token in tokens {
 				fmt.printf("    %v", token.type)
-				if token.type != .NEWLINE && token.type != .EOF {
+				if token.type != .EOF {
 					fmt.printf("(%s)", token.lexeme)
 				}
 				fmt.printfln(" at line %d, column %d", token.position.line, token.position.column)
