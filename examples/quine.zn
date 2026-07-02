@@ -1,11 +1,11 @@
 // This program prints itself as its output.
 use 'string';
-var q = string.asciichar(34);
-var l = [
+val q = string.asciichar(34);
+val l = [
     "// This program prints itself as its output.",
     "use 'string';",
-    "var q = string.asciichar(34);",
-    "var l = [",
+    "val q = string.asciichar(34);",
+    "val l = [",
     "",
     "];",
     "for var i = 0; i < 4; i = i + 1 {",
