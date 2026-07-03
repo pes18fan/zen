@@ -265,12 +265,14 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.value) or_return
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
 
+		if var.is_module {
+			resolver_error(rs, fmt.tprintf("Cannot reassign module '%v'.", var.name))
+			return false
+		}
+
 		if var.is_final {
 			if var.is_native_value {
-				resolver_error(
-					rs,
-					fmt.tprintf("Native value '%v' cannot be overwritten.", var.name),
-				)
+				resolver_error(rs, fmt.tprintf("Cannot reassign native value '%v'.", var.name))
 			} else {
 				resolver_error(rs, "Can only set a final variable once.")
 			}

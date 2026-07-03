@@ -5,6 +5,7 @@ import "core:os"
 import "core:path/filepath"
 import "core:strconv"
 import "core:strings"
+import "core:unicode/utf8"
 
 // AST Node Definitions
 
@@ -695,34 +696,39 @@ still need to be freed if necessary.
 In this compiler, it is used to create an escape-sequenced string out of a slice 
 of the program input itself, which should **NOT** be freed until the program ends; 
 which is why it does not take ownership.
-
-So far, only the newline and tab sequences are supported.
 */
 @(private = "file")
-add_escape_sequences :: proc(str: string) -> string {
-	sequences := make(map[byte]byte)
+parse_escape_sequences :: proc(str: string) -> (string, ErrorMessage) {
+	sequences := make(map[rune]rune)
 	sequences['n'] = '\n'
 	sequences['t'] = '\t'
 	sequences['"'] = '\"'
+	sequences['\''] = '\''
 	defer delete(sequences)
 
 	sb := strings.builder_make()
 	defer strings.builder_destroy(&sb)
 
-	escaped := false
-	for i := 0; i < len(str); i += 1 {
-		c := str[i]
-		if !escaped && c == '\\' && i + 1 < len(str) {
-			if replacement, ok := sequences[str[i + 1]]; ok {
-				strings.write_byte(&sb, replacement)
-				i += 1
-				continue
+	i := 0
+	for i < len(str) {
+		r, width := utf8.decode_rune(str[i:])
+		i += width
+
+		if r == '\\' && i < len(str) {
+			next, next_width := utf8.decode_rune(str[i:])
+
+			if replacement, ok := sequences[next]; ok {
+				strings.write_rune(&sb, replacement)
+				i += next_width
+			} else {
+				return "", fmt.tprintf("Unsupported escape sequence '%v'.", next)
 			}
+		} else {
+			strings.write_rune(&sb, r)
 		}
-		strings.write_byte(&sb, c)
 	}
 
-	return strings.clone(strings.to_string(sb))
+	return strings.clone(strings.to_string(sb)), nil
 }
 
 parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
@@ -731,7 +737,25 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 
 	#partial switch literal.token.type {
 	case .STRING:
-		literal.value = add_escape_sequences(literal.token.lexeme[1:len(literal.token.lexeme) - 1])
+		escaped, err := parse_escape_sequences(
+			literal.token.lexeme[1:len(literal.token.lexeme) - 1],
+		)
+		if err != nil {
+			parser_error(p, literal.token, err.?)
+		} else {
+			literal.value = escaped
+		}
+	case .MULTILINE_STRING_LINE:
+		sb := strings.builder_make()
+		defer strings.builder_destroy(&sb)
+
+		strings.write_string(&sb, literal.token.lexeme[2:]) // discard the '\\'
+		for parser_check(p, .MULTILINE_STRING_LINE) {
+			token := parser_advance(p)
+			strings.write_string(&sb, token.lexeme[2:])
+		}
+
+		literal.value = strings.clone(strings.to_string(sb))
 	case .NUMBER:
 		value, ok := strconv.parse_f64(literal.token.lexeme)
 		if !ok {
@@ -770,9 +794,14 @@ parse_variable :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	if parser_match(p, .STRING) {
 		str_literal := new(LiteralExpr)
 		str_literal.token = parser_previous(p)
-		str_literal.value = add_escape_sequences(
+		escaped, err := parse_escape_sequences(
 			str_literal.token.lexeme[1:len(str_literal.token.lexeme) - 1],
 		)
+		if err != nil {
+			parser_error(p, parser_peek(p), err.?)
+		} else {
+			str_literal.value = escaped
+		}
 
 		call := new(CallExpr)
 
@@ -1053,64 +1082,65 @@ parse_subscript :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 //---------------------------------------------------------
 
 rules: [TokenType]ParseRule = {
-	.LPAREN        = {parse_grouping, parse_call, .CALL},
-	.RPAREN        = {nil, nil, .NONE},
-	.LSQUIRLY      = {parse_block_expr, nil, .NONE},
-	.RSQUIRLY      = {nil, nil, .NONE},
-	.LSQUARE       = {parse_list, parse_subscript, .CALL},
-	.RSQUARE       = {nil, nil, .NONE},
-	.COMMA         = {nil, nil, .NONE},
-	.COLON         = {nil, nil, .NONE},
-	.DOT           = {nil, parse_dot, .CALL},
-	.DOT_DOT       = {nil, parse_binary, .CONCATENATION},
-	.MINUS         = {parse_unary, parse_binary, .TERM},
-	.PLUS          = {nil, parse_binary, .TERM},
-	.SEMI          = {nil, nil, .NONE},
-	.SLASH         = {nil, parse_binary, .FACTOR},
-	.STAR          = {nil, parse_binary, .FACTOR},
-	.PERCENT       = {nil, parse_binary, .FACTOR},
-	.BANG_EQUAL    = {nil, parse_binary, .EQUALITY},
-	.BAR_GREATER   = {nil, parse_pipe, .PIPELINE},
-	.EQUAL         = {nil, nil, .NONE},
-	.EQUAL_EQUAL   = {nil, parse_binary, .EQUALITY},
-	.ARROW         = {nil, nil, .NONE},
-	.FAT_ARROW     = {nil, nil, .NONE},
-	.GREATER       = {nil, parse_binary, .COMPARISON},
-	.GREATER_EQUAL = {nil, parse_binary, .COMPARISON},
-	.LESS          = {nil, parse_binary, .COMPARISON},
-	.LESS_EQUAL    = {nil, parse_binary, .COMPARISON},
-	.IDENT         = {parse_variable, nil, .NONE},
-	.STRING        = {parse_literal, nil, .NONE},
-	.NUMBER        = {parse_literal, nil, .NONE},
-	.AND           = {nil, parse_logical, .AND},
-	.BREAK         = {parse_break, nil, .NONE},
-	.CONTINUE      = {parse_continue, nil, .NONE},
-	.CATCH         = {nil, nil, .CONDITIONAL},
-	.ELSE          = {nil, nil, .NONE},
-	.EXIT          = {parse_exit, nil, .NONE},
-	.FALSE         = {parse_literal, nil, .NONE},
-	.FOR           = {parse_for, nil, .NONE},
-	.FUNC          = {parse_function, nil, .NONE},
-	.IF            = {parse_if_expr, nil, .CONDITIONAL},
-	.IFNT          = {parse_if_expr, nil, .CONDITIONAL},
-	.IN            = {nil, nil, .NONE},
-	.IT            = {parse_it, nil, .NONE},
-	.NIL           = {parse_literal, nil, .NONE},
-	.NOT           = {parse_unary, nil, .NONE},
-	.OR            = {nil, parse_logical, .OR},
-	.ORELSE        = {nil, nil, .NONE},
-	.PRINT         = {parse_print, nil, .NONE},
-	.PUB           = {parse_pub, nil, .NONE},
-	.RETURN        = {parse_return, nil, .NONE},
-	.SWITCH        = {parse_switch_expr, nil, .CONDITIONAL},
-	.TRUE          = {parse_literal, nil, .NONE},
-	.TRY           = {nil, nil, .NONE},
-	.USE           = {parse_use_expr, nil, .NONE},
-	.WHILE         = {parse_while, nil, .NONE},
-	.WHILENT       = {parse_while, nil, .NONE},
-	.VAR           = {parse_var_decl_expression, nil, .NONE},
-	.VAL           = {parse_var_decl_expression, nil, .NONE},
-	.EOF           = {nil, nil, .NONE},
+	.LPAREN                = {parse_grouping, parse_call, .CALL},
+	.RPAREN                = {nil, nil, .NONE},
+	.LSQUIRLY              = {parse_block_expr, nil, .NONE},
+	.RSQUIRLY              = {nil, nil, .NONE},
+	.LSQUARE               = {parse_list, parse_subscript, .CALL},
+	.RSQUARE               = {nil, nil, .NONE},
+	.COMMA                 = {nil, nil, .NONE},
+	.COLON                 = {nil, nil, .NONE},
+	.DOT                   = {nil, parse_dot, .CALL},
+	.DOT_DOT               = {nil, parse_binary, .CONCATENATION},
+	.MINUS                 = {parse_unary, parse_binary, .TERM},
+	.PLUS                  = {nil, parse_binary, .TERM},
+	.SEMI                  = {nil, nil, .NONE},
+	.SLASH                 = {nil, parse_binary, .FACTOR},
+	.STAR                  = {nil, parse_binary, .FACTOR},
+	.PERCENT               = {nil, parse_binary, .FACTOR},
+	.BANG_EQUAL            = {nil, parse_binary, .EQUALITY},
+	.BAR_GREATER           = {nil, parse_pipe, .PIPELINE},
+	.EQUAL                 = {nil, nil, .NONE},
+	.EQUAL_EQUAL           = {nil, parse_binary, .EQUALITY},
+	.ARROW                 = {nil, nil, .NONE},
+	.FAT_ARROW             = {nil, nil, .NONE},
+	.GREATER               = {nil, parse_binary, .COMPARISON},
+	.GREATER_EQUAL         = {nil, parse_binary, .COMPARISON},
+	.LESS                  = {nil, parse_binary, .COMPARISON},
+	.LESS_EQUAL            = {nil, parse_binary, .COMPARISON},
+	.IDENT                 = {parse_variable, nil, .NONE},
+	.STRING                = {parse_literal, nil, .NONE},
+	.MULTILINE_STRING_LINE = {parse_literal, nil, .NONE},
+	.NUMBER                = {parse_literal, nil, .NONE},
+	.AND                   = {nil, parse_logical, .AND},
+	.BREAK                 = {parse_break, nil, .NONE},
+	.CONTINUE              = {parse_continue, nil, .NONE},
+	.CATCH                 = {nil, nil, .CONDITIONAL},
+	.ELSE                  = {nil, nil, .NONE},
+	.EXIT                  = {parse_exit, nil, .NONE},
+	.FALSE                 = {parse_literal, nil, .NONE},
+	.FOR                   = {parse_for, nil, .NONE},
+	.FUNC                  = {parse_function, nil, .NONE},
+	.IF                    = {parse_if_expr, nil, .CONDITIONAL},
+	.IFNT                  = {parse_if_expr, nil, .CONDITIONAL},
+	.IN                    = {nil, nil, .NONE},
+	.IT                    = {parse_it, nil, .NONE},
+	.NIL                   = {parse_literal, nil, .NONE},
+	.NOT                   = {parse_unary, nil, .NONE},
+	.OR                    = {nil, parse_logical, .OR},
+	.ORELSE                = {nil, nil, .NONE},
+	.PRINT                 = {parse_print, nil, .NONE},
+	.PUB                   = {parse_pub, nil, .NONE},
+	.RETURN                = {parse_return, nil, .NONE},
+	.SWITCH                = {parse_switch_expr, nil, .CONDITIONAL},
+	.TRUE                  = {parse_literal, nil, .NONE},
+	.TRY                   = {nil, nil, .NONE},
+	.USE                   = {parse_use_expr, nil, .NONE},
+	.WHILE                 = {parse_while, nil, .NONE},
+	.WHILENT               = {parse_while, nil, .NONE},
+	.VAR                   = {parse_var_decl_expression, nil, .NONE},
+	.VAL                   = {parse_var_decl_expression, nil, .NONE},
+	.EOF                   = {nil, nil, .NONE},
 }
 
 Parser :: struct {
