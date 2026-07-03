@@ -79,6 +79,8 @@ There are two forms of strings in zen:
     ;
     ```
 
+Two strings are equal if they have the same contents.
+
 Strings are immutable in zen.
 
 ### `Nil`
@@ -99,11 +101,15 @@ zen is statically typed. It uses Hindley-Milner type inference, allowing it
 to automatically infer types of expressions. However, type annotations may
 still be provided where desired for readability or to constrain inference.
 
+### `Any`
+
 Type inference can be effectively disabled by using the `Any` type for variables.
 `Any` is a special type that is compatible with anything, making it easy to
-opt into dynamic typing. However, it is not recommended to use it in combination
-with static types, as its effect of disabling type inference is infectious
-and can seep into the rest of the program.
+opt into dynamic typing. 
+
+However, it is not recommended to use `Any` in combination with static types, as
+its effect of disabling type inference is infectious and can seep into the rest
+of the program.
 
 ## Variables
 
@@ -438,6 +444,24 @@ numeric operations,  `==`, `!=`, `>`, `<`, `>=`, `<=` for comparisons, `and`,
 concatenation, and the pipe operator `|>` described in more detail in the next
 section.
 
+### Precedence
+
+Precedence of expressions is described in the following table. The larger the
+precedence level, the more precedence the operator has.
+
+| Precedence  | Operators  |
+|---|---|
+|  10  | `-`, `not`  |
+|  9  | `*`, `/`, `%`  |
+|  8  | `+`, `-`  |
+|  7  | `..`  |
+|  6  | `<`, `>`, `<=`, `>=`  |
+|  5  | `==`, `!=`  |
+|  4  | `and`  |
+|  3  | `or`  |
+|  2  | `if`, `switch`  |
+|  1  | `|>`  |
+
 ## Pipelines
 
 zen supports a unique feature inspired by the Elixir programming language called
@@ -473,6 +497,8 @@ A list is a ordered, indexable sequence of values.
 Lists have the type `List[a]`, where the `a` represents the type of the
 values in the list. This means that lists in zen are homogenous; only one type
 of value is allowed in a list.
+
+Two lists are equal if they are the same value in memory.
 
 Lists can be created using a list literal:
 
@@ -655,8 +681,8 @@ for you to use.
     if the string is not a valid number.
 - `copy(x)`: Return a copy of `x`.
 - `panic(s)`: Crash the program with a message `s`.
-- `assert(x)`: Crash the program if the expression `x` is falsey, otherwise do
-    nothing.
+- `assert(x)`: Crash the program if the expression `x` evaluates to `false`, 
+    otherwise do nothing.
 - `dirname()`: Return the directory containing the running program, or an empty 
     string if running a REPL.
 - `filename()`: Return the name of the running program, or an empty string if 

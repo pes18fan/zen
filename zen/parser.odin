@@ -250,7 +250,7 @@ Precedence :: enum {
 	NONE,
 	ASSIGNMENT, // =
 	PIPELINE, // |>
-	CONDITIONAL, // if switch orelse
+	CONDITIONAL, // if switch
 	OR, // or
 	AND, // and
 	EQUALITY, // == !=
@@ -258,7 +258,7 @@ Precedence :: enum {
 	CONCATENATION, // ..
 	TERM, // + -
 	FACTOR, // * / %
-	UNARY, // ! -
+	UNARY, // - not
 	CALL, // . () []
 	PRIMARY,
 }
