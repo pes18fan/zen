@@ -1,0 +1,12 @@
+// The fast exponentiation algorithm
+val MOD = 1000000007;
+
+func pow(n, x) =>
+    switch {
+        x == 0 => 1,
+        x == 1 => n,
+        x == 2 => n * n,
+        else => (if x % 2 == 0 { 1 } else { n }) * pow(n * n % MOD, x / 2) 
+    };
+
+puts(pow(2, 16))    // expect: 65536
