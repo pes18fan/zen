@@ -1,0 +1,31 @@
+// Church-style booleans and numerals built purely from closures.
+// Each numeral has the shape (a -> a) -> a -> a, and church_succ/church_add
+// build new closures that capture and re-apply earlier closures.
+func church_true(a, b) => a;
+func church_false(a, b) => b;
+
+func church_zero(f, x) => x;
+func church_succ(n) => func(f, x) => f(n(f, x));
+
+func to_num(n) => n(func(x) => x + 1, 0);
+
+var one = church_succ(church_zero);
+var two = church_succ(one);
+var three = church_succ(two);
+
+// Church 3
+puts(str(to_num(three)));   // expect: 3
+
+func church_add(m, n) => func(f, x) => m(f, n(f, x));
+
+var five = church_add(two, three);
+
+// Church 2 + 3
+puts(str(to_num(five)));    // expect: 5
+
+func church_mul(m, n) => func(f, x) => m(func(y) => n(f, y), x);
+
+var six = church_mul(two, three);
+
+// Church 2 * 3
+puts(str(to_num(six)))  // expect: 6

@@ -1,0 +1,34 @@
+// Mutable state and message dispatch built entirely from closures, a so-called
+// "poor man's object".
+func make_counter(start) {
+    var count = start;
+
+    func handler(msg) {
+        switch msg {
+            "get" => count,
+            "inc" => {
+                count = count + 1;
+                count
+            },
+            "dec" => {
+                count = count - 1;
+                count
+            },
+            else => panic("unknown message: " .. msg)
+        }
+    };
+
+    handler
+};
+
+var counter = make_counter(10);
+puts(counter("inc"));  // expect: 11
+puts(counter("inc"));  // expect: 12
+puts(counter("dec"));  // expect: 11
+puts(counter("get"));  // expect: 11
+
+// A second independent counter to check that each call to
+// make_counter captures its own fresh `count`, not a shared one.
+var other = make_counter(0);
+puts(other("inc"));    // expect: 1
+puts(counter("get"))   // expect: 11

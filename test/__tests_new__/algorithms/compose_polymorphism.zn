@@ -1,0 +1,21 @@
+// Generic composition and identity for testing let-polymorphism.
+func compose[A, B, C](f, g) {
+    func(x) => f(g(x))
+};
+
+func add1(x) => x + 1;
+func double(x) => x * 2;
+func to_str(x) => str(x);
+
+var add1_then_double = compose(double, add1);
+puts(add1_then_double(5));   // expect: 12
+
+var double_then_str = compose(to_str, double);
+puts(double_then_str(5));    // expect: 10
+
+func identity[T](x: T): T => x;
+
+// Same `identity`, used at three unrelated concrete types back to back.
+puts(identity(42));         // expect: 42
+puts(identity("hello"));    // expect: hello
+puts(identity(true))        // expect: true

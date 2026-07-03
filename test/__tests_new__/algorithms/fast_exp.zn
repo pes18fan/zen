@@ -1,4 +1,4 @@
-// The fast exponentiation algorithm
+// The fast exponentiation algorithm / exponentiation by squaring.
 val MOD = 1000000007;
 
 func pow(n, x) =>
