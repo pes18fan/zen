@@ -31,24 +31,79 @@ if it ends with a semicolon.
 Sequences can only exist at the top level of the file or at the top level of
 a block.
 
+## Comments
+
+zen supports single-line comments via the `//` syntax.
+
+```zen
+// This is a comment!
+```
+
+There are no multiline comments in zen.
+
 ## Datatypes
 
-zen has the following primitive datatypes:
+zen has four primitive datatypes.
 
-- `Number`: A real number represented as a 64-bit floating point. Numbers also
-    support exponential notation (e.g `1e2` for `100`).
-- `Bool`: A boolean value i.e. true or false.
-- `String`: A sequence of text, enclosed by either double or single quotes.
-    Strings are immutable in zen.
-- `Nil`: A value that represents the absence of a value. It is the default
-    value for uninitialized variables and the implicit return value for functions
-    that do not return anything.
+### `Number`
+
+A real number represented as a 64-bit floating point. Numbers also support
+exponential notation (e.g `1e2` for `100`).
+
+### `Bool`
+
+Represents a value that can be either be `true` or `false`.
+
+### `String`
+
+A sequence of text. Strings in zen are assumed to be encoded in UTF-8.
+There are two forms of strings in zen:
+
+- Single-line strings, enclosed by single or double quotes. They support escape
+    sequences like `\n` and `\t`.
+    
+    ```zen
+    var str = "double quotes!";
+    var single = 'in single quotes too!'
+    ```
+
+- Multiline strings, with each line starting with a `\\`. Everything after the
+    `\\` is interpreted as a string, similar to a comment. They do not support
+    escape sequences.
+
+    ```zen
+    var poem =
+        \\ Your two great eyes will slay me suddenly;
+        \\ Their beauty shakes me who was once serene;
+        \\ Straight through my heart the wound is quick and keen. 
+    ;
+    ```
+
+Strings are immutable in zen.
+
+### `Nil`
+
+A value that represents the absence of a value. Its only value is the literal
+`nil`.
+
+`nil` is the default value for uninitialized variables, and the implicit return 
+value for functions that do not return anything.
+
+It is important to note that `Nil` is a unit type, that is, it is not compatible
+with any other type. If a value already has some other type, you are not allowed
+to assign `nil` to it; with the exception of the `Any` type.
 
 ## Type system
 
 zen is statically typed. It uses Hindley-Milner type inference, allowing it
 to automatically infer types of expressions. However, type annotations may
 still be provided where desired for readability or to constrain inference.
+
+Type inference can be effectively disabled by using the `Any` type for variables.
+`Any` is a special type that is compatible with anything, making it easy to
+opt into dynamic typing. However, it is not recommended to use it in combination
+with static types, as its effect of disabling type inference is infectious
+and can seep into the rest of the program.
 
 ## Variables
 
@@ -71,12 +126,13 @@ can still be mutated.
 Variables are lexically scoped.
 
 Variable names can include any letter in the English alphabet, underscores,
-numbers and question marks. However, a variable must begin with a letter or
-underscore.
+numbers, question marks or exclamation marks. However, a variable must begin 
+with a letter or underscore.
 
 ```zen
 var _ = "something";
 val truthy? = true;
+val hey! = "HELLO!";
 var name123 = "some name"
 ```
 
