@@ -40,6 +40,7 @@ TokenType :: enum {
 	// literals
 	IDENT,
 	STRING,
+	MULTILINE_STRING_LINE, // starting with '\\'
 	NUMBER,
 
 	// keywords
@@ -98,6 +99,7 @@ Lexer :: struct #all_or_none {
 	source:         string,
 	start:          int,
 	current:        int,
+	previous:       int, // can't just be current-1 as we work with utf8
 	start_position: Pos,
 	position:       Pos,
 }
@@ -106,7 +108,6 @@ Lexer :: struct #all_or_none {
 Reports a syntax error. Assumes that `token` is an illegal token since only
 illegal tokens are returned on syntax errors. 
 */
-@(private = "file")
 syntax_error :: proc(l: ^Lexer, message: string) {
 	fmt.eprint(color_red("error"))
 	fmt.eprintfln(": %s", style_bold(message))
@@ -115,73 +116,70 @@ syntax_error :: proc(l: ^Lexer, message: string) {
 }
 
 /* Returns true if `c` is alphanumeric, a question mark or an exclamation mark. */
-@(private = "file")
 is_alphanumeric_or_qn_or_ex :: proc(c: rune) -> bool {
 	return is_alpha(c) || is_digit(c) || c == '?' || c == '!'
 }
 
 /* Returns true if `c` is a letter or underscore. */
-@(private = "file")
 is_alpha :: proc(c: rune) -> bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
 }
 
 /* Returns true if `c` is a digit. */
-@(private = "file")
 is_digit :: proc(c: rune) -> bool {
 	return c >= '0' && c <= '9'
 }
 
 /* Returns true if the scanner reached the end of the source. */
-@(private = "file")
-is_at_end :: proc(l: ^Lexer) -> bool {
+lexer_is_at_end :: proc(l: ^Lexer) -> bool {
 	return l.current >= len(l.source)
 }
 
 /* Consume the current character and return it. */
-@(private = "file")
-advance :: proc(l: ^Lexer) -> rune #no_bounds_check {
-	defer l.current += 1
-	defer l.position.column += 1
-	return utf8.rune_at(l.source, l.current)
+lexer_advance :: proc(l: ^Lexer) -> rune #no_bounds_check {
+	r, width := utf8.decode_rune(l.source[l.current:])
+	l.previous = l.current
+	l.current += width
+	if r == '\n' {
+		l.position.column = 1
+		l.position.line += 1
+	} else {
+		l.position.column += 1
+	}
+	return r
 }
 
 /* Return the current character without consuming it. */
-@(private = "file")
-peek :: proc(l: ^Lexer) -> rune #no_bounds_check {
+lexer_peek :: proc(l: ^Lexer) -> rune #no_bounds_check {
 	return utf8.rune_at(l.source, l.current)
 }
 
 /* Returns the character after the current one. */
-@(private = "file")
-peek_next :: proc(l: ^Lexer) -> rune {
-	if is_at_end(l) {
+lexer_peek_next :: proc(l: ^Lexer) -> rune {
+	if lexer_is_at_end(l) {
 		return utf8.RUNE_EOF
 	}
-	return utf8.rune_at(l.source, l.current + 1)
+	_, width := utf8.decode_rune(l.source[l.current:])
+	return utf8.rune_at(l.source, l.current + width)
 }
 
 /* Returns the previously consumed character. */
-@(private = "file")
-previous :: proc(l: ^Lexer) -> rune {
-	return utf8.rune_at(l.source, l.current - 1)
+lexer_previous :: proc(l: ^Lexer) -> rune {
+	return utf8.rune_at(l.source, l.previous)
 }
 
 /* Consume the next character if it matches `expected`. */
-@(private = "file")
-match :: proc(l: ^Lexer, expected: rune) -> bool {
-	if is_at_end(l) {return false}
-	if peek(l) != expected {
+lexer_match :: proc(l: ^Lexer, expected: rune) -> bool {
+	if lexer_is_at_end(l) {return false}
+	if lexer_peek(l) != expected {
 		return false
 	}
-	defer l.current += 1
-	defer l.position.column += 1
+	lexer_advance(l)
 
 	return true
 }
 
 /* Create a token of the provided `type`. */
-@(private = "file")
 make_token :: proc(l: ^Lexer, type: TokenType) -> Token {
 	return Token {
 		type = type,
@@ -200,19 +198,17 @@ automatic semicolon insertion.
 @(optimization_mode = "favor_size")
 skip_whitespace :: proc(l: ^Lexer) {
 	for {
-		c := peek(l)
+		c := lexer_peek(l)
 
 		switch c {
 		case '\t', '\v', '\f', '\r', ' ':
-			advance(l)
+			lexer_advance(l)
 		case '\n':
-			advance(l)
-			l.position.line += 1
-			l.position.column = 1
+			lexer_advance(l)
 		case '/':
-			if peek_next(l) == '/' {
-				for peek(l) != '\n' && !is_at_end(l) {
-					advance(l)
+			if lexer_peek_next(l) == '/' {
+				for lexer_peek(l) != '\n' && !lexer_is_at_end(l) {
+					lexer_advance(l)
 				}
 			} else {
 				return
@@ -389,16 +385,16 @@ when CHAOTIC {
 
 /* Consume an identifier. */
 @(private = "file")
-tok_ident :: proc(l: ^Lexer) -> Token {
+lexer_lex_ident :: proc(l: ^Lexer) -> Token {
 	when CHAOTIC {
 		// Consume letters, underscores, question marks and apostrophes.
-		for is_alphanumeric_or_qn_or_ex_or_apostrophe(peek(l)) {
-			advance(l)
+		for is_alphanumeric_or_qn_or_ex_or_apostrophe(lexer_peek(l)) {
+			lexer_advance(l)
 		}
 	} else {
 		// Consume letters, underscores and question marks.
-		for is_alphanumeric_or_qn_or_ex(peek(l)) {
-			advance(l)
+		for is_alphanumeric_or_qn_or_ex(lexer_peek(l)) {
+			lexer_advance(l)
 		}
 	}
 
@@ -407,81 +403,95 @@ tok_ident :: proc(l: ^Lexer) -> Token {
 
 /* Consume a number. */
 @(private = "file")
-tok_number :: proc(l: ^Lexer) -> Maybe(Token) {
+lexer_lex_number :: proc(l: ^Lexer) -> Maybe(Token) {
 	// Consume digits.
-	for is_digit(peek(l)) {
-		advance(l)
+	for is_digit(lexer_peek(l)) {
+		lexer_advance(l)
 	}
 
 	// Consume the fractional part, if it exists.
-	if peek(l) == '.' && is_digit(peek_next(l)) {
-		advance(l)
+	if lexer_peek(l) == '.' && is_digit(lexer_peek_next(l)) {
+		lexer_advance(l)
 
-		for is_digit(peek(l)) {
-			advance(l)
+		for is_digit(lexer_peek(l)) {
+			lexer_advance(l)
 		}
 	}
 
 	// Consume the exponential part, if it exists.
 	// `xey` means `x` times 10 to the power of `y`
-	if peek(l) == 'e' {
-		advance(l)
+	if lexer_peek(l) == 'e' {
+		lexer_advance(l)
 
-		if !is_digit(peek(l)) {
+		if !is_digit(lexer_peek(l)) {
 			syntax_error(l, "Invalid number.")
 			return nil
 		}
 	}
 
-	for is_digit(peek(l)) {
-		advance(l)
+	for is_digit(lexer_peek(l)) {
+		lexer_advance(l)
 	}
 
 	return make_token(l, .NUMBER)
 }
 
+/* Consume one line of a multiline string. */
+lexer_lex_multiline_string_line :: proc(l: ^Lexer) -> Token {
+	// Consume characters until a newline or EOF.
+	for lexer_peek(l) != '\n' && !lexer_is_at_end(l) {
+		lexer_advance(l)
+	}
+
+	// Consume the newline.
+	if !lexer_is_at_end(l) {
+		lexer_advance(l)
+	}
+
+	return make_token(l, .MULTILINE_STRING_LINE)
+}
+
 /* Consume a string. */
-@(private = "file")
-tok_string :: proc(l: ^Lexer, starts_with: rune) -> Maybe(Token) {
+lexer_lex_string :: proc(l: ^Lexer, starts_with: rune) -> Maybe(Token) {
 	// Consume characters until the closing quote.
-	for peek(l) != starts_with && !is_at_end(l) {
-		if peek(l) == '\n' {
-			l.position.line += 1
-			l.position.column = 1
+	for lexer_peek(l) != starts_with && !lexer_is_at_end(l) {
+		// quoted strings can't be multiline
+		if lexer_peek(l) == '\n' {
+			syntax_error(l, "Unterminated string.")
+			return nil
 		}
 
 		// don't end at escaped quotes
-		if peek(l) == '\\' && peek_next(l) == starts_with {
-			advance(l)
+		if lexer_peek(l) == '\\' && lexer_peek_next(l) == starts_with {
+			lexer_advance(l)
 		}
 
-		advance(l)
+		lexer_advance(l)
 	}
 
-	if is_at_end(l) {
+	if lexer_is_at_end(l) {
 		syntax_error(l, "Unterminated string.")
 		return nil
 	}
 
 	// Consume the closing quote.
-	advance(l)
+	lexer_advance(l)
 	return make_token(l, .STRING)
 }
 
 /* Lex a token. */
-@(private = "file")
 lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	skip_whitespace(l)
 	l.start = l.current
 	l.start_position = l.position
 
-	if is_at_end(l) {
+	if lexer_is_at_end(l) {
 		return make_token(l, .EOF)
 	}
 
-	c := advance(l)
-	if is_alpha(c) {return tok_ident(l)}
-	if is_digit(c) {return tok_number(l)}
+	c := lexer_advance(l)
+	if is_alpha(c) {return lexer_lex_ident(l)}
+	if is_digit(c) {return lexer_lex_number(l)}
 
 	switch c {
 	case '(':
@@ -503,9 +513,9 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case ',':
 		return make_token(l, .COMMA)
 	case '.':
-		return make_token(l, match(l, '.') ? .DOT_DOT : .DOT)
+		return make_token(l, lexer_match(l, '.') ? .DOT_DOT : .DOT)
 	case '-':
-		return make_token(l, match(l, '>') ? .ARROW : .MINUS)
+		return make_token(l, lexer_match(l, '>') ? .ARROW : .MINUS)
 	case '+':
 		return make_token(l, .PLUS)
 	case '/':
@@ -515,29 +525,33 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case '*':
 		return make_token(l, .STAR)
 	case '|':
-		if match(l, '>') {
+		if lexer_match(l, '>') {
 			return make_token(l, .BAR_GREATER)
 		}
 	case '!':
-		if match(l, '=') {
+		if lexer_match(l, '=') {
 			return make_token(l, .BANG_EQUAL)
 		}
 	case '=':
-		if match(l, '>') {
+		if lexer_match(l, '>') {
 			return make_token(l, .FAT_ARROW)
 		}
-		return make_token(l, match(l, '=') ? .EQUAL_EQUAL : .EQUAL)
+		return make_token(l, lexer_match(l, '=') ? .EQUAL_EQUAL : .EQUAL)
 	case '<':
-		return make_token(l, match(l, '=') ? .LESS_EQUAL : .LESS)
+		return make_token(l, lexer_match(l, '=') ? .LESS_EQUAL : .LESS)
 	case '>':
-		return make_token(l, match(l, '=') ? .GREATER_EQUAL : .GREATER)
+		return make_token(l, lexer_match(l, '=') ? .GREATER_EQUAL : .GREATER)
 	case '"':
-		return tok_string(l, starts_with = '"')
+		return lexer_lex_string(l, starts_with = '"')
 	case '\'':
-		return tok_string(l, starts_with = '\'')
+		return lexer_lex_string(l, starts_with = '\'')
+	case '\\':
+		if lexer_match(l, '\\') {
+			return lexer_lex_multiline_string_line(l)
+		}
 	}
 
-	syntax_error(l, fmt.tprintf("Unexpected character '%c'.", previous(l)))
+	syntax_error(l, fmt.tprintf("Unexpected character '%c'.", lexer_previous(l)))
 	return nil
 }
 
@@ -549,6 +563,7 @@ lex :: proc(source: string) -> ([]Token, bool) {
 		source         = source,
 		start          = 0,
 		current        = 0,
+		previous       = 0,
 		start_position = {1, 1},
 		position       = {1, 1},
 	}
