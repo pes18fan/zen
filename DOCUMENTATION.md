@@ -713,8 +713,9 @@ for you to use.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
-- `asciichar(x)`: Convert a number to its corresponding ASCII character.
-- `asciinum(s)`: Convert an ASCII character to its corresponding number.
+- `asciichar(x)`: Convert a number `x` to its corresponding ASCII character.
+- `asciinum(s)`: Convert an ASCII character `s` to its corresponding number.
+- `byte_count(s)`: Get the number of bytes in the string `s`.
 
 ### module `list`
 
@@ -726,10 +727,12 @@ for you to use.
 > [!NOTE]
 > All these functions mutate the list in-place and return the mutated list.
 
-- `sum(l)`: Reduce a list of numbers to its sum.
+- `sum(l)`: Reduce a list of numbers `l` to its sum.
 
 ### module `result`
 
+- `ok?(r)`: Returns `true` if the result `r` is an `ok` variant and `false` otherwise.
+- `err?(r)`: Returns `true` if the result `r` is an `err` variant and `false` otherwise.
 - `unwrap(r)`: Get the wrapped value of the result `r` if it is the `ok` variant,
     and panic if it is the `err` variant.
 - `unwrap_or(r, x)`: Get the wrapped value of the result `r` if it is the `ok` variant,
