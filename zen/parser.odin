@@ -28,7 +28,7 @@ Expr :: union #shared_nil {
 	^LiteralExpr,
 	^LogicalExpr,
 	^PipeExpr,
-	^PrintExpr,
+	^EchoExpr,
 	^ReturnExpr,
 	^SequenceExpr,
 	^SubscriptExpr,
@@ -173,7 +173,7 @@ PipeExpr :: struct {
 	right:    Expr,
 }
 
-PrintExpr :: struct {
+EchoExpr :: struct {
 	token: Token,
 	expr:  Expr,
 }
@@ -330,7 +330,7 @@ parse_precedence :: proc(p: ^Parser, precedence: Precedence) -> Expr {
 	return expr
 }
 
-// Parse an expression, treating newlines and semicolons as expression-separating infix operators.
+// Parse an expression, treating semicolons as expression-separating infix operators.
 parse_expression_top :: proc(p: ^Parser) -> Expr {
 	fst := parse_expression(p)
 	if parser_is_at_end(p) || parser_check(p, .RSQUIRLY) {
@@ -371,11 +371,11 @@ parse_if_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr.condition = parse_expression(p)
 
 	parser_consume(p, .LSQUIRLY, "Expect '{' after condition.")
-	expr.then_branch = parse_block_expr(p, can_assign).(^BlockExpr)
+	expr.then_branch = parse_block(p, can_assign).(^BlockExpr)
 
 	if parser_match(p, .ELSE) {
 		parser_consume(p, .LSQUIRLY, "Expect '{' after else.")
-		expr.else_branch = parse_block_expr(p, can_assign).(^BlockExpr)
+		expr.else_branch = parse_block(p, can_assign).(^BlockExpr)
 	}
 	return expr
 }
@@ -425,7 +425,7 @@ parse_while :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr.condition = parse_expression(p)
 
 	parser_consume(p, .LSQUIRLY, "Expect '{' after condition.")
-	expr.body = parse_block_expr(p, can_assign).(^BlockExpr)
+	expr.body = parse_block(p, can_assign).(^BlockExpr)
 	return expr
 }
 
@@ -440,7 +440,7 @@ parse_for :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		parser_advance(p) // parser_consume IN
 		expr.iterable = parse_expression(p)
 		parser_consume(p, .LSQUIRLY, "Expect '{' after iterable.")
-		expr.body = parse_block_expr(p, can_assign).(^BlockExpr)
+		expr.body = parse_block(p, can_assign).(^BlockExpr)
 		return expr
 	}
 
@@ -466,7 +466,7 @@ parse_for :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		parser_consume(p, .LSQUIRLY, "Expect '{' after for clauses.")
 	}
 
-	stmt.body = parse_block_expr(p, can_assign).(^BlockExpr)
+	stmt.body = parse_block(p, can_assign).(^BlockExpr)
 	return stmt
 }
 
@@ -644,8 +644,8 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	return expr
 }
 
-parse_print :: proc(p: ^Parser, can_assign: bool) -> Expr {
-	expr := new(PrintExpr)
+parse_echo :: proc(p: ^Parser, can_assign: bool) -> Expr {
+	expr := new(EchoExpr)
 	expr.token = parser_previous(p)
 	expr.expr = parse_expression(p)
 	return expr
@@ -756,7 +756,11 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 		}
 
 		multiline := strings.clone(strings.to_string(sb))
-		literal.value = multiline[:len(multiline) - 1] // discard the last newline
+		if multiline[len(multiline) - 1] == '\n' {
+			// discard the last newline
+			multiline = multiline[:len(multiline) - 1]
+		}
+		literal.value = multiline
 	case .NUMBER:
 		value, ok := strconv.parse_f64(literal.token.lexeme)
 		if !ok {
@@ -924,13 +928,13 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 		lambda.body = parse_expression(p)
 	} else {
 		parser_consume(p, .LSQUIRLY, "Expect '=>' or '{' after function parameter list.")
-		lambda.body = parse_block_expr(p, can_assign)
+		lambda.body = parse_block(p, can_assign)
 	}
 
 	return lambda
 }
 
-parse_block_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
+parse_block :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(BlockExpr)
 	expr.token = parser_previous(p) // the '{'
 	if !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
@@ -1085,7 +1089,7 @@ parse_subscript :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 rules: [TokenType]ParseRule = {
 	.LPAREN                = {parse_grouping, parse_call, .CALL},
 	.RPAREN                = {nil, nil, .NONE},
-	.LSQUIRLY              = {parse_block_expr, nil, .NONE},
+	.LSQUIRLY              = {parse_block, nil, .NONE},
 	.RSQUIRLY              = {nil, nil, .NONE},
 	.LSQUARE               = {parse_list, parse_subscript, .CALL},
 	.RSQUARE               = {nil, nil, .NONE},
@@ -1117,6 +1121,7 @@ rules: [TokenType]ParseRule = {
 	.BREAK                 = {parse_break, nil, .NONE},
 	.CONTINUE              = {parse_continue, nil, .NONE},
 	.CATCH                 = {nil, nil, .CONDITIONAL},
+	.ECHO                  = {parse_echo, nil, .NONE},
 	.ELSE                  = {nil, nil, .NONE},
 	.EXIT                  = {parse_exit, nil, .NONE},
 	.FALSE                 = {parse_literal, nil, .NONE},
@@ -1130,7 +1135,6 @@ rules: [TokenType]ParseRule = {
 	.NOT                   = {parse_unary, nil, .NONE},
 	.OR                    = {nil, parse_logical, .OR},
 	.ORELSE                = {nil, nil, .NONE},
-	.PRINT                 = {parse_print, nil, .NONE},
 	.PUB                   = {parse_pub, nil, .NONE},
 	.RETURN                = {parse_return, nil, .NONE},
 	.SWITCH                = {parse_switch_expr, nil, .CONDITIONAL},
@@ -1244,7 +1248,7 @@ parser_synchronize :: proc(p: ^Parser) {
 		     .IFNT,
 		     .WHILE,
 		     .WHILENT,
-		     .PRINT,
+		     .ECHO,
 		     .RETURN,
 		     .SWITCH,
 		     .PUB,
@@ -1342,7 +1346,7 @@ free_expr :: proc(expr: Expr) {
 		free_expr(e.left)
 		free_expr(e.right)
 		free(e)
-	case ^PrintExpr:
+	case ^EchoExpr:
 		free_expr(e.expr)
 		free(e)
 	case ^ReturnExpr:
@@ -1436,10 +1440,14 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, "(break)\n")
 	case ^BlockExpr:
 		print_indent(b, indent)
-		strings.write_string(b, "(block\n")
-		print_expr(b, e.expression, indent + 1)
-		print_indent(b, indent)
-		strings.write_string(b, ")\n")
+		if e.expression != nil {
+			strings.write_string(b, "(block\n")
+			print_expr(b, e.expression, indent + 1)
+			print_indent(b, indent)
+			strings.write_string(b, ")\n")
+		} else {
+			strings.write_string(b, "(block)")
+		}
 	case ^CallExpr:
 		print_indent(b, indent)
 		strings.write_string(b, "(call\n")
@@ -1570,9 +1578,9 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.right, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
-	case ^PrintExpr:
+	case ^EchoExpr:
 		print_indent(b, indent)
-		strings.write_string(b, "(print\n")
+		strings.write_string(b, "(echo\n")
 		print_expr(b, e.expr, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")

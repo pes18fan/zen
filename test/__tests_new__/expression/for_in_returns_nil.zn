@@ -1,2 +1,2 @@
 var result = for x in [1, 2, 3] { x };
-print result; // expect: nil
+echo result // expect: nil

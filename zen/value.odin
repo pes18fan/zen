@@ -2,6 +2,7 @@ package zen
 
 import "core:fmt"
 import "core:math"
+import "core:os"
 
 /* 
 Whether to use NaN boxing to represent values. Set to false to use a tagged 
@@ -244,7 +245,7 @@ type_of_value :: proc(value: Value) -> string {
 	unreachable()
 }
 
-stringify_value :: proc(value: Value) -> string {
+stringify_value :: proc(value: Value, quote_strings: bool = false) -> string {
 	when NAN_BOXING {
 		if is_nil(value) {
 			return "nil"
@@ -257,7 +258,7 @@ stringify_value :: proc(value: Value) -> string {
 				return fmt.tprintf("%.3f", as_number(value))
 			}
 		} else if is_obj(value) {
-			return stringify_object(as_obj(value))
+			return stringify_object(as_obj(value), quote_strings)
 		}
 	} else {
 		switch v in value {
@@ -310,9 +311,9 @@ copy_value :: proc(gc: ^GC, value: Value) -> Value {
 }
 
 /* Print out `value` in a human-readable format. */
-print_value :: proc(value: Value) {
-	str := stringify_value(value)
-	fmt.print(str)
+print_value :: proc(file: ^os.File, value: Value, quote_strings: bool = false) {
+	str := stringify_value(value, quote_strings)
+	fmt.fprint(file, str)
 }
 
 /* Determine if two `Value`s are equal. */

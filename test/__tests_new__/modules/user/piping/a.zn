@@ -1,5 +1,5 @@
 use "b.zn";
 
-print b.a()
+echo b.a()
     |> b.b()
-    |> b.c() // expect: abc
+    |> b.c() // expect: "abc"

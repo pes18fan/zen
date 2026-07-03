@@ -3,4 +3,4 @@ use "string";
 var x = ""
     |> string.chomp()
     |> string.replace("hello", "hi");
-print x // expect:
+echo x // expect: ""

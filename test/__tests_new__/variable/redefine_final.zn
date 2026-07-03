@@ -1,6 +1,2 @@
-// expect:
-// ERR: Can only set a final variable once
-// end expect
-
 val a = "some";
-a = "other"
+a = "other" // ERR: Can only set a final variable once.

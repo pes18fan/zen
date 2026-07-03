@@ -355,7 +355,7 @@ stringify_function :: proc(fn: ^ObjFunction) -> string {
 	return fmt.tprintf("<func %s>", fn.name.chars)
 }
 
-stringify_object :: proc(obj: ^Obj) -> string {
+stringify_object :: proc(obj: ^Obj, quote_strings: bool = false) -> string {
 	switch obj.type {
 	case .CLOSURE:
 		return stringify_function(as_closure(obj_val(obj)).function)
@@ -370,7 +370,7 @@ stringify_object :: proc(obj: ^Obj) -> string {
 			strings.write_string(&sb, "[")
 
 			for i := 0; i < list.items.count; i += 1 {
-				value := stringify_value(list.items.values[i])
+				value := stringify_value(list.items.values[i], quote_strings = true)
 				strings.write_string(&sb, value)
 
 				if i != list.items.count - 1 {
@@ -386,7 +386,7 @@ stringify_object :: proc(obj: ^Obj) -> string {
 		return fmt.tprintf("<module %s>", as_module(obj_val(obj)).name.chars)
 	case .RESULT:
 		result := as_result(obj_val(obj))
-		within := stringify_value(result.value)
+		within := stringify_value(result.value, quote_strings = true)
 		if result.is_ok {
 			return fmt.tprintf("ok(%s)", within)
 		} else {
@@ -395,8 +395,11 @@ stringify_object :: proc(obj: ^Obj) -> string {
 	case .NATIVE:
 		return "<native func>"
 	case .STRING:
-		return as_ostring(obj_val(obj))
-	// return fmt.tprintf("\"%s\"", as_ostring(obj_val(obj)))
+		if quote_strings {
+			return fmt.tprintf("\"%s\"", as_ostring(obj_val(obj)))
+		} else {
+			return as_ostring(obj_val(obj))
+		}
 	case .UPVALUE:
 		return "upvalue"
 	}

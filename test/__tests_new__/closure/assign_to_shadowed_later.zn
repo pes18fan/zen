@@ -7,7 +7,7 @@ var a = "global";
 
     var a = "inner";
     assign();
-    print a .. "\n"; // expect: inner
+    echo a // expect: "inner"
 };
 
-print a .. "\n" // expect: assigned
+echo a // expect: "assigned"

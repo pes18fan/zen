@@ -42,7 +42,7 @@ test_lexer_default :: proc(t: ^tt.T) {
 	source := `// this is a comment
 func foo() {
     if not false {
-        print str;
+        echo str;
     }
 };
 
@@ -68,9 +68,9 @@ func test() {
 		Token{type = .NOT, lexeme = "not", position = Pos{3, 8}},
 		Token{type = .FALSE, lexeme = "false", position = Pos{3, 12}},
 		Token{type = .LSQUIRLY, lexeme = "{", position = Pos{3, 18}},
-		Token{type = .PRINT, lexeme = "print", position = Pos{4, 9}},
-		Token{type = .IDENT, lexeme = "str", position = Pos{4, 15}},
-		Token{type = .SEMI, lexeme = ";", position = Pos{4, 18}},
+		Token{type = .ECHO, lexeme = "echo", position = Pos{4, 9}},
+		Token{type = .IDENT, lexeme = "str", position = Pos{4, 14}},
+		Token{type = .SEMI, lexeme = ";", position = Pos{4, 17}},
 		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{5, 5}},
 		Token{type = .RSQUIRLY, lexeme = "}", position = Pos{6, 1}},
 		Token{type = .SEMI, lexeme = ";", position = Pos{6, 2}},

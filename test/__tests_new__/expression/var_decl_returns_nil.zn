@@ -1,2 +1,2 @@
 var result = var x = 42;
-print result; // expect: nil
+echo result // expect: nil

@@ -47,9 +47,9 @@ func merge_sort(l, less) {
 func num_less(a, b) => a < b;
 
 var nums = [5, 3, 8, 1, 9, 2, 7, 4, 6];
-puts(merge_sort(nums, num_less));   // expect: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+echo merge_sort(nums, num_less);   // expect: [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 func str_less(a, b) => len(a) < len(b);
 
 var words = ["banana", "apple", "cherry"];
-puts(merge_sort(words, str_less))   // expect: [apple, cherry, banana]
+echo merge_sort(words, str_less)   // expect: ["apple", "cherry", "banana"]

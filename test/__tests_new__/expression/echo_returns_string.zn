@@ -1,0 +1,10 @@
+use "list";
+
+val ret = echo "something"; // expect: "something"
+puts(ret);  // expect: something
+
+val num = echo 3 + 4;   // expect: 7
+puts(num);   // expect: 7
+
+val l = echo list.push(["a", "b", "c"], "d"); // expect: ["a", "b", "c", "d"]
+puts(l)   // expect: ["a", "b", "c", "d"]

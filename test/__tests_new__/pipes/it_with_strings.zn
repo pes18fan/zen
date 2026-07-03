@@ -1,5 +1,5 @@
 use "string";
 
-print "hello"
+echo "hello"
     |> string.upcase()
-    |> it .. ", world" // expect: HELLO, world
+    |> it .. ", world" // expect: "HELLO, world"

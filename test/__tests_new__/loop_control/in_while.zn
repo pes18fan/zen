@@ -5,8 +5,7 @@ while i < 5 {
         continue
     };
 
-    print i;
-    print "\n";
+    echo i;
     i = i + 1
 };
 // expect: 0
@@ -20,8 +19,7 @@ while i < 5 {
         break
     };
 
-    print i;
-    print "\n";
+    echo i;
     i = i + 1
 }
 // expect: 0

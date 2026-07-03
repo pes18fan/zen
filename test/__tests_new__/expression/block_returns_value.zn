@@ -1,2 +1,2 @@
 var result = { 42 };
-print result; // expect: 42
+echo result // expect: 42
