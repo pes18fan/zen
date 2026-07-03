@@ -1,0 +1,46 @@
+var s1 = "Привет, мир!";
+puts(s1);
+// expect: Привет, мир!
+
+var s2 = "你好世界";
+puts(s2);
+// expect: 你好世界
+
+var s3 = "こんにちは世界";
+puts(s3);
+// expect: こんにちは世界
+
+var s4 = "😂👍💯";
+puts(s4);
+// expect: 😂👍💯
+
+var multi_utf8 = 
+    \\Пример
+    \\многострочной
+    \\строки
+    \\с
+    \\UTF-8
+    \\символами 😂
+;
+puts(multi_utf8);
+// expect: Пример
+// expect: многострочной
+// expect: строки
+// expect: с
+// expect: UTF-8
+// expect: символами 😂
+
+puts(len("hello"));
+// expect: 5
+
+puts(len("你好世界"));
+// expect: 4
+
+puts(len("Привет"));
+// expect: 6
+
+puts(len("hello 😂"));
+// expect: 7
+
+puts(len("😂👍💯"));
+// expect: 3

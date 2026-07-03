@@ -755,7 +755,8 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			strings.write_string(&sb, token.lexeme[2:])
 		}
 
-		literal.value = strings.clone(strings.to_string(sb))
+		multiline := strings.clone(strings.to_string(sb))
+		literal.value = multiline[:len(multiline) - 1] // discard the last newline
 	case .NUMBER:
 		value, ok := strconv.parse_f64(literal.token.lexeme)
 		if !ok {

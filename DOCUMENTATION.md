@@ -647,7 +647,8 @@ for you to use.
 
 - `puts(x)`: Print an expression to stdout and append a newline.
 - `gets()`: Read a line from stdin.
-- `len(s)`: Get the length of a string or list `s`.
+- `len(s)`: Get the number of elements in `s` if it is a list, or the number of
+    UTF-8 codepoints in `s` if it is a string.
 - `typeof(x)`: Get the type of any expression as a string.
 - `str(x)`: Convert any value into a string.
 - `parse(s)`: Attempt to parse a string `s` into a floating point number. Panics

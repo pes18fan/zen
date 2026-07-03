@@ -318,7 +318,7 @@ allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
 	zstring := as_string(obj_val(allocate_obj(gc, ObjString, .STRING)))
 	zstring.chars = str
 	zstring.hash = hash
-	zstring.len = len(str)
+	zstring.len = strings.rune_count(str)
 
 	vm: ^VM
 	/* Need to do this little dance to get the VM. */
