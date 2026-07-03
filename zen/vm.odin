@@ -253,7 +253,7 @@ operator can only return either a 64-bit float or a boolean. All of these
 operators take numbers as their arguments, hence 'numeric'.
 */
 @(private = "file")
-numeric_binary_op :: proc(
+numeric_binary_op :: #force_inline proc(
 	vm: ^VM,
 	$returns: typeid,
 	op: string,
