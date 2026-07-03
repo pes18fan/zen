@@ -51,6 +51,7 @@ UntypedVariable :: struct #all_or_none {
 	is_loop_variable: bool, // not used here but important for codegen
 	is_captured:      bool,
 	is_module:        bool,
+	is_native_value:  bool, // an Odin-implemented native (stdlib) function/value
 	initialized:      bool,
 	scope_depth:      int,
 	local_index:      int,
@@ -185,6 +186,7 @@ declare_variable :: proc(
 			is_loop_variable = is_loop_variable,
 			is_captured      = false,
 			is_module        = false,
+			is_native_value  = false,
 			initialized      = false,
 			scope_depth      = rs.function_scope.scope_depth,
 			local_index      = 0,
@@ -210,6 +212,7 @@ declare_variable :: proc(
 		is_loop_variable = is_loop_variable,
 		is_captured      = false,
 		is_module        = false,
+		is_native_value  = false,
 		initialized      = false,
 		scope_depth      = rs.function_scope.scope_depth,
 		local_index      = rs.function_scope.local_count,
@@ -261,6 +264,19 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.value) or_return
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
+
+		if var.is_final {
+			if var.is_native_value {
+				resolver_error(
+					rs,
+					fmt.tprintf("Native value '%v' cannot be overwritten.", var.name),
+				)
+			} else {
+				resolver_error(rs, "Can only set a final variable once.")
+			}
+			return false
+		}
+
 		resolved := new_clone(var^)
 		resolved.shadower = nil
 		rs.resolutions[e] = resolved
@@ -351,7 +367,27 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.index) or_return
 	case ^SubscriptSetExpr:
 		rs.current_token = e.token
-		resolve_with_resolver(rs, e.receiver) or_return
+
+		if varexpr, ok := e.receiver.(^VariableExpr); ok {
+			var := try2(
+				rs,
+				assert_variable_exists_and_resolve_it(rs, varexpr.name.lexeme),
+			) or_return
+
+			if var.is_final {
+				if var.is_native_value {
+					resolver_error(
+						rs,
+						fmt.tprintf("Native value '%v' cannot be overwritten.", var.name),
+					)
+				} else {
+					resolver_error(rs, "Can only set a final variable once.")
+				}
+				return false
+			}
+		} else {
+			resolve_with_resolver(rs, e.receiver) or_return
+		}
 		resolve_with_resolver(rs, e.index) or_return
 		resolve_with_resolver(rs, e.value) or_return
 	case ^SequenceExpr:
@@ -385,6 +421,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			is_loop_variable = false,
 			is_captured      = false,
 			is_module        = true,
+			is_native_value  = false,
 			initialized      = true,
 			scope_depth      = 0,
 			local_index      = 0,
@@ -543,6 +580,7 @@ resolve :: proc(
 				is_loop_variable = false,
 				is_captured      = false,
 				is_module        = false,
+				is_native_value  = true,
 				initialized      = true,
 				scope_depth      = 0,
 				local_index      = 0,
@@ -606,6 +644,7 @@ resolve_full :: proc(vm: ^VM, expr: Expr) -> (ResolutionMap, bool) {
 				is_loop_variable = false,
 				is_captured      = false,
 				is_module        = false,
+				is_native_value  = true,
 				initialized      = true,
 				scope_depth      = 0,
 				local_index      = 0,
