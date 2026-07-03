@@ -120,8 +120,8 @@ val nice = 69;
 nice = 68 // ERROR!
 ```
 
-With `val` however, only the binding is final; objects like lists and instances
-can still be mutated.
+With `val` however, only the binding is final; objects like lists can still be
+mutated.
 
 Variables are lexically scoped.
 
@@ -542,7 +542,7 @@ are of two types, builtin and user-defined modules.
 Builtin modules are a set of modules built into the language itself with various
 useful functions. A builtin module can be imported by simply using `use "mod"`
 where `mod` is the name of the module. Any function in the builtin module can be
-accessed and called using dot notation like with instances.
+accessed and called using dot notation.
 
 ```zen
 use "time";
