@@ -374,12 +374,14 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 				assert_variable_exists_and_resolve_it(rs, varexpr.name.lexeme),
 			) or_return
 
+			if var.is_module {
+				resolver_error(rs, fmt.tprintf("Cannot reassign module '%v'.", var.name))
+				return false
+			}
+
 			if var.is_final {
 				if var.is_native_value {
-					resolver_error(
-						rs,
-						fmt.tprintf("Native value '%v' cannot be overwritten.", var.name),
-					)
+					resolver_error(rs, fmt.tprintf("Cannot reassign native value '%v'.", var.name))
 				} else {
 					resolver_error(rs, "Can only set a final variable once.")
 				}
@@ -421,7 +423,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			is_loop_variable = false,
 			is_captured      = false,
 			is_module        = true,
-			is_native_value  = false,
+			is_native_value  = true if e.type == .BUILTIN else false,
 			initialized      = true,
 			scope_depth      = 0,
 			local_index      = 0,
