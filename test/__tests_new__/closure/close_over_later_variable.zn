@@ -3,8 +3,8 @@ func f() {
     var b = "b";
 
     func g() {
-        print b .. "\n"; // expect: b
-        print a .. "\n"; // expect: a
+        echo b; // expect: "b"
+        echo a; // expect: "a"
     };
     g()
 };

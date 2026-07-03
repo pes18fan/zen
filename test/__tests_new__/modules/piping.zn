@@ -1,5 +1,5 @@
 use "string";
 
-print "abcd"
+echo "abcd"
     |> string.upcase()
-    |> string.replace("BCD", "efg") // expect: Aefg
+    |> string.replace("BCD", "efg") // expect: "Aefg"

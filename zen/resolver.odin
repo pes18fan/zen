@@ -357,7 +357,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.left) or_return
 		resolve_with_resolver(rs, e.right) or_return
-	case ^PrintExpr:
+	case ^EchoExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.expr) or_return
 	case ^ReturnExpr:

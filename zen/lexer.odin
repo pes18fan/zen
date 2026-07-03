@@ -48,6 +48,7 @@ TokenType :: enum {
 	BREAK,
 	CATCH,
 	CONTINUE,
+	ECHO,
 	ELSE,
 	EXIT,
 	FALSE,
@@ -61,7 +62,6 @@ TokenType :: enum {
 	NOT,
 	OR,
 	ORELSE,
-	PRINT,
 	PUB,
 	RETURN,
 	SWITCH,
@@ -189,11 +189,7 @@ make_token :: proc(l: ^Lexer, type: TokenType) -> Token {
 	}
 }
 
-/*
-Ignore any whitespace character (and comment) encountered. Newlines do not
-fall in this category, they are handled separately, as they are used for
-automatic semicolon insertion.
-*/
+// Ignore any whitespace character (and comment) encountered.
 @(private = "file")
 @(optimization_mode = "favor_size")
 skip_whitespace :: proc(l: ^Lexer) {
@@ -257,10 +253,12 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 		{
 			if l.current - l.start > 1 {
 				switch utf8.rune_at(l.source, l.start + 1) {
-				case 'x':
-					return check_keyword(l, 2, 2, "it", .EXIT)
+				case 'c':
+					return check_keyword(l, 2, 2, "ho", .ECHO)
 				case 'l':
 					return check_keyword(l, 2, 2, "se", .ELSE)
+				case 'x':
+					return check_keyword(l, 2, 2, "it", .EXIT)
 				}
 			}
 		}
@@ -315,16 +313,7 @@ ident_type :: proc(l: ^Lexer) -> TokenType {
 			}
 		}
 	case 'p':
-		{
-			if l.current - l.start > 1 {
-				switch utf8.rune_at(l.source, l.start + 1) {
-				case 'r':
-					return check_keyword(l, 2, 3, "int", .PRINT)
-				case 'u':
-					return check_keyword(l, 2, 1, "b", .PUB)
-				}
-			}
-		}
+		return check_keyword(l, 1, 2, "ub", .PUB)
 	case 'r':
 		return check_keyword(l, 1, 5, "eturn", .RETURN)
 	case 's':

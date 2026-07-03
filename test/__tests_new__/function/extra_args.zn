@@ -1,6 +1,6 @@
 func f(a, b) {
-    print a;
-    print b
+    echo a;
+    echo b
 };
 
 f(1, 2, 3, 4) // ERR: Expected 2 arguments for 'f' but got 4.

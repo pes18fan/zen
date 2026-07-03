@@ -1,2 +1,2 @@
-print 1
+echo 1
     |> it .. 'a'    // ERR: Expected left operand to '..' to be of type String, got Number.

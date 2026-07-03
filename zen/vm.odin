@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:math"
 import "core:mem"
 import vmem "core:mem/virtual"
+import "core:os"
 import "core:slice"
 import "core:time"
 
@@ -316,11 +317,11 @@ print_stack :: proc(vm: ^VM) {
 	fmt.printf("          ")
 	for i := 0; i <= vm.stack_top; i += 1 {
 		value := vm.stack[i]
-		fmt.printf("[ ")
-		print_value(value)
-		fmt.printf(" ]")
+		fmt.eprintf("[ ")
+		print_value(os.stderr, value)
+		fmt.eprintf(" ]")
 	}
-	fmt.printf("\n")
+	fmt.eprintf("\n")
 }
 
 /*
@@ -511,13 +512,14 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				vm_push(vm, number_val(-as_number(vm_pop(vm))))
 			}
-		case .OP_PRINT:
+		case .OP_PRINT_STDERR:
 			// leave the value on the stack
-			print_value(vm_peek(vm, 0))
+			print_value(os.stderr, vm_peek(vm, 0), quote_strings = true)
+			fmt.eprintln()
 		case .OP_PRINT_REPL:
 			fmt.print("=> ")
-			print_value(vm_peek(vm, 0))
-			fmt.println()
+			print_value(os.stdout, vm_peek(vm, 0), quote_strings = true)
+			fmt.eprintln()
 		case .OP_JUMP:
 			{
 				offset := read_short(frame)

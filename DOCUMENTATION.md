@@ -2,14 +2,11 @@
 
 Reference for the zen programming language.
 
-Get started now with the `print` expression to print to standard out:
+Get started now with the `puts` function to print to standard out!
 
 ```zen
-print "Hello, world!\n" //=> Hello, world!
+puts "Hello, world!" //=> Hello, world!
 ```
-
-Note that the `print` expression does not append a newline. You can use the
-`puts()` function if you want that.
 
 Every piece of code in zen is an **expression** that produces a value. Statements
 like `if`, `while`, `for`, `switch`, blocks `{ ... }`, and variable declarations
@@ -649,6 +646,16 @@ result.unwrap_or(ok(1), 2);          //=> 1
 result.unwrap_or(err("uh oh"), -1)   //=> -1
 ```
 
+## Echo
+
+The `echo` expression prints a string representation of whatever expression is
+passed to it. It returns the string that it prints.
+
+```zen
+val str = echo "heya!";     //=> "heya!"
+puts(str)                   //=> heya!
+```
+
 ## Exiting early
 
 You can use the `exit` expression to exit a program early.
@@ -672,6 +679,7 @@ for you to use.
 ### Functions in the global scope
 
 - `puts(x)`: Print an expression to stdout and append a newline.
+- `print(x)`: Print an expression to stdout.
 - `gets()`: Read a line from stdin.
 - `len(s)`: Get the number of elements in `s` if it is a list, or the number of
     UTF-8 codepoints in `s` if it is a string.

@@ -3,8 +3,7 @@ for var i = 0; i < 5; i = i + 1 {
         continue
     };
 
-    print i;
-    print "\n"
+    echo i;
 };
 // expect: 0
 // expect: 1
@@ -16,8 +15,7 @@ for var i = 0; i < 5; i = i + 1 {
         break
     };
 
-    print i;
-    print "\n"
+    echo i;
 }
 // expect: 0
 // expect: 1

@@ -4,4 +4,4 @@ var result = switch x {
     2 => "two",
     else => "other"
 };
-print result; // expect: two
+echo result // expect: "two"

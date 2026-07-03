@@ -1384,7 +1384,7 @@ check_type :: proc(
 		s = combine_substitutions(sn, s)
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
-	case ^PrintExpr:
+	case ^EchoExpr:
 		tc.current_token = e.token
 		s1, t1 := infer_type(tc, e.expr) or_return
 		sn := try_unify(type, t1, expected_expression_name) or_return // print returns what it printed
@@ -2014,6 +2014,9 @@ get_global_builtin_function_signature :: proc(
 
 	switch fn {
 	case .PUTS:
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
+	case .PRINT:
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
 	case .GETS:

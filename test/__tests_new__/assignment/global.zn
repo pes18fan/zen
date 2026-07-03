@@ -1,12 +1,8 @@
 var a = "before";
-print a; // expect: before
-print "\n";
+echo a; // expect: "before"
 
 a = "after";
-print a; // expect: after
-print "\n";
+echo a; // expect: "after"
 
-print a = "arg"; // expect: arg
-print "\n";
-print a; // expect: arg
-print "\n"
+echo a = "arg"; // expect: "arg"
+echo a // expect: "arg"

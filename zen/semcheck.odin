@@ -226,7 +226,7 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		sm.pipeline_active = true
 		semcheck_expr(sm, e.right) or_return
 		sm.pipeline_active = old_pipeline
-	case ^PrintExpr:
+	case ^EchoExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.expr) or_return
 	case ^ReturnExpr:
