@@ -857,6 +857,11 @@ compile_if_expression :: proc(cg: ^Codegen, e: ^IfExpr) -> bool {
 
 	begin_scope(cg)
 	compile_expression(cg, then_branch) or_return
+
+	if else_branch == nil {
+		emit_opcode(cg, .OP_POP, .OP_NIL)
+	}
+
 	end_scope(cg)
 
 	else_jump := emit_jump(cg, .OP_JUMP)
@@ -868,9 +873,8 @@ compile_if_expression :: proc(cg: ^Codegen, e: ^IfExpr) -> bool {
 		compile_expression(cg, else_branch) or_return
 		return try(cg, patch_jump(cg, else_jump))
 	} else {
-		try(cg, patch_jump(cg, else_jump)) or_return
-
 		emit_opcode(cg, .OP_NIL)
+		try(cg, patch_jump(cg, else_jump)) or_return
 		return true
 	}
 }
