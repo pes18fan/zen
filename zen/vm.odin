@@ -409,8 +409,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				// Take the value on top of the stack and store it into the slot.
 				frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
 			}
-		/* This opcode is used both to get properties of an instance and to get
-         * values in a module. */
+		// This opcode is used to get values in a module.
 		case .OP_GET_PROPERTY:
 			{
 				if is_module(vm_peek(vm, 0)) {

@@ -279,8 +279,7 @@ stringify_value :: proc(value: Value) -> string {
 	unreachable()
 }
 
-// Make a deep copy of a value; only makes sense in the case of instances and
-// lists.
+// Make a deep copy of a value; only maof andkes sense in the case of lists.
 copy_value :: proc(gc: ^GC, value: Value) -> Value {
 	if !is_obj(value) {
 		return value
