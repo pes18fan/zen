@@ -85,7 +85,7 @@ repl :: proc(vm: ^VM) -> int {
 
 	when CHAOTIC {
 		fmt.print("Welcome to zen!")
-		color_red(os.stdout, " (chaotic mode)\n")
+		fmt.println(color_red(" (chaotic mode)"))
 	} else {
 		fmt.println("Welcome to zen!")
 	}
