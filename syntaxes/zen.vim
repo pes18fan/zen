@@ -21,9 +21,10 @@ syn keyword zenConstant it nil this super
 " Built-in Functions
 syn keyword zenBuiltin puts gets assert panic len typeof str parse copy dirname filename
 
-" Strings, defined with priority and contains to be robust
+" Strings, both multiline and single-line
 syn region zenString start=/"/ skip=/\\./ end=/"/ contains=zenEscape
 syn region zenString start=/'/ skip=/\\./ end=/'/ contains=zenEscape
+syn region zenString start=/\\\\/ end=/\n/
 syn match  zenEscape /\\./ contained
 
 " Operators
