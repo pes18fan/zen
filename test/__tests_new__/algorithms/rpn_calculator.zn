@@ -1,0 +1,73 @@
+// Reverse Polish Notation calculator.
+use "list";
+use "result";
+
+func apply_op(op, a, b) {
+    switch op {
+        "+" => ok(a + b),
+        "-" => ok(a - b),
+        "*" => ok(a * b),
+        "/" => if b == 0 { err("division by zero") } else { ok(a / b) },
+        else => err("unknown operator: " .. op)
+    }
+};
+
+func rpn_eval(tokens) {
+    var stack = [];
+    var error = "";
+    var failed = false;
+
+    for t in tokens {
+        if failed {
+            continue
+        };
+
+        switch {
+            t == "+" or t == "-" or t == "*" or t == "/" => {
+                if len(stack) < 2 {
+                    failed = true;
+                    error = "not enough operands";
+                } else {
+                    var b = stack |> list.pop();
+                    var a = stack |> list.pop();
+                    var res = apply_op(t, a, b);
+                    if result.ok?(res) {
+                        stack = stack |> list.push(result.unwrap(res));
+                    } else {
+                        failed = true;
+                        error = "eval error";
+                    }
+                }
+            },
+            else => {
+                stack = stack |> list.push(parse(t));
+            }
+        }
+    };
+
+    if failed {
+        err(error)
+    } else {
+        if len(stack) == 1 {
+            ok(stack[0])
+        } else {
+            err("malformed expression")
+        }
+    }
+};
+
+// (3 + 4) * 2 - 7 = 7
+var expr = ["3", "4", "+", "2", "*", "7", "-"];
+var res = rpn_eval(expr);
+
+if result.ok?(res) {
+    puts(result.unwrap(res)) // expect: 7
+} else {
+    puts("Error occurred")
+};
+
+var bad_expr = ["3", "0", "/"];
+var bad_res = rpn_eval(bad_expr);
+
+// Div by zero handled as error?
+puts(result.err?(bad_res))  // expect: true

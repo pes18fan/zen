@@ -1,0 +1,45 @@
+// Solver for N-Queens via backtracking.
+use "list";
+use "math";
+
+func safe(queens, row, col) {
+    var n = len(queens);
+    var is_safe = true;
+    for var i = 0; i < n; i = i + 1 {
+        var r = queens[i][0];
+        var c = queens[i][1];
+        if c == col {
+            is_safe = false
+        };
+        if math.abs(r - row) == math.abs(c - col) {
+            is_safe = false
+        }
+    };
+    is_safe
+};
+
+func solve(n, row, queens, solutions) {
+    if row == n {
+        solutions = solutions |> list.push(copy(queens));
+        solutions
+    } else {
+        for var col = 0; col < n; col = col + 1 {
+            if safe(queens, row, col) {
+                queens = queens |> list.push([row, col]);
+                solutions = solve(n, row + 1, queens, solutions);
+                queens = queens |> list.remove_last()
+            }
+        };
+        solutions
+    }
+};
+
+val n = 6;
+val solutions = solve(n, 0, [], []);
+
+// Number of solutions for 6-queens
+puts(len(solutions));   // expect: 4
+
+// First solution (row, col pairs):
+puts(solutions[0])  // expect: [[0, 1], [1, 3], [2, 5], [3, 0], [4, 2], [5, 4]]
+
