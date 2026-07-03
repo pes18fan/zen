@@ -1969,6 +1969,8 @@ get_module_function_signature :: proc(
 			return tapp(.FUNCTION, {number_t, string_t}), nil
 		case "asciinum":
 			return tapp(.FUNCTION, {string_t, number_t}), nil
+		case "byte_count":
+			return tapp(.FUNCTION, {string_t, number_t}), nil
 		}
 	case .RESULT:
 		switch fn_name {

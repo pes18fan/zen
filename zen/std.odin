@@ -65,6 +65,7 @@ STD_MODULE_FUNCTIONS: [BuiltinModule][]BuiltinFunction = {
 		{"reverse", reverse_native, 1},
 		{"asciichar", asciichar_native, 1},
 		{"asciinum", asciinum_native, 1},
+		{"byte_count", byte_count_native, 1},
 	},
 	.LIST   = {
 		{"push", push_native, 2},
@@ -705,6 +706,16 @@ asciinum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool)
 	rn := as_string(args[0]).chars[0]
 	num := cast(f64)(cast(i32)(rn))
 	return number_val(num), true
+}
+
+/* Get the number of bytes in a string. */
+byte_count_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(vm, "Cannot get the byte count of a '%v'.", type_of_value(args[0]))
+		return nil_val(), false
+	}
+
+	return number_val(cast(f64)len(as_string(args[0]).chars)), true
 }
 
 
