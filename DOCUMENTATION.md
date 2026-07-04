@@ -38,7 +38,11 @@ zen supports single-line comments via the `//` syntax.
 
 There are no multiline comments in zen.
 
-## Datatypes
+## Type system
+
+zen is statically typed. It uses Hindley-Milner type inference, allowing it
+to automatically infer types of expressions. However, type annotations may
+still be provided where desired for readability or to constrain inference.
 
 zen has four primitive datatypes.
 
@@ -80,6 +84,17 @@ Two strings are equal if they have the same contents.
 
 Strings are immutable in zen.
 
+### Functions
+
+A function represents a computation, potentially with side effects, that returns
+a value of a certain type when invoked, and optionally takes in some parameters
+that it can use for the purposes of the computation.
+
+The type annotation of a function is represented by the format `(T, U, ...) -> R`,
+where `T, U, ...` represent parameter types and `R` represents the return type.
+
+Functions are described in detail in their own section further below.
+
 ### `Nil`
 
 A value that represents the absence of a value. Its only value is the literal
@@ -92,21 +107,50 @@ It is important to note that `Nil` is a unit type, that is, it is not compatible
 with any other type. If a value already has some other type, you are not allowed
 to assign `nil` to it; with the exception of the `Any` type.
 
-## Type system
+Some other types that you will see in zen include:
 
-zen is statically typed. It uses Hindley-Milner type inference, allowing it
-to automatically infer types of expressions. However, type annotations may
-still be provided where desired for readability or to constrain inference.
+### `List[a]`
+
+The type of a list containing values of some type `a`. Lists are described in
+more detail in their own section further in this document.
+
+### `Result[t, e]`
+
+Represents a value that may be in one of two states; a "good" state of type `t`
+known as the `ok` variant, and a "bad" state of type `e` described as the `err`
+variant.
+
+Results are described in more detail in their section below.
+
+### `Never`
+
+Represents the type of some value that can never exist. It can also be described
+as the type of an expression that never finishes evaluating. It is most useful
+to describe functions that never finish executing; for instance, the builtin
+function `panic` has a return type of `Never` as it exits the program before
+it ever returns.
+
+Trying to assign any non-`Never` value in a place where type `Never` is expected
+is a type error. This prevents you from doing something like `var a: Never = 1`.
+
+The opposite however is allowed; doing something like `var a: Number = panic("message")`
+is perfectly valid because the program panics before `a` can ever be assigned.
+The branching expressions `if` and `switch` expressions are even more permissive
+with `Never`, while normally all branches of such an expression need to be
+the same type, an exception is present for `Never` which allows it to be used
+in any branch no matter what type the other branches have.
 
 ### `Any`
 
 Type inference can be effectively disabled by using the `Any` type for variables.
-`Any` is a special type that is compatible with anything, making it easy to
-opt into dynamic typing. 
+`Any` is a special type that accepts all types and can be assigned to all
+types (except `Never`), making it easy to opt into dynamic typing.
 
 However, it is not recommended to use `Any` in combination with static types, as
 its effect of disabling type inference is infectious and can seep into the rest
-of the program.
+of the program by turning all other types into `Any`. To prevent these issues
+from occuring in normal execution, the type system never infers `Any` by itself; 
+an explicit type annotation is necessary to use it.
 
 ## Variables
 

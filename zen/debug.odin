@@ -5,14 +5,14 @@ import "core:os"
 
 /* Print debug info for a simple instruction. */
 @(private = "file")
-simple_instruction :: proc(name: string, offset: int) -> int {
+simple_instruction :: proc($name: string, offset: int) -> int {
 	fmt.eprintf("%s\n", name)
 	return offset + 1
 }
 
 /* Print debug info for an instruction with one byte operand. */
 @(private = "file")
-byte_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
+byte_instruction :: proc($name: string, c: ^Chunk, offset: int) -> int {
 	slot := c.code[offset + 1]
 	fmt.eprintf("%-16s %4d\n", name, slot)
 	return offset + 2
@@ -20,7 +20,7 @@ byte_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 
 /* Print debug info for a jump instruction. */
 @(private = "file")
-jump_instruction :: proc(name: string, sign: int, c: ^Chunk, offset: int) -> int {
+jump_instruction :: proc($name: string, sign: int, c: ^Chunk, offset: int) -> int {
 	jump := int(c.code[offset + 1]) << 8
 	jump |= int(c.code[offset + 2])
 	fmt.eprintf("%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump)
@@ -29,7 +29,7 @@ jump_instruction :: proc(name: string, sign: int, c: ^Chunk, offset: int) -> int
 
 /* Print debug info for an instruction that loads a constant. */
 @(private = "file")
-constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
+constant_instruction :: proc($name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
 	fmt.eprintf("%-16s %4d '", name, constant)
 	str := stringify_value(c.constants.values[constant])
@@ -39,7 +39,7 @@ constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 }
 
 @(private = "file")
-long_constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
+long_constant_instruction :: proc($name: string, c: ^Chunk, offset: int) -> int {
 	constant := int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
 	fmt.eprintf("%-16s %4d '", name, constant)
 	str := stringify_value(c.constants.values[constant])
@@ -49,7 +49,7 @@ long_constant_instruction :: proc(name: string, c: ^Chunk, offset: int) -> int {
 }
 
 @(private = "file")
-user_module_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
+user_module_instruction :: proc($name: string, c: ^Chunk, offset: int, long: bool) -> int {
 	module_name_idx, module_path_idx: int
 	if long {
 		module_name_idx = int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
@@ -72,7 +72,7 @@ user_module_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool
 
 /* Print debug info for the OP_INVOKE opcode. */
 @(private = "file")
-invoke_instruction :: proc(name: string, c: ^Chunk, offset: int, long: bool) -> int {
+invoke_instruction :: proc($name: string, c: ^Chunk, offset: int, long: bool) -> int {
 	constant: int
 	arg_count: byte
 	if long {
@@ -106,8 +106,8 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		fmt.eprintf("    %d\t", get_line(c.lines, offset))
 	}
 
-	instruction := c.code[offset]
-	switch OpCode(instruction) {
+	instruction := OpCode(c.code[offset])
+	switch instruction {
 	case .OP_CONSTANT:
 		return constant_instruction("OP_CONSTANT", c, offset)
 	case .OP_CONSTANT_LONG:
@@ -296,13 +296,13 @@ dbg_println :: proc(args: ..struct {
 }
 
 @(disabled = !ODIN_DEBUG)
-dbg_printf :: proc(format: string, args: ..any) {
+dbg_printf :: proc($format: string, args: ..any) {
 	fmt.eprint(color_yellow("DEBUG "))
 	fmt.eprintf(format, ..args)
 }
 
 @(disabled = !ODIN_DEBUG)
-dbg_printfln :: proc(format: string, args: ..any) {
+dbg_printfln :: proc($format: string, args: ..any) {
 	fmt.eprint(color_yellow("DEBUG "))
 	fmt.eprintfln(format, ..args)
 }

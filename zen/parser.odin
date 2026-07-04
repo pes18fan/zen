@@ -772,14 +772,7 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	case .NUMBER:
 		value, ok := strconv.parse_f64(literal.token.lexeme)
 		if !ok {
-			parser_error(
-				p,
-				literal.token,
-				fmt.tprintf(
-					"'%s' is not a valid 64-bit floating point number.",
-					literal.token.lexeme,
-				),
-			)
+			fmt.panicf("'%s' is not a valid 64-bit floating point number", literal.token.lexeme)
 		}
 		literal.value = value
 	case .TRUE:
@@ -789,11 +782,7 @@ parse_literal :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	case .NIL:
 		literal.value = nil
 	case:
-		parser_error(
-			p,
-			literal.token,
-			fmt.tprintf("'%s' is not a valid literal", literal.token.lexeme),
-		)
+		fmt.panicf("'%s' is not a valid literal", literal.token.lexeme)
 	}
 
 	return literal
@@ -1121,10 +1110,10 @@ rules: [TokenType]ParseRule = {
 	.GREATER_EQUAL         = {nil, parse_binary, .COMPARISON},
 	.LESS                  = {nil, parse_binary, .COMPARISON},
 	.LESS_EQUAL            = {nil, parse_binary, .COMPARISON},
-	.IDENT                 = {parse_variable, nil, .PRIMARY},
-	.STRING                = {parse_literal, nil, .PRIMARY},
-	.MULTILINE_STRING_LINE = {parse_literal, nil, .PRIMARY},
-	.NUMBER                = {parse_literal, nil, .PRIMARY},
+	.IDENT                 = {parse_variable, nil, .NONE},
+	.STRING                = {parse_literal, nil, .NONE},
+	.MULTILINE_STRING_LINE = {parse_literal, nil, .NONE},
+	.NUMBER                = {parse_literal, nil, .NONE},
 	.AND                   = {nil, parse_logical, .AND},
 	.BREAK                 = {parse_break, nil, .NONE},
 	.CONTINUE              = {parse_continue, nil, .NONE},
@@ -1138,15 +1127,15 @@ rules: [TokenType]ParseRule = {
 	.IF                    = {parse_if_expr, nil, .CONDITIONAL},
 	.IFNT                  = {parse_if_expr, nil, .CONDITIONAL},
 	.IN                    = {nil, nil, .NONE},
-	.IT                    = {parse_it, nil, .PRIMARY},
-	.NIL                   = {parse_literal, nil, .PRIMARY},
+	.IT                    = {parse_it, nil, .NONE},
+	.NIL                   = {parse_literal, nil, .NONE},
 	.NOT                   = {parse_unary, nil, .UNARY},
 	.OR                    = {nil, parse_logical, .OR},
 	.ORELSE                = {nil, nil, .CONDITIONAL},
 	.PUB                   = {parse_pub, nil, .NONE},
 	.RETURN                = {parse_return, nil, .NONE},
 	.SWITCH                = {parse_switch_expr, nil, .CONDITIONAL},
-	.TRUE                  = {parse_literal, nil, .PRIMARY},
+	.TRUE                  = {parse_literal, nil, .NONE},
 	.TRY                   = {nil, nil, .NONE},
 	.USE                   = {parse_use_expr, nil, .NONE},
 	.WHILE                 = {parse_while, nil, .NONE},
@@ -1687,6 +1676,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
 	case:
-		fmt.sbprintf(b, "<Unknown Expr %T>\n", e)
+		fmt.sbprintf(b, "<undefined expr %T>\n", e)
 	}
 }

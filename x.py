@@ -26,7 +26,7 @@ match platform.system():
         pass
 
 
-def setup_isocline():
+def setup_isocline() -> None:
     repo = "https://github.com/daanx/isocline.git"
     root = "isocline"
     inc = os.path.join(root, "include")
@@ -36,7 +36,7 @@ def setup_isocline():
     lib_path = os.path.join(root, lib_name)
 
     if os.path.exists(lib_path):
-        return lib_path
+        return
 
     if not os.path.isdir(root):
         print("Downloading isocline...")
@@ -60,7 +60,7 @@ def setup_isocline():
             objs.append(obj)
             subprocess.run(
                 ["lib.exe", "/nologo", f"/OUT:{lib_path}"] + objs, check=True)
-            return lib_path
+            return
 
         cc = shutil.which("clang") or shutil.which("gcc")
         if not cc:
@@ -76,7 +76,7 @@ def setup_isocline():
         if not ar:
             raise RuntimeError("No archiver found for isocline build")
         subprocess.run([ar, "rcs", lib_path] + objs, check=True)
-        return lib_path
+        return
 
     cc = shutil.which("cc") or shutil.which("clang") or shutil.which("gcc")
     if not cc:
@@ -92,7 +92,7 @@ def setup_isocline():
     if not ar:
         raise RuntimeError("No archiver found for isocline build")
     subprocess.run([ar, "rcs", lib_path] + objs, check=True)
-    return lib_path
+    return
 
 
 def create_debug_build():
