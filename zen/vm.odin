@@ -512,14 +512,14 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				vm_push(vm, number_val(-as_number(vm_pop(vm))))
 			}
-		case .OP_PRINT_STDERR:
+		case .OP_PRINT:
 			// leave the value on the stack
-			print_value(os.stderr, vm_peek(vm, 0), quote_strings = true)
-			fmt.eprintln()
+			print_value(os.stdout, vm_peek(vm, 0), quote_strings = true)
+			fmt.println()
 		case .OP_PRINT_REPL:
 			fmt.print("=> ")
 			print_value(os.stdout, vm_peek(vm, 0), quote_strings = true)
-			fmt.eprintln()
+			fmt.println()
 		case .OP_JUMP:
 			{
 				offset := read_short(frame)

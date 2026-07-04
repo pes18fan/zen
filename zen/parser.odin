@@ -286,7 +286,7 @@ parse :: proc(tokens: []Token) -> (expr: Expr, success: bool) {
 	if parser_is_at_end(&p) {
 		return nil, true
 	}
-	return parse_expression_top(&p), !p.had_error
+	return parse_expression_top(&p, within_block = false), !p.had_error
 }
 
 parse_method :: proc(p: ^Parser, can_assign: bool) -> ^FunctionExpr {
@@ -331,9 +331,13 @@ parse_precedence :: proc(p: ^Parser, precedence: Precedence) -> Expr {
 }
 
 // Parse an expression, treating semicolons as expression-separating infix operators.
-parse_expression_top :: proc(p: ^Parser) -> Expr {
+parse_expression_top :: proc(p: ^Parser, within_block: bool) -> Expr {
 	fst := parse_expression(p)
-	if parser_is_at_end(p) || parser_check(p, .RSQUIRLY) {
+	if parser_is_at_end(p) {
+		return fst
+	}
+
+	if within_block && parser_check(p, .RSQUIRLY) {
 		return fst
 	}
 
@@ -350,7 +354,7 @@ parse_expression_top :: proc(p: ^Parser) -> Expr {
 	if parser_is_at_end(p) || parser_check(p, .RSQUIRLY) {
 		seq.right = nil
 	} else {
-		seq.right = parse_expression_top(p)
+		seq.right = parse_expression_top(p, within_block)
 	}
 	return seq
 }
@@ -938,7 +942,7 @@ parse_block :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(BlockExpr)
 	expr.token = parser_previous(p) // the '{'
 	if !parser_check(p, .RSQUIRLY) && !parser_is_at_end(p) {
-		expr.expression = parse_expression_top(p)
+		expr.expression = parse_expression_top(p, within_block = true)
 	}
 	parser_consume(p, .RSQUIRLY, "Expect '}' after block.")
 	return expr
@@ -1446,7 +1450,7 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 			print_indent(b, indent)
 			strings.write_string(b, ")\n")
 		} else {
-			strings.write_string(b, "(block)")
+			strings.write_string(b, "(block)\n")
 		}
 	case ^CallExpr:
 		print_indent(b, indent)
