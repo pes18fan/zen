@@ -10,7 +10,7 @@ Check out more code in `/examples`!
 
 # features
 
-- dynamic typing with garbage collection
+- static typing with Hindley-Milner type inference
 - first-class functions and closures
 - file-based module system for code organization
 - elixir-inspired pipe operator `|>`

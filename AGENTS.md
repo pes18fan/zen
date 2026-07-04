@@ -36,7 +36,11 @@ Requires Odin and Python (stdlib only, no pip deps).
   `-o:speed` if that shows weird codegen behavior.
 - `CHAOTIC=true` unlocks joke features (`ifn't`, `whilen't`) that are
   intentionally untested — don't expect test coverage for them.
-- Debug binary is named `dzen` (not `zen`); the README's `bin/dbg/zen` is wrong.
+- Debug binary is named `dzen` (not `zen`).
+- The debug binary provides some flags to observe the behavior of the interpreter,
+    like dumping the AST, dumping bytecode, tracing VM execution et cetera.
+    View available flags with `dzen -h`. These flags do not exist in the release
+    build.
 
 ## Testing
 

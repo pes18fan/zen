@@ -91,8 +91,8 @@ get_builtin_module :: #force_inline proc(gc: ^GC, module: BuiltinModule) -> []Bu
 /* These are the functions available in the global scope. The rest are in their
 corresponding modules. */
 GlobalBuiltinFunction :: enum {
-	PUTS,
 	PRINT,
+	PUTS,
 	GETS,
 	PANIC,
 	ASSERT,
@@ -120,8 +120,8 @@ as_global_builtin_function :: proc(name: string) -> (GlobalBuiltinFunction, bool
 
 @(rodata)
 GLOBAL_BUILTIN_FUNCTIONS: [GlobalBuiltinFunction]BuiltinFunction = {
-	.PUTS     = {"puts", puts_native, 1},
 	.PRINT    = {"print", print_native, 1},
+	.PUTS     = {"puts", puts_native, 1},
 	.GETS     = {"gets", gets_native, 0},
 	.PANIC    = {"panic", panic_native, 1},
 	.ASSERT   = {"assert", assert_native, 1},
@@ -143,16 +143,16 @@ init_natives :: proc(gc: ^GC) {
 }
 
 
+/* Print a string to stdout. */
+print_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	print_value(os.stdout, args[0])
+	return nil_val(), true
+}
+
 /* Print a string to stdout followed by a newline. */
 puts_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	print_value(os.stdout, args[0])
 	fmt.print("\n")
-	return nil_val(), true
-}
-
-/* Print a string to stdout. */
-print_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	print_value(os.stdout, args[0])
 	return nil_val(), true
 }
 

@@ -2013,10 +2013,10 @@ get_global_builtin_function_signature :: proc(
 	never_t := type_never
 
 	switch fn {
-	case .PUTS:
+	case .PRINT:
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
-	case .PRINT:
+	case .PUTS:
 		a := fresh(tc)
 		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
 	case .GETS:

@@ -263,6 +263,10 @@ Precedence :: enum {
 	PRIMARY,
 }
 
+increment_precedence :: proc(prec: Precedence) -> Precedence {
+	return cast(Precedence)(cast(int)(prec) + 1)
+}
+
 ParsePrefixFn :: #type proc(p: ^Parser, can_assign: bool) -> Expr
 ParseInfixFn :: #type proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr
 
@@ -985,7 +989,7 @@ parse_exit :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	operator := parser_previous(p)
 	rule := parser_get_rule(operator.type)
-	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
+	right := parse_precedence(p, increment_precedence(rule.precedence))
 
 	pipe := new(PipeExpr)
 	pipe.token = operator
@@ -1015,7 +1019,7 @@ parse_pipe :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 parse_logical :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	operator := parser_previous(p)
 	rule := parser_get_rule(operator.type)
-	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
+	right := parse_precedence(p, increment_precedence(rule.precedence))
 
 	logical := new(LogicalExpr)
 	logical.token = operator
@@ -1029,7 +1033,7 @@ parse_binary :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	operator := parser_previous(p)
 	rule := parser_get_rule(operator.type)
 	// Add 1 to precedence for left-associative operators
-	right := parse_precedence(p, cast(Precedence)(cast(int)rule.precedence + 1))
+	right := parse_precedence(p, increment_precedence(rule.precedence))
 
 	binary := new(BinaryExpr)
 	binary.token = operator
@@ -1117,10 +1121,10 @@ rules: [TokenType]ParseRule = {
 	.GREATER_EQUAL         = {nil, parse_binary, .COMPARISON},
 	.LESS                  = {nil, parse_binary, .COMPARISON},
 	.LESS_EQUAL            = {nil, parse_binary, .COMPARISON},
-	.IDENT                 = {parse_variable, nil, .NONE},
-	.STRING                = {parse_literal, nil, .NONE},
-	.MULTILINE_STRING_LINE = {parse_literal, nil, .NONE},
-	.NUMBER                = {parse_literal, nil, .NONE},
+	.IDENT                 = {parse_variable, nil, .PRIMARY},
+	.STRING                = {parse_literal, nil, .PRIMARY},
+	.MULTILINE_STRING_LINE = {parse_literal, nil, .PRIMARY},
+	.NUMBER                = {parse_literal, nil, .PRIMARY},
 	.AND                   = {nil, parse_logical, .AND},
 	.BREAK                 = {parse_break, nil, .NONE},
 	.CONTINUE              = {parse_continue, nil, .NONE},
@@ -1128,21 +1132,21 @@ rules: [TokenType]ParseRule = {
 	.ECHO                  = {parse_echo, nil, .NONE},
 	.ELSE                  = {nil, nil, .NONE},
 	.EXIT                  = {parse_exit, nil, .NONE},
-	.FALSE                 = {parse_literal, nil, .NONE},
+	.FALSE                 = {parse_literal, nil, .PRIMARY},
 	.FOR                   = {parse_for, nil, .NONE},
 	.FUNC                  = {parse_function, nil, .NONE},
 	.IF                    = {parse_if_expr, nil, .CONDITIONAL},
 	.IFNT                  = {parse_if_expr, nil, .CONDITIONAL},
 	.IN                    = {nil, nil, .NONE},
-	.IT                    = {parse_it, nil, .NONE},
-	.NIL                   = {parse_literal, nil, .NONE},
-	.NOT                   = {parse_unary, nil, .NONE},
+	.IT                    = {parse_it, nil, .PRIMARY},
+	.NIL                   = {parse_literal, nil, .PRIMARY},
+	.NOT                   = {parse_unary, nil, .UNARY},
 	.OR                    = {nil, parse_logical, .OR},
-	.ORELSE                = {nil, nil, .NONE},
+	.ORELSE                = {nil, nil, .CONDITIONAL},
 	.PUB                   = {parse_pub, nil, .NONE},
 	.RETURN                = {parse_return, nil, .NONE},
 	.SWITCH                = {parse_switch_expr, nil, .CONDITIONAL},
-	.TRUE                  = {parse_literal, nil, .NONE},
+	.TRUE                  = {parse_literal, nil, .PRIMARY},
 	.TRY                   = {nil, nil, .NONE},
 	.USE                   = {parse_use_expr, nil, .NONE},
 	.WHILE                 = {parse_while, nil, .NONE},

@@ -649,11 +649,11 @@ result.unwrap_or(err("uh oh"), -1)   //=> -1
 ## Echo
 
 The `echo` expression prints a string representation of whatever expression is
-passed to it. It returns the string that it prints.
+passed to it. It returns whatever value it printed.
 
 ```zen
-val str = echo "heya!";     //=> "heya!"
-puts(str)                   //=> heya!
+val number = echo 3;        //=> 3
+println(number + 1);        //=> 4
 ```
 
 ## Exiting early
