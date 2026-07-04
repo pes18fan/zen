@@ -1388,7 +1388,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^EchoExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expr) or_return
-		emit_opcode(cg, .OP_PRINT_STDERR)
+		emit_opcode(cg, .OP_PRINT)
 	case ^ReturnExpr:
 		cg.current_token = e.token
 		compile_return_expression(cg, e) or_return

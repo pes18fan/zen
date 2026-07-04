@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:os"
 
 /* Amount of bytes to allocate before the next garbage collection. */
 GC_HEAP_GROW_FACTOR :: 2
@@ -124,7 +125,7 @@ mark_object :: proc(gc: ^GC, object: ^Obj) {
 	when ODIN_DEBUG {
 		if config.log_gc {
 			fmt.eprintf("%p mark ", object)
-			print_value(obj_val(object))
+			print_value(os.stderr, obj_val(object))
 			fmt.eprintf(" of type %s\n", type_of_obj(object))
 		}
 	}
@@ -242,7 +243,7 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 	when ODIN_DEBUG {
 		if config.log_gc {
 			fmt.eprintf("%p blacken ", object)
-			print_value(obj_val(object))
+			print_value(os.stderr, obj_val(object))
 			fmt.eprintf(" of type %s\n", type_of_obj(object))
 		}
 	}
