@@ -200,7 +200,7 @@ free_typescheme :: proc(scheme: ^TypeScheme) {
 type_any :: TypeAny{}
 type_never :: TypeNever{}
 
-tquant :: proc(bound: []TypeVariable, type: Type) -> TypeQuantified {
+tquant :: #force_inline proc(bound: []TypeVariable, type: Type) -> TypeQuantified {
 	return TypeQuantified{bound = slice.clone(bound), type = type}
 }
 
