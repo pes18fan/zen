@@ -1,0 +1,19 @@
+func fn0() { "no args" };
+func fn1(a) { a };
+func fn2(a, b) { a + b };
+func fn3(a, b, c) { a + b + c };
+func fn4(a, b, c, d) { a + b + c + d };
+func fn5(a, b, c, d, e) { a + b + c + d + e };
+func fn6(a, b, c, d, e, f) { a + b + c + d + e + f };
+func fn7(a, b, c, d, e, f, g) { a + b + c + d + e + f + g };
+func fn8(a, b, c, d, e, f, g, h) { a + b + c + d + e + f + g + h };
+
+echo fn0(); // expect: "no args"
+echo fn1(1); // expect: 1
+echo fn2(1, 2); // expect: 3
+echo fn3(1, 2, 3); // expect: 6
+echo fn4(1, 2, 3, 4); // expect: 10
+echo fn5(1, 2, 3, 4, 5); // expect: 15
+echo fn6(1, 2, 3, 4, 5, 6); // expect: 21
+echo fn7(1, 2, 3, 4, 5, 6, 7); // expect: 28
+echo fn8(1, 2, 3, 4, 5, 6, 7, 8); // expect: 36
