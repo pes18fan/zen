@@ -214,35 +214,29 @@ free_VM :: proc(vm: ^VM) {
 }
 
 /* Reads a byte from the chunk and increments the instruction pointer. */
-@(private = "file")
 read_byte :: #force_inline proc(frame: ^CallFrame) -> byte #no_bounds_check {
 	defer frame.ip = mem.ptr_offset(frame.ip, 1)
 	return frame.ip^
 }
 
-@(private = "file")
 read_short :: #force_inline proc(frame: ^CallFrame) -> int #no_bounds_check {
 	defer frame.ip = mem.ptr_offset(frame.ip, 2)
 	return int(frame.ip^) << 8 | int(mem.ptr_offset(frame.ip, 1)^)
 }
 
 /* Reads a constant from the chunk and pushes it onto the stack. */
-@(private = "file")
 read_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
 	return frame.closure.function.chunk.constants.values[read_byte(frame)]
 }
 
-@(private = "file")
 read_constant_long :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
 	return frame.closure.function.chunk.constants.values[read_short(frame)]
 }
 
-@(private = "file")
 read_string :: #force_inline proc(frame: ^CallFrame) -> ^ObjString {
 	return as_string(read_constant(frame))
 }
 
-@(private = "file")
 read_string_long :: #force_inline proc(frame: ^CallFrame) -> ^ObjString {
 	return as_string(read_constant_long(frame))
 }
@@ -858,11 +852,16 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
+				code := as_number(top)
+				if code < 0 {
+					vm_panic(vm, "Exit code must be non-negative.")
+					return .INTERPRET_RUNTIME_ERROR
+				}
+
 				// clear the stack
 				reset_stack(vm)
 
-				code := cast(int)as_number(top)
-				config.__exit_code = code
+				zen_update_exit_code(uint(code))
 				return .INTERPRET_VOLUNTARY_EXIT
 			}
 		}

@@ -1,13 +1,13 @@
-use "time"
+use "time";
 
-func add(x, y) => x + y
-func mul(x, y) => x * y
+func add(x, y) => x + y;
+func mul(x, y) => x * y;
 
-var start = time.clock_ms()
+var start = time.clock_ms();
 
-var res = 0
+var res = 0;
 for var i = 0; i < 1000000; i = i + 1 {
     res = i |> add(2) |> mul(3) |> add(1)
-}
+};
 
 puts(time.clock_ms() - start)

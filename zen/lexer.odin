@@ -112,7 +112,7 @@ syntax_error :: proc(l: ^Lexer, message: string) {
 	fmt.eprint(color_red("error"))
 	fmt.eprintfln(": %s", style_bold(message))
 	fmt.eprintfln("  at line %d, column %d", l.position.line, l.position.column)
-	fmt.eprintfln("  in %s", "REPL" if config.repl else filepath.base(config.__path))
+	fmt.eprintfln("  in %s", "REPL" if config.repl else filepath.base(zen_get_path()))
 }
 
 /* Returns true if `c` is alphanumeric, a question mark or an exclamation mark. */

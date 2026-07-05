@@ -3,7 +3,6 @@
 use "list";
 use "math";
 use "string";
-use "result";
 
 // Hello world! (This is a comment btw)
 print "Hello, world!";
@@ -143,7 +142,6 @@ puts("hello" |> string.upcase());
 // Another way to access the last expression is with the `it` keyword.
 puts("69"
     |> parse()
-    |> result.unwrap()
     |> it + 1); //=> 70
 
 // Lists work nicely with pipelines.

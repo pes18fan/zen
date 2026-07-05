@@ -490,7 +490,7 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	relative_path_str := parser_advance(p).lexeme
 	relative_path := strings.trim(relative_path_str[1:len(relative_path_str) - 1], " ")
 	abs_path, join_err := filepath.join(
-		[]string{config.__dirname, relative_path},
+		[]string{zen_get_dirname(), relative_path},
 		context.allocator,
 	)
 	if join_err != nil {
