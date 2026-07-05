@@ -201,13 +201,13 @@ copy_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 /* Return the name of the running program. Returns an empty string if in a REPL. */
 filename_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return obj_val(copy_string(vm.gc, config.__path)), true
+	return obj_val(copy_string(vm.gc, zen_get_path())), true
 }
 
 /* Return the directory containing the running program. Returns an empty string
  * if in a REPL. */
 dirname_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	return obj_val(copy_string(vm.gc, config.__dirname)), true
+	return obj_val(copy_string(vm.gc, zen_get_dirname())), true
 }
 
 /* Return the `ok` variant of a result that wraps the argument. */
@@ -265,7 +265,7 @@ read_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	path := as_string(args[0]).chars
-	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
+	abs_path, err := filepath.join([]string{zen_get_dirname(), path}, context.allocator)
 	if err != nil {
 		vm_panic(vm, "Failed to get filepath for read operation: %s", os.error_string(err))
 		return nil_val(), false
@@ -296,7 +296,7 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	path := as_string(args[0]).chars
-	abs_path, err := filepath.join([]string{config.__dirname, path}, context.allocator)
+	abs_path, err := filepath.join([]string{zen_get_dirname(), path}, context.allocator)
 	if err != nil {
 		vm_panic(vm, "Failed to get filepath for write operation: %s", os.error_string(err))
 		return nil_val(), false

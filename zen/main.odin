@@ -25,29 +25,11 @@ when ODIN_DEBUG {
 		log_gc:           bool,
 		record_time:      bool,
 		repl:             bool,
-
-		/* Value that a program exits with on a top-level return. */
-		__exit_code:      int,
-
-		/* Path to the running file. */
-		__path:           string,
-
-		/* Directory the running file is in. */
-		__dirname:        string,
 	}
 } else {
 	Config :: struct {
 		record_time: bool,
 		repl:        bool,
-
-		/* Value that a program exits with on a top-level return. */
-		__exit_code: int,
-
-		/* Path to the running file. */
-		__path:      string,
-
-		/* Directory the running file is in. */
-		__dirname:   string,
 	}
 }
 
@@ -63,23 +45,17 @@ when ODIN_DEBUG {
 		log_gc           = false,
 		record_time      = false,
 		repl             = false,
-		__exit_code      = 0,
-		__path           = "",
-		__dirname        = "",
 	}
 } else {
 	config := Config {
 		record_time = false,
 		repl        = false,
-		__exit_code = 0,
-		__path      = "",
-		__dirname   = "",
 	}
 }
 
 /* Fire up a REPL. */
 @(private = "file")
-repl :: proc(vm: ^VM) -> int {
+repl :: proc(vm: ^VM) -> uint {
 	vm.name = "REPL"
 	vm.path = "REPL"
 
@@ -273,7 +249,7 @@ set_debug_flag_short :: proc(flag: rune) -> bool {
 
 /* Parse the arguments passed to the program. */
 @(private = "file")
-parse_argv :: proc(vm: ^VM) -> (status: int) {
+parse_argv :: proc(vm: ^VM) -> (status: uint) {
 	argc := len(os.args)
 	argv := os.args
 	script := ""
@@ -378,7 +354,7 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 				fmt.eprintfln("Failed to read from stdin: %s", os.error_string(err))
 			}
 
-			config.__path = "Piped input"
+			zen_update_path("Piped input")
 			vm.name = "Piped input"
 			vm.path = "Piped input"
 			res := interpret(vm, vm.gc, string(buf[:n]))
@@ -388,27 +364,27 @@ parse_argv :: proc(vm: ^VM) -> (status: int) {
 			return repl(vm)
 		}
 	} else {
-		current_dir, err := os.get_working_directory(context.allocator)
-		if err != nil {
-			fmt.eprintfln("Failed to get working directory: %s", os.error_string(err))
+		current_dir, wkdir_err := os.get_working_directory(context.temp_allocator)
+		if wkdir_err != nil {
+			fmt.eprintfln("Failed to get working directory: %s", os.error_string(wkdir_err))
 			return 1
 		}
-		defer delete(current_dir)
 
-		config.__path, err = filepath.join([]string{current_dir, script}, context.allocator)
-		if err != nil {
-			fmt.eprintfln("Failed to get file path: %s", os.error_string(err))
+		path, join_err := filepath.join([]string{current_dir, script}, context.temp_allocator)
+		if join_err != nil {
+			fmt.eprintfln("Failed to get file path: %s", os.error_string(join_err))
 		}
+		zen_update_path(path)
 
-		config.__dirname, _ = filepath.split(config.__path)
-		defer delete(config.__path)
+		dirname, _ := filepath.split(path)
+		zen_update_dirname(dirname)
 
 		result := run_file(vm, script)
 		return interpret_result_exit_code(result)
 	}
 }
 
-interpret_result_exit_code :: proc(result: InterpretResult) -> int {
+interpret_result_exit_code :: proc(result: InterpretResult) -> uint {
 	switch result {
 	case .INTERPRET_LEX_ERROR:
 		return 65
@@ -421,7 +397,7 @@ interpret_result_exit_code :: proc(result: InterpretResult) -> int {
 	case .INTERPRET_READ_ERROR:
 		return 74
 	case .INTERPRET_VOLUNTARY_EXIT:
-		return config.__exit_code
+		return zen_get_exit_code()
 	case .INTERPRET_OK:
 		return 0
 	case:
@@ -490,5 +466,5 @@ main :: proc() {
 
 	init_natives(&gc)
 
-	status = parse_argv(&vm)
+	status = int(parse_argv(&vm))
 }

@@ -354,6 +354,7 @@ collect_garbage :: proc(gc: ^GC) {
 	}
 
 	// prevent -vet from complaining
+	_ = os.stdout
 	_ = fmt.println
 
 	mark_roots(gc, gc.mark_roots_arg)
