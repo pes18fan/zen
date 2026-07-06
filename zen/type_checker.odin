@@ -1577,22 +1577,35 @@ check_type :: proc(
 		return s, nil
 	case ^SequenceExpr:
 		tc.current_token = e.token
-		s1, _ := infer_type(tc, e.left) or_return // infer left with fresh var
-		apply_substitution(s1, tc.ctx)
-		if e.right == nil {
-			// seq evaluates to nil if there is no right side
-			sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
-			return combine_substitutions(sn, s1), nil
-		}
-		s2 := check_type(
-			tc,
-			e.right,
-			apply_substitution(s1, type),
-			expected_expression_name,
-		) or_return // infer right with expected type
-		apply_substitution(s2, tc.ctx)
 
-		s := combine_substitutions(s2, s1)
+		s := make(Substitution)
+		left := e.left
+		right := e.right
+		for {
+			s1, _ := infer_type(tc, left) or_return // infer left with fresh var
+			apply_substitution(s1, tc.ctx)
+			s = combine_substitutions(s1, s)
+
+			if right == nil {
+				// seq evaluates to nil if there is no right side
+				sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
+				s = combine_substitutions(sn, s)
+				break
+			}
+
+			if seq, ok := right.(^SequenceExpr); ok {
+				left = seq.left
+				right = seq.right
+			} else {
+				s2, last_t := infer_type(tc, right) or_return
+				apply_substitution(s2, tc.ctx)
+				s = combine_substitutions(s2, s)
+				sn := try_unify(type, last_t, expected_expression_name) or_return
+				s = combine_substitutions(sn, s)
+				break
+			}
+		}
+
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^SwitchExpr:
