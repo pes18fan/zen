@@ -634,9 +634,15 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			binding.type = nil
 		}
 
-		if parser_match(p, .EQUAL) {
-			binding.initializer = parse_expression(p)
-		}
+		parser_consume(
+			p,
+			.EQUAL,
+			fmt.tprintf(
+				"Expected '=' after %s.",
+				"type annotation" if binding.type != nil else "variable name",
+			),
+		)
+		binding.initializer = parse_expression(p)
 
 		// to allow named lambdas to recurse when we get to resolving and
 		// typechecking
@@ -1656,11 +1662,9 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 				type := binding.type.(Type)
 				fmt.sbprintf(b, ": %v", type_string(type, debugging = false))
 			}
-			if binding.initializer != nil {
-				init: Expr = binding.initializer
-				strings.write_string(b, " =\n")
-				print_expr(b, init, indent + 1)
-			}
+			init: Expr = binding.initializer
+			strings.write_string(b, " =\n")
+			print_expr(b, init, indent + 1)
 		}
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")

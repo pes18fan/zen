@@ -291,14 +291,7 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 
 		for binding in e.bindings {
 			sm.current_token = binding.name
-			if binding.initializer == nil && is_final {
-				semantic_error(sm, "Final variables must be initialized.")
-				return false
-			}
-
-			if binding.initializer != nil {
-				semcheck_expr(sm, binding.initializer) or_return
-			}
+			semcheck_expr(sm, binding.initializer) or_return
 		}
 	case ^WhileExpr:
 		sm.current_token = e.token

@@ -682,16 +682,12 @@ compile_var_declaration :: proc(
 
 	for binding in bindings {
 		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
-		if binding.initializer == nil {
-			emit_opcode(cg, .OP_NIL)
-		} else {
-			/* Allow anonymous functions to recurse by referring to the name they've
+		/* Allow anonymous functions to recurse by referring to the name they've
 			 * been bound to. */
-			if _, ok := binding.initializer.(^FunctionExpr); ok {
-				mark_initialized(cg)
-			}
-			compile_expression(cg, binding.initializer) or_return
+		if _, ok := binding.initializer.(^FunctionExpr); ok {
+			mark_initialized(cg)
 		}
+		compile_expression(cg, binding.initializer) or_return
 
 		define_variable(cg, global)
 	}
