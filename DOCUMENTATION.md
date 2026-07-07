@@ -13,21 +13,6 @@ like `if`, `while`, `for`, `switch`, blocks `{ ... }`, and variable declarations
 `var`/`val` all produce values and can be composed together. In fact, a zen
 program is in itself one large expression.
 
-## Semicolons
-
-Expressions are chained together by semicolons. The semicolon also discards the
-value of the expression before it, causing it to evaluate to `nil` within the
-surrounding sequence. For instance, `1` evaluates to the number 1 but `1;` 
-evaluates to `nil` by discarding the number value.
-
-A collection of expressions joined by semicolons is called a **sequence**. A
-sequence can either end with an expression or a semicolon. A sequence itself 
-is an expression; it evaluates to whatever expression is at its end, or to `nil`
-if it ends with a semicolon.
-
-Sequences can only exist at the top level of the file or at the top level of
-a block.
-
 ## Comments
 
 zen supports single-line comments via the `//` syntax.
@@ -37,120 +22,6 @@ zen supports single-line comments via the `//` syntax.
 ```
 
 There are no multiline comments in zen.
-
-## Type system
-
-zen is statically typed. It uses Hindley-Milner type inference, allowing it
-to automatically infer types of expressions. However, type annotations may
-still be provided where desired for readability or to constrain inference.
-
-zen has four primitive datatypes.
-
-### `Number`
-
-A real number represented as a 64-bit floating point. Numbers also support
-exponential notation (e.g `1e2` for `100`).
-
-### `Bool`
-
-Represents a value that can be either be `true` or `false`.
-
-### `String`
-
-A sequence of text. Strings in zen are assumed to be encoded in UTF-8.
-There are two forms of strings in zen:
-
-- Single-line strings, enclosed by single or double quotes. They support escape
-    sequences like `\n` and `\t`.
-    
-    ```zen
-    var str = "double quotes!";
-    var single = 'in single quotes too!'
-    ```
-
-- Multiline strings, with each line starting with a `\\`. Everything after the
-    `\\` is interpreted as a string, similar to a comment. They do not support
-    escape sequences.
-
-    ```zen
-    var poem =
-        \\ Your two great eyes will slay me suddenly;
-        \\ Their beauty shakes me who was once serene;
-        \\ Straight through my heart the wound is quick and keen. 
-    ;
-    ```
-
-Two strings are equal if they have the same contents.
-
-Strings are immutable in zen.
-
-### Functions
-
-A function represents a computation, potentially with side effects, that returns
-a value of a certain type when invoked, and optionally takes in some parameters
-that it can use for the purposes of the computation.
-
-The type annotation of a function is represented by the format `(T, U, ...) -> R`,
-where `T, U, ...` represent parameter types and `R` represents the return type.
-
-Functions are described in detail in their own section further below.
-
-### `Nil`
-
-A value that represents the absence of a value. Its only value is the literal
-`nil`.
-
-`nil` is the default value for uninitialized variables, and the implicit return 
-value for functions that do not return anything.
-
-It is important to note that `Nil` is a unit type, that is, it is not compatible
-with any other type. If a value already has some other type, you are not allowed
-to assign `nil` to it; with the exception of the `Any` type.
-
-Some other types that you will see in zen include:
-
-### `List[a]`
-
-The type of a list containing values of some type `a`. Lists are described in
-more detail in their own section further in this document.
-
-### `Result[t, e]`
-
-Represents a value that may be in one of two states; a "good" state of type `t`
-known as the `ok` variant, and a "bad" state of type `e` described as the `err`
-variant.
-
-Results are described in more detail in their section below.
-
-### `Never`
-
-Represents the type of some value that can never exist. It can also be described
-as the type of an expression that never finishes evaluating. It is most useful
-to describe functions that never finish executing; for instance, the builtin
-function `panic` has a return type of `Never` as it exits the program before
-it ever returns.
-
-Trying to assign any non-`Never` value in a place where type `Never` is expected
-is a type error. This prevents you from doing something like `var a: Never = 1`.
-
-The opposite however is allowed; doing something like `var a: Number = panic("message")`
-is perfectly valid because the program panics before `a` can ever be assigned.
-The branching expressions `if` and `switch` expressions are even more permissive
-with `Never`, while normally all branches of such an expression need to be
-the same type, an exception is present for `Never` which allows it to be used
-in any branch no matter what type the other branches have.
-
-### `Any`
-
-Type inference can be effectively disabled by using the `Any` type for variables.
-`Any` is a special type that accepts all types and can be assigned to all
-types (except `Never`), making it easy to opt into dynamic typing.
-
-However, it is not recommended to use `Any` in combination with static types, as
-its effect of disabling type inference is infectious and can seep into the rest
-of the program by turning all other types into `Any`. To prevent these issues
-from occuring in normal execution, the type system never infers `Any` by itself; 
-an explicit type annotation is necessary to use it.
 
 ## Variables
 
@@ -189,11 +60,14 @@ line or spanning multiple lines. A `var` or `val` declaration returns `nil`.
 ```
 var
     age = 21,
-    is_cool = true,
-    unknown
+    is_cool = true;
 ```
 
-Uninitialized variables default to `nil`.
+Variables must be initialized.
+
+```zen
+var a;   // This is an error!
+```
 
 > [!NOTE]
 > Like in Python, zen uses aliasing. What that means is that doing
@@ -218,7 +92,21 @@ var x = {
 puts(x) //=> 20
 ```
 
-## Conditionals
+## Semicolons
+
+As is visible in the examples so far, expressions are followed by semicolons.
+It is important to not consider a semicolon as a "terminator" but rather as a
+"chaining operator" for expressions; two expressions separated by a semicolon
+is itself one expression known as a **sequence**. 
+
+A sequence can either end with an expression or a semicolon. As a sequence itself 
+is an expression, it evaluates to some value, which is either whatever expression
+is at its end, or to `nil` if it ends with a semicolon.
+
+Sequences can only exist at the top level of the file or at the top level of
+a block.
+
+## Control flow
 
 ### if-else
 
@@ -284,7 +172,7 @@ switch {
 }
 ```
 
-## Loops
+### Loops
 
 zen has the traditional `while` and `for` loops.
 
@@ -350,7 +238,7 @@ If a function only returns a value, it can be shortened using JS-like
 arrow notation:
 
 ```
-func double(n) => n * 2;
+func double(n) => n * 2
 ```
 
 Closures are also supported.
@@ -364,7 +252,7 @@ func outer() {
         print x
     };
 
-    return inner
+    inner
 };
 
 val in = outer();
@@ -376,7 +264,7 @@ functions around.
 
 ```
 func apply(value, fn) {
-    return fn(value)
+    fn(value)
 };
 
 print apply(2, func(n) { return n * 2 }) //=> 4
@@ -401,10 +289,10 @@ global scope can be used before it is defined, which is incredibly useful for
 free ordering of declarations as well as for mutual recursion purposes.
 
 ```zen
-func is_even(n) => if n == 0 { true } else { is_odd(n - 1) }
-func is_odd(n) => if n == 0 { false } else { is_even(n - 1) }
+func is_even(n) => if n == 0 { true } else { is_odd(n - 1) };
+func is_odd(n) => if n == 0 { false } else { is_even(n - 1) };
 
-puts(is_even(4)) //=> true
+puts(is_even(4)); //=> true
 puts(is_odd(4))  //=> false
 ```
 
@@ -427,7 +315,7 @@ too, because zen can often infer them automatically.
 ```zen
 func id(x) {
     x
-}
+};
 
 func id[T](x: T): T {
     x
@@ -441,7 +329,7 @@ directly.
 ```zen
 func first[A, B](a: A, b: B): A {
     a
-}
+};
 
 func ignore[T](x: T) {
     1
@@ -456,9 +344,9 @@ func wrap(x) {
     x
 };
 
-puts(wrap(1))     //=> 1
-puts(wrap("hi"))   //=> hi
-puts(wrap(0.25))  //=> 0.250
+puts(wrap(1));      //=> 1
+puts(wrap("hi"));   //=> hi
+puts(wrap(0.25))    //=> 0.250
 ```
 
 Generic functions may also be nested, and inner type parameters follow normal
@@ -476,32 +364,6 @@ func outer[T](x: T) {
 
 If a generic constraint cannot be satisfied, the compiler reports a type error
 as usual.
-
-## Operators
-
-zen has all of the common operators, including `+`, `-`, `*`, `/` and `%` for 
-numeric operations,  `==`, `!=`, `>`, `<`, `>=`, `<=` for comparisons, `and`, 
-`or` and `not` for boolean operations, as well as the `..` for string 
-concatenation, and the pipe operator `|>` described in more detail in the next
-section.
-
-### Precedence
-
-Precedence of expressions is described in the following table. The larger the
-precedence level, the more precedence the operator has.
-
-| Precedence  | Operators  |
-|---|---|
-|  10  | `-`, `not`  |
-|  9  | `*`, `/`, `%`  |
-|  8  | `+`, `-`  |
-|  7  | `..`  |
-|  6  | `<`, `>`, `<=`, `>=`  |
-|  5  | `==`, `!=`  |
-|  4  | `and`  |
-|  3  | `or`  |
-|  2  | `if`, `switch`  |
-|  1  | `|>`  |
 
 ## Pipelines
 
@@ -643,6 +505,144 @@ pub func foo() {
 Running `a.zn` will print out "bar".
 
 Functions without the `pub` keyword will NOT be imported when a file is `use`d.
+
+## Operators
+
+zen has all of the common operators, including `+`, `-`, `*`, `/` and `%` for 
+numeric operations,  `==`, `!=`, `>`, `<`, `>=`, `<=` for comparisons, `and`, 
+`or` and `not` for boolean operations, as well as the `..` for string 
+concatenation, and the pipe operator `|>`.
+
+### Precedence
+
+Precedence of expressions is described in the following table. The larger the
+precedence level, the more precedence the operator has.
+
+| Precedence  | Operators  |
+|---|---|
+|  10  | `-`, `not`  |
+|  9  | `*`, `/`, `%`  |
+|  8  | `+`, `-`  |
+|  7  | `..`  |
+|  6  | `<`, `>`, `<=`, `>=`  |
+|  5  | `==`, `!=`  |
+|  4  | `and`  |
+|  3  | `or`  |
+|  2  | `if`, `switch`  |
+|  1  | `|>`  |
+
+
+## Type system
+
+zen is statically typed. It uses Hindley-Milner type inference, allowing it
+to automatically infer types of expressions. However, type annotations may
+still be provided where desired for readability or to constrain inference.
+
+### Primitive types
+
+#### `Number`
+
+A real number represented as a 64-bit floating point. Numbers also support
+exponential notation (e.g `1e2` for `100`).
+
+#### `Bool`
+
+Represents a value that can be either be `true` or `false`.
+
+#### `String`
+
+A sequence of text. Strings in zen are assumed to be encoded in UTF-8.
+There are two forms of strings in zen:
+
+- Single-line strings, enclosed by single or double quotes. They support escape
+    sequences like `\n` and `\t`.
+    
+    ```zen
+    var str = "double quotes!";
+    var single = 'in single quotes too!'
+    ```
+
+- Multiline strings, with each line starting with a `\\`. Everything after the
+    `\\` is interpreted as a string, similar to a comment. They do not support
+    escape sequences.
+
+    ```zen
+    var poem =
+        \\ Your two great eyes will slay me suddenly;
+        \\ Their beauty shakes me who was once serene;
+        \\ Straight through my heart the wound is quick and keen. 
+    ;
+    ```
+
+Two strings are equal if they have the same contents.
+
+Strings are immutable in zen.
+
+#### `Nil`
+
+A value that represents the absence of a value. Its only value is the literal
+`nil`.
+
+`nil` is the default value for uninitialized variables, and the implicit return 
+value for functions that do not return anything.
+
+It is important to note that `Nil` is a unit type, that is, it is not compatible
+with any other type. If a value already has some other type, you are not allowed
+to assign `nil` to it; with the exception of the `Any` type.
+
+### Composite types
+
+#### Functions
+
+The type annotation of a function is represented by the format `(T, U, ...) -> R`,
+where `T, U, ...` represent parameter types and `R` represents the return type.
+
+See the function section for more information about functions in the language itself.
+
+#### `List[a]`
+
+The type of a list containing values of some type `a`. See the list section for
+more information.
+
+#### `Result[t, e]`
+
+Represents a value that may be in one of two states; a "good" state of type `t`
+known as the `ok` variant, and a "bad" state of type `e` described as the `err`
+variant.
+
+See the error handling section for more info about results.
+
+### Special types
+
+#### `Never`
+
+Represents the type of some value that can never exist. It can also be described
+as the type of an expression that never finishes evaluating. It is most useful
+to describe functions that never finish executing; for instance, the builtin
+function `panic` has a return type of `Never` as it exits the program before
+it ever returns.
+
+Trying to assign any non-`Never` value in a place where type `Never` is expected
+is a type error. This prevents you from doing something like `var a: Never = 1`.
+
+The opposite however is allowed; doing something like `var a: Number = panic("message")`
+is perfectly valid because the program panics before `a` can ever be assigned.
+The branching expressions `if` and `switch` expressions are even more permissive
+with `Never`, while normally all branches of such an expression need to be
+the same type, an exception is present for `Never` which allows it to be used
+in any branch no matter what type the other branches have.
+
+#### `Any`
+
+Type inference can be effectively disabled by using the `Any` type for variables.
+`Any` is a special type that accepts all types and can be assigned to all
+types (except `Never`), making it easy to opt into dynamic typing.
+
+However, it is not recommended to use `Any` in combination with static types, as
+its effect of disabling type inference is infectious and can seep into the rest
+of the program by turning all other types into `Any`. To prevent these issues
+from occuring in normal execution, the type system never infers `Any` by itself; 
+an explicit type annotation is necessary to use it.
 
 ## Error handling
 
