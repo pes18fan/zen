@@ -60,13 +60,13 @@ line or spanning multiple lines. A `var` or `val` declaration returns `nil`.
 ```
 var
     age = 21,
-    is_cool = true;
+    is_cool = true
 ```
 
 Variables must be initialized.
 
 ```zen
-var a;   // This is an error!
+var a;  // this is not allowed!
 ```
 
 > [!NOTE]
