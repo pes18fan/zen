@@ -893,8 +893,8 @@ interpret :: proc(
 	}
 
 	tokens, lx_ok := lex(source)
-	defer delete(tokens)
 	if !lx_ok {
+		delete(source)
 		return .INTERPRET_LEX_ERROR
 	}
 
@@ -916,14 +916,17 @@ interpret :: proc(
 				}
 				fmt.printfln(" at line %d, column %d", token.position.line, token.position.column)
 			}
+			delete(source)
+			delete(tokens)
 
 			return .INTERPRET_OK
 		}
 	}
 
 	expr, ps_ok := parse(tokens)
-	defer free_expr(expr)
 	if !ps_ok {
+		delete(source)
+		delete(tokens)
 		return .INTERPRET_PARSE_ERROR
 	}
 
@@ -939,6 +942,9 @@ interpret :: proc(
 		if config.dump_ast {
 			str := ast_string(expr)
 			fmt.println(str)
+			delete(source)
+			delete(tokens)
+			free_expr(expr)
 
 			return .INTERPRET_OK
 		}
@@ -946,6 +952,9 @@ interpret :: proc(
 
 	sm_ok := semcheck(expr)
 	if !sm_ok {
+		delete(source)
+		delete(tokens)
+		free_expr(expr)
 		return .INTERPRET_COMPILE_ERROR
 	}
 
@@ -953,6 +962,20 @@ interpret :: proc(
 	if config.record_time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Semantic analyzer: %v\n", time.stopwatch_duration(sw))
+		time.stopwatch_reset(&sw)
+		time.stopwatch_start(&sw)
+	}
+
+	graph, mod_ok := create_module_graph(zen_get_path(), source, tokens, expr)
+	if !mod_ok {
+		return .INTERPRET_COMPILE_ERROR
+	}
+	defer destroy_module_graph(graph)
+
+	/* Time module resolution. */
+	if config.record_time {
+		time.stopwatch_stop(&sw)
+		fmt.eprintf("Module resolver: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
 		time.stopwatch_start(&sw)
 	}

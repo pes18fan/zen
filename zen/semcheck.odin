@@ -73,6 +73,12 @@ semantic_in_global_scope :: proc(sm: ^Semantic) -> bool {
 semcheck_function_expr :: proc(sm: ^Semantic, e: ^FunctionExpr, type: FunctionType) -> bool {
 	params := e.params
 	body := e.body
+	public := e.public
+
+	if public && !semantic_in_global_scope(sm) {
+		semantic_error(sm, "A function can only be marked 'pub' in the global scope.")
+		return false
+	}
 
 	compiler: SemanticCompiler
 	init_semantic_compiler(sm, &compiler, type)
