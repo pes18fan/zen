@@ -98,22 +98,36 @@ add_imports :: proc(mr: ^ModuleResolver, expr: Expr, curr: ^Module) -> bool {
 			return true
 		}
 
-		name := e.name
-		fullpath := e.fullpath
-
-		if existing, ok := mr.resolved[fullpath]; ok {
+		if existing, ok := mr.resolved[e.fullpath]; ok {
 			toposort.add_dependency(&mr.sorter, curr, existing)
 			return true
 		}
 
-		source := read_file(fullpath) or_return
-		tokens := lex(source) or_return
-		ast := parse(tokens) or_return
-		semcheck(ast) or_return
+		source := read_file(e.fullpath) or_return
+		tokens, lex_ok := lex(source)
+		if !lex_ok {
+			delete(source)
+			return false
+		}
+
+		ast, parse_ok := parse(tokens)
+		if !parse_ok {
+			delete(source)
+			delete(tokens)
+			return false
+		}
+
+		if !semcheck(ast) {
+			delete(source)
+			delete(tokens)
+			free_expr(ast)
+			return false
+		}
 
 		mod := new(Module)
-		mod^ = Module{name, fullpath, source, tokens, ast}
-		mr.resolved[fullpath] = mod
+		fullpath := strings.clone(e.fullpath)
+		mod^ = Module{strings.clone(e.name), fullpath, source, tokens, ast}
+		mr.resolved[e.fullpath] = mod
 		toposort.add_dependency(&mr.sorter, curr, mod)
 		queue.enqueue(&mr.module_queue, mod)
 	case ^VarDeclExpr:
@@ -151,7 +165,13 @@ create_module_graph :: proc(
 	defer destroy_module_resolver(&mr)
 
 	root_mod := new(Module)
-	root_mod^ = {strings.clone(filepath.short_stem(fullpath)), fullpath, source, tokens, ast}
+	root_mod^ = {
+		strings.clone(filepath.short_stem(fullpath)),
+		strings.clone(fullpath),
+		source,
+		tokens,
+		ast,
+	}
 	mr.resolved[fullpath] = root_mod
 	toposort.add_key(&mr.sorter, root_mod)
 	queue.enqueue(&mr.module_queue, root_mod)
@@ -163,7 +183,7 @@ create_module_graph :: proc(
 
 	sorted, cycled := toposort.sort(&mr.sorter)
 	if len(cycled) > 0 {
-		defer destroy_module_resolver(&mr)
+		defer destroy_module_graph(cycled[:])
 
 		sb := strings.builder_make()
 		defer strings.builder_destroy(&sb)
@@ -206,6 +226,7 @@ destroy_module_resolver :: proc(m: ^ModuleResolver) {
 
 destroy_module_graph :: proc(graph: []^Module) {
 	for &module in graph {
+		delete(module.name)
 		delete(module.fullpath)
 		free_expr(module.ast)
 		delete(module.tokens)
