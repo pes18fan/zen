@@ -1398,16 +1398,13 @@ check_type :: proc(
 		s := make(Substitution)
 		if e.value != nil {
 			s = check_type(tc, e.value, tc.return_type, "return value") or_return
-			apply_substitution(s, tc.ctx)
-			sn := try_unify(type, type_never, expected_expression_name) or_return // return expression itself has type `!`
-			s = combine_substitutions(sn, s)
 		} else {
 			s = try_unify(tc.return_type, tapp(.NIL), expected_expression_name) or_return
-			apply_substitution(s, tc.ctx)
-			sn := try_unify(type, type_never, expected_expression_name) or_return
-			s = combine_substitutions(sn, s)
 		}
+		apply_substitution(s, tc.ctx)
+		sn := try_unify(type, type_never, expected_expression_name) or_return
 
+		s = combine_substitutions(sn, s)
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
 	case ^SubscriptExpr:

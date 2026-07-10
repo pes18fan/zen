@@ -74,7 +74,7 @@ try2_resolver :: #force_inline proc(rs: ^Resolver, ret: $T, err: ErrorMessage) -
 	return ret, true
 }
 
-print_error :: #force_inline proc(token: Token, message: string) {
+print_error :: #force_inline proc(token: Token, message: string, details: string = "") {
 	fmt.eprint(color_red("error"))
 	fmt.eprintfln(": %s", style_bold(message))
 
@@ -97,4 +97,9 @@ print_error :: #force_inline proc(token: Token, message: string) {
 		fmt.eprint(" ")
 	}
 	fmt.eprintln(color_red("^"))
+
+	if details != "" {
+		fmt.eprint(color_blue("note: "))
+		fmt.eprintln(details)
+	}
 }

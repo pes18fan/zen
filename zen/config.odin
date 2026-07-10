@@ -5,14 +5,14 @@ import "core:sync"
 @(private = "file")
 Global :: struct {
 	/* Value that a program exits with. Defaults to zero. */
-	exit_code: uint,
+	exit_code:    uint,
 
-	/* Path to the running file. */
-	path:      string,
+	/* Path to the file invoked by the interpreter. */
+	root_path:    string,
 
-	/* Directory the running file is in. */
-	dirname:   string,
-	mutex:     sync.Mutex,
+	/* Directory the invoked file is in. */
+	root_dirname: string,
+	mutex:        sync.Mutex,
 }
 
 @(private = "file")
@@ -24,22 +24,22 @@ zen_initialize :: proc "contextless" () {
 	defer sync.unlock(&g.mutex)
 
 	g.exit_code = 0
-	g.path = ""
-	g.dirname = ""
+	g.root_path = ""
+	g.root_dirname = ""
 }
 
 zen_update_dirname :: proc(new: string) {
 	sync.lock(&g.mutex)
 	defer sync.unlock(&g.mutex)
 
-	g.dirname = new
+	g.root_dirname = new
 }
 
 zen_update_path :: proc(new: string) {
 	sync.lock(&g.mutex)
 	defer sync.unlock(&g.mutex)
 
-	g.path = new
+	g.root_path = new
 }
 
 zen_update_exit_code :: proc(new: uint) {
@@ -53,14 +53,14 @@ zen_get_dirname :: proc() -> string {
 	sync.lock(&g.mutex)
 	defer sync.unlock(&g.mutex)
 
-	return g.dirname
+	return g.root_dirname
 }
 
 zen_get_path :: proc() -> string {
 	sync.lock(&g.mutex)
 	defer sync.unlock(&g.mutex)
 
-	return g.path
+	return g.root_path
 }
 
 zen_get_exit_code :: proc() -> uint {
