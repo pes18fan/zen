@@ -1,3 +1,3 @@
 var a = "1";
-var a;
+var a = nil;
 echo a; // expect: nil

@@ -1,0 +1,1 @@
+var x: Number   // ERR: Expect '=' after type annotation.

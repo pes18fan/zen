@@ -1,0 +1,1 @@
+var x   // ERR: Expect '=' after variable name.
