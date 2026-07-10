@@ -1,6 +1,6 @@
 package zen
 
-SemanticCompiler :: struct {
+SemanticCompiler :: struct #all_or_none {
 	enclosing:   ^SemanticCompiler, // The enclosing function.
 	func_type:   FunctionType, // Type of the function being checked.
 	loop_depth:  int, // How many loops in are we?
@@ -11,7 +11,7 @@ SemanticCompiler :: struct {
 /* Main state for the semantic analysis pass. Holds the current scope,
 pipeline state and some other necessary items.
 One Semantic instance is created per call to `semcheck`. */
-Semantic :: struct {
+Semantic :: struct #all_or_none {
 	current_compiler: ^SemanticCompiler,
 	current_token:    Token,
 	had_error:        bool,
@@ -20,11 +20,11 @@ Semantic :: struct {
 
 init_semantic_compiler :: proc(sm: ^Semantic, c: ^SemanticCompiler, type: FunctionType) {
 	c^ = SemanticCompiler {
-		local_count = 0,
-		scope_depth = 0,
-		loop_depth  = 0,
 		enclosing   = sm.current_compiler,
 		func_type   = type,
+		loop_depth  = 0,
+		scope_depth = 0,
+		local_count = 0,
 	}
 
 	sm.current_compiler = c
@@ -36,7 +36,12 @@ end_semantic_compiler :: proc(sm: ^Semantic) {
 }
 
 init_semantic :: proc() -> Semantic {
-	return Semantic{current_compiler = nil, had_error = false, pipeline_active = false}
+	return Semantic {
+		current_compiler = nil,
+		current_token = {},
+		had_error = false,
+		pipeline_active = false,
+	}
 }
 
 semantic_error :: proc(sm: ^Semantic, message: string) {
@@ -278,16 +283,10 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 	case ^UnaryExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.right) or_return
-	case ^UseExpr:
-		sm.current_token = e.token
-		if !semantic_in_global_scope(sm) {
-			semantic_error(sm, "Can only declare modules at the top level.")
-			return false
-		}
+	case ^UseExpr: // nothing to check
 	case ^VariableExpr: // nothing to check
 	case ^VarDeclExpr:
 		sm.current_token = e.token
-		is_final := e.is_final
 
 		for binding in e.bindings {
 			sm.current_token = binding.name

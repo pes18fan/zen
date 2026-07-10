@@ -151,7 +151,7 @@ LiteralExpr :: struct {
 
 /* 
 The four primitive values in zen: f64, string, bool and nil (Odin unions are
-nilable unless you specify otherwise)
+nilable unless you specify otherwise).
 */
 PrimitiveValue :: union {
 	f64,
@@ -203,8 +203,7 @@ SubscriptSetExpr :: struct {
 	value:    Expr,
 }
 
-// Variant of the switch statement whose cases must evaluate to expressions
-ExprSwitchCase :: struct {
+SwitchCase :: struct {
 	condition: Expr,
 	body:      Expr,
 }
@@ -212,7 +211,7 @@ ExprSwitchCase :: struct {
 SwitchExpr :: struct {
 	token:       Token,
 	condition:   Expr,
-	cases:       []ExprSwitchCase,
+	cases:       []SwitchCase,
 	else_branch: Expr,
 }
 
@@ -391,7 +390,7 @@ parse_if_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(SwitchExpr)
 	expr.token = parser_previous(p)
-	cases := make([dynamic]ExprSwitchCase, 0)
+	cases := make([dynamic]SwitchCase, 0)
 	has_else_clause := false
 
 	if parser_match(p, .LSQUIRLY) {
@@ -410,7 +409,7 @@ parse_switch_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			break
 		}
 
-		case_node: ExprSwitchCase
+		case_node: SwitchCase
 		case_node.condition = parse_expression(p)
 		parser_consume(p, .FAT_ARROW, "Expect '=>' after case.")
 		case_node.body = parse_expression(p)
@@ -622,6 +621,7 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(VarDeclExpr)
 	expr.token = parser_previous(p)
 	expr.is_final = expr.token.type == .VAL
+	var_type_str := "final variable" if expr.is_final else "variable"
 	bindings := make([dynamic]VarBinding, 0)
 
 	for {
@@ -638,8 +638,8 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			p,
 			.EQUAL,
 			fmt.tprintf(
-				"Expected '=' after %s.",
-				"type annotation" if binding.type != nil else "variable name",
+				"Expect '=' after %s.",
+				"type annotation" if binding.type != nil else fmt.tprintf("%s name", var_type_str),
 			),
 		)
 		binding.initializer = parse_expression(p)
@@ -1560,12 +1560,15 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		strings.write_string(b, ")\n")
 	case ^LiteralExpr:
 		print_indent(b, indent)
-		if e.value == nil {
-			fmt.sbprintln(b, "nil")
-		} else if v, ok := e.value.(string); ok {
+		switch v in e.value {
+		case string:
 			fmt.sbprintfln(b, "\"%v\"", v)
-		} else {
+		case f64:
 			fmt.sbprintfln(b, "%v", e.value)
+		case bool:
+			fmt.sbprintfln(b, "%v", e.value)
+		case:
+			fmt.sbprintln(b, "nil", e.value)
 		}
 	case ^LogicalExpr:
 		print_indent(b, indent)

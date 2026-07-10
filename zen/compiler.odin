@@ -1352,7 +1352,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 			} else {
 				emit_opcode(cg, .OP_FALSE)
 			}
-		// nil case
 		case:
 			emit_opcode(cg, .OP_NIL)
 		}
