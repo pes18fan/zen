@@ -9,10 +9,6 @@ puts(a);            // expect: 20
 val name = "zen";
 puts(name);         // expect: zen
 
-// default nil
-var uninitialized;
-puts(uninitialized); // expect: nil
-
 // shadowing
 var v = "outer";
 {

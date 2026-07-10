@@ -1,5 +1,5 @@
 val x = 2, y = 3;
-var a = 1, b = true, c = "hello", d;
+var a = 1, b = true, c = "hello", d = nil;
 
 echo x; // expect: 2
 echo y; // expect: 3
