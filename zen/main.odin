@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:mem"
 import "core:os"
 import "core:path/filepath"
+import "core:strings"
 import ic "isocline"
 
 VERSION :: string(#load("../.zen_version"))
@@ -79,8 +80,9 @@ repl :: proc(vm: ^VM) -> uint {
 			break
 		}
 
-		line_str := string(raw)
+		line_str := strings.clone(string(raw))
 		if len(line_str) == 0 {
+			delete(line_str)
 			ic.ic_free(rawptr(raw))
 			continue
 		}
@@ -95,7 +97,6 @@ repl :: proc(vm: ^VM) -> uint {
 }
 
 /* Read a file and return it as a string. */
-@(private = "file")
 read_file :: proc(path: string) -> (string, bool) {
 	data, err := os.read_entire_file(path, context.allocator)
 	if err != nil {
@@ -125,7 +126,7 @@ run_file :: proc(
 ) -> InterpretResult {
 	source, ok := read_file(path)
 	if !ok {return .INTERPRET_READ_ERROR}
-	defer delete(source)
+	// defer delete(source)
 
 	vm.path = path
 
