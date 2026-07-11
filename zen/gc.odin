@@ -25,9 +25,6 @@ GC :: struct {
 	/* All the strings that have been allocated. */
 	strings:         Table,
 
-	/* The "init" string. */
-	init_string:     ^ObjString,
-
 	/* The stack of modules that have been imported so far in the program,
      * represented by their paths. For instance, if you run "a.zn" which imports
      * "b.zn" which then imports "c.zn", the import stack would be something like
@@ -73,7 +70,6 @@ init_gc :: proc() -> GC {
 		gray_count = 0,
 		mark_roots_arg = nil,
 		strings = init_table(),
-		init_string = nil,
 		import_stack = make([dynamic]string),
 		globals = init_table(),
 	}
@@ -83,7 +79,6 @@ init_gc :: proc() -> GC {
 free_gc :: proc(gc: ^GC) {
 	free_table(&gc.strings)
 	free_table(&gc.globals)
-	gc.init_string = nil
 	free_objects(gc)
 	delete(gc.import_stack)
 	delete(gc.gray_stack)
@@ -193,6 +188,10 @@ mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
 	/* Mark the VM's registers. */
 	if is_obj(vm.it) {mark_object(gc, as_obj(vm.it))}
 	if is_obj(vm.save) {mark_object(gc, as_obj(vm.save))}
+
+	/* Mark the command line args, we don't want these to be freed till the
+    whole execution is done */
+	mark_object(gc, vm.args)
 
 	/* Mark closure objects in the CallFrames. These need to be marked to 
     access constants and upvalues. */

@@ -7,6 +7,7 @@ import "core:mem"
 import vmem "core:mem/virtual"
 import "core:os"
 import "core:slice"
+import "core:strings"
 import "core:time"
 
 FRAMES_MAX :: 96
@@ -75,15 +76,6 @@ VM :: struct {
 	// TODO: make `it` a stack to allow nested pipelines
 	it:               Value, // stores the intermediate value of a pipeline
 	save:             Value, // general purpose, currently stores return value of a block
-
-	/* Persistent type checker state for the REPL. */
-	type_checker:     ^TypeChecker,
-	type_arena:       vmem.Arena,
-	type_arena_init:  bool,
-
-	/* Persistent resolver state for the REPL. */
-	resolver_init:    bool,
-	resolver_globals: map[string]^UntypedVariable,
 }
 
 /* The result of the interpreting. */
@@ -185,11 +177,6 @@ init_VM :: proc() -> VM {
 		frame_count      = 0,
 		it               = nil_val(),
 		save             = nil_val(),
-		type_checker     = nil,
-		type_arena       = {},
-		type_arena_init  = false,
-		resolver_init    = false,
-		resolver_globals = nil,
 	}
 
 	return vm
@@ -198,15 +185,6 @@ init_VM :: proc() -> VM {
 /* Free's the VM's memory. */
 free_VM :: proc(vm: ^VM) {
 	free_table(&vm.compiler_globals)
-
-	if vm.type_arena_init {
-		pop_function_scope(vm.type_checker)
-		vmem.arena_destroy(&vm.type_arena)
-	}
-
-	if vm.resolver_init {
-		delete_resolved_globals(vm.resolver_globals)
-	}
 
 	// don't free explicitly, let gc do it
 	vm.it = nil_val()
@@ -874,6 +852,7 @@ interpret :: proc(
 	gc: ^GC,
 	source: string,
 	importer: Maybe(ImportingModule) = nil,
+	persistent_globals: ^map[string]^UntypedVariable = nil,
 ) -> InterpretResult {
 	/* If the name of the VM and the importing module are both the same (if the
      * importing module is not nil), then we have a cyclic import, which causes
@@ -892,9 +871,18 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	tokens, lx_ok := lex(source)
+	arena: vmem.Arena
+	err := vmem.arena_init_growing(&arena)
+	ensure(err == nil)
+	defer vmem.arena_destroy(&arena)
+
+	arena_allocator := vmem.arena_allocator(&arena)
+	prev_alloc := context.allocator
+	context.allocator = arena_allocator
+
+	source_in_arena := strings.clone(source) // clone into the arena
+	tokens, lx_ok := lex(source_in_arena)
 	if !lx_ok {
-		delete(source)
 		return .INTERPRET_LEX_ERROR
 	}
 
@@ -916,8 +904,6 @@ interpret :: proc(
 				}
 				fmt.printfln(" at line %d, column %d", token.position.line, token.position.column)
 			}
-			delete(source)
-			delete(tokens)
 
 			return .INTERPRET_OK
 		}
@@ -925,8 +911,6 @@ interpret :: proc(
 
 	expr, ps_ok := parse(tokens)
 	if !ps_ok {
-		delete(source)
-		delete(tokens)
 		return .INTERPRET_PARSE_ERROR
 	}
 
@@ -942,9 +926,6 @@ interpret :: proc(
 		if config.dump_ast {
 			str := ast_string(expr)
 			fmt.println(str)
-			delete(source)
-			delete(tokens)
-			free_expr(expr)
 
 			return .INTERPRET_OK
 		}
@@ -952,9 +933,6 @@ interpret :: proc(
 
 	sm_ok := semcheck(expr)
 	if !sm_ok {
-		delete(source)
-		delete(tokens)
-		free_expr(expr)
 		return .INTERPRET_COMPILE_ERROR
 	}
 
@@ -966,11 +944,10 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	graph, mod_ok := create_module_graph(zen_get_path(), source, tokens, expr)
+	_, mod_ok := create_module_graph(zen_get_path(), source, tokens, expr)
 	if !mod_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
-	defer destroy_module_graph(graph)
 
 	/* Time module resolution. */
 	if config.record_time {
@@ -980,15 +957,9 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	reso, rs_ok := resolve_full(vm, expr)
+	reso, rs_ok := resolve_full(vm, expr, persistent_globals)
 	if !rs_ok {
 		return .INTERPRET_COMPILE_ERROR
-	}
-
-	// this is temporary; the resolution map should only be
-	// deleted after the typechecking is done
-	when !TYPE_CHECK {
-		delete_resolution_map(reso)
 	}
 
 	/* Time the resolver. */
@@ -1007,9 +978,7 @@ interpret :: proc(
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		if !should_not_typecheck {
-			tm, tc_ok := typecheck_full(vm, expr, reso)
-			defer delete_resolution_map(reso)
-			defer delete_typemap(tm)
+			_, tc_ok := typecheck_full(vm, expr, reso)
 
 			if !tc_ok {
 				return .INTERPRET_COMPILE_ERROR
@@ -1022,8 +991,6 @@ interpret :: proc(
 				time.stopwatch_reset(&sw)
 				time.stopwatch_start(&sw)
 			}
-		} else {
-			delete_resolution_map(reso)
 		}
 	}
 
@@ -1032,6 +999,7 @@ interpret :: proc(
 	// keep just the last push), remove instructions that make no difference
 	// to the final (correct) result
 
+	context.allocator = prev_alloc
 	collect_globals(&vm.compiler_globals, gc, expr)
 	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
 	if !cg_ok {

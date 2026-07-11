@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:mem"
 
 /*
 TODO: Variable resolution / symbol table creation. Needs very careful
@@ -28,7 +29,7 @@ awful hacky designs. Some points:
 
 Resolver :: struct #all_or_none {
 	resolutions:    ResolutionMap,
-	globals:        ^map[string]^UntypedVariable,
+	globals:        map[string]^UntypedVariable,
 	function_scope: ^UntypedContext,
 	current_token:  Token,
 }
@@ -122,7 +123,7 @@ resolve_variable :: proc(rs: ^Resolver, name: string) -> (^UntypedVariable, bool
 	} else if up != nil {
 		return up, true
 	} else {
-		global, ok := rs.globals^[name]
+		global, ok := rs.globals[name]
 		if ok {
 			return global, true
 		}
@@ -160,7 +161,7 @@ declare_variable :: proc(
 ) -> ErrorMessage {
 	// TODO: handle later
 	if in_global_scope(rs) {
-		var, exists := rs.globals^[name]
+		var, exists := rs.globals[name]
 		if exists {
 			if !var.initialized {
 				return nil
@@ -175,8 +176,6 @@ declare_variable :: proc(
 			}
 		}
 
-		old := rs.globals^[name]
-		free(old)
 		new_var := new(UntypedVariable)
 		new_var^ = {
 			shadower         = nil,
@@ -194,7 +193,7 @@ declare_variable :: proc(
 		// do NOT remove the fmt.tprint, idk why but the REPL won't work without
 		// explicitly allocating the key
 		key := fmt.tprint(name)
-		rs.globals^[key] = new_var
+		rs.globals[key] = new_var
 		return nil
 	}
 
@@ -231,7 +230,7 @@ declare_variable :: proc(
 
 define_variable :: proc(rs: ^Resolver, name: string) {
 	if in_global_scope(rs) {
-		var, ok := rs.globals^[name]
+		var, ok := rs.globals[name]
 		if !ok {
 			fmt.panicf("no global variable with name %v exists", name)
 		}
@@ -412,7 +411,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^UseExpr:
 		rs.current_token = e.token
 		name := e.name
-		if _, exists := rs.globals^[name]; exists {
+		if _, exists := rs.globals[name]; exists {
 			resolver_error(rs, fmt.tprintf("Module '%s' is already defined.", name))
 			return false
 		}
@@ -430,7 +429,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			scope_depth      = 0,
 			local_index      = 0,
 		}
-		rs.globals^[fmt.tprint(name)] = new_var
+		rs.globals[fmt.tprint(name)] = new_var
 	case ^VariableExpr:
 		rs.current_token = e.token
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
@@ -478,18 +477,6 @@ push_function_scope_untyped :: proc(rs: ^Resolver) {
 pop_function_scope_untyped :: proc(rs: ^Resolver) {
 	fs := rs.function_scope
 	enc := fs.enclosing
-
-	for _, &var in fs.variables {
-		// make sure to handle shadowing
-		v := var
-		for v != nil {
-			next := v.shadower
-			free(v)
-			v = next
-		}
-	}
-	delete(fs.variables)
-	free(fs)
 	rs.function_scope = enc
 }
 
@@ -501,21 +488,12 @@ pop_block_scope_untyped :: proc(rs: ^Resolver) {
 	assert(rs.function_scope.scope_depth > 0, "cannot have less than zero block scopes")
 	depth := rs.function_scope.scope_depth
 	to_delete: [dynamic]string
-	defer delete(to_delete)
 	for name, var in rs.function_scope.variables {
 		if var.scope_depth == depth {
 			append(&to_delete, name)
 		}
 	}
 	for name in to_delete {
-		if var, exists := rs.function_scope.variables[name]; exists {
-			cur := var
-			for cur != nil {
-				next := cur.shadower
-				free(cur)
-				cur = next
-			}
-		}
 		delete_key(&rs.function_scope.variables, name)
 	}
 	rs.function_scope.scope_depth -= 1
@@ -560,112 +538,70 @@ resolve :: proc(
 	resolutions: ResolutionMap,
 	success: bool,
 ) {
-	globals := existing_globals
-	new_globals: map[string]^UntypedVariable
-	if globals == nil {
-		new_globals = make(map[string]^UntypedVariable)
-		globals = &new_globals
+	globals: map[string]^UntypedVariable
+	if existing_globals != nil {
+		globals = existing_globals^
+	} else {
+		globals = make(map[string]^UntypedVariable)
 	}
+
+	if setup_native_fns {
+		add_native_fns_to_variable_map(&globals, context.allocator)
+	}
+
 	rs := Resolver {
 		resolutions    = nil,
 		globals        = globals,
 		function_scope = nil,
 		current_token  = {},
 	}
-
-	if setup_native_fns {
-		#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
-			native_var := new(UntypedVariable)
-			native_var^ = {
-				shadower         = nil,
-				name             = fmt.tprint(fn.name),
-				kind             = .GLOBAL,
-				is_final         = true,
-				is_loop_variable = false,
-				is_captured      = false,
-				is_module        = false,
-				is_native_value  = true,
-				initialized      = true,
-				scope_depth      = 0,
-				local_index      = 0,
-			}
-			globals^[fn.name] = native_var
-		}
-	}
-
 	push_function_scope_untyped(&rs)
 	defer pop_function_scope_untyped(&rs)
-	defer if !config.repl {
-		delete_resolved_globals(globals^)
-	}
 
-	if !collect_forward_references(&rs, expr) {
-		return rs.resolutions, false
-	}
-	if !resolve_with_resolver(&rs, expr) {
-		return rs.resolutions, false
-	}
+	collect_forward_references(&rs, expr) or_return
+	resolve_with_resolver(&rs, expr) or_return
 	return rs.resolutions, true
 }
 
-delete_resolution_map :: proc(reso: ResolutionMap) {
-	for _, &var in reso {
-		// make sure to handle shadowing
-		v := var
-		for v != nil {
-			next := v.shadower
-			free(v)
-			v = next
+add_native_fns_to_variable_map :: #force_inline proc(
+	m: ^map[string]^UntypedVariable,
+	allocator: mem.Allocator,
+) {
+	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
+		native_var := new(UntypedVariable, allocator)
+		native_var^ = {
+			shadower         = nil,
+			name             = fn.name,
+			kind             = .GLOBAL,
+			is_final         = true,
+			is_loop_variable = false,
+			is_captured      = false,
+			is_module        = false,
+			is_native_value  = true,
+			initialized      = true,
+			scope_depth      = 0,
+			local_index      = 0,
 		}
+		m[fn.name] = native_var
 	}
-	delete(reso)
-}
-
-delete_resolved_globals :: proc(globals: map[string]^UntypedVariable) {
-	for _, &var in globals {
-		v := var
-		for v != nil {
-			next := v.shadower
-			free(v)
-			v = next
-		}
-	}
-	delete(globals)
 }
 
 @(require_results)
-resolve_full :: proc(vm: ^VM, expr: Expr) -> (ResolutionMap, bool) {
-	if config.repl && !vm.resolver_init {
-		vm.resolver_globals = make(map[string]^UntypedVariable)
-		vm.resolver_init = true
-		#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
-			native_var := new(UntypedVariable)
-			native_var^ = {
-				shadower         = nil,
-				name             = fmt.tprint(fn.name),
-				kind             = .GLOBAL,
-				is_final         = true,
-				is_loop_variable = false,
-				is_captured      = false,
-				is_module        = false,
-				is_native_value  = true,
-				initialized      = true,
-				scope_depth      = 0,
-				local_index      = 0,
-			}
-			vm.resolver_globals[fn.name] = native_var
-		}
-	}
-
-	out, rs_ok := resolve(
+resolve_full :: proc(
+	vm: ^VM,
+	expr: Expr,
+	persistent_globals: ^map[string]^UntypedVariable = nil,
+) -> (
+	resolutions: ResolutionMap,
+	ok: bool,
+) {
+	out := resolve(
 		expr,
-		existing_globals = &vm.resolver_globals if config.repl else nil,
-		setup_native_fns = false if config.repl else true,
-	)
-	if !rs_ok {
-		delete_resolution_map(out)
-		return nil, false
-	}
+		existing_globals = persistent_globals,
+		// persistently existing globals are assumed to already have setup their
+		// native function definitions
+		setup_native_fns = true if persistent_globals == nil else false,
+	) or_return
 
 	return out, true
 }
