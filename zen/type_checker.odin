@@ -1,11 +1,11 @@
 package zen
 
 import "core:fmt"
-import vmem "core:mem/virtual"
+import "core:mem"
 import "core:slice"
 import "core:strings"
 
-TypeChecker :: struct {
+TypeChecker :: struct #all_or_none {
 	ctx:           ^TypeContext,
 	resolutions:   ResolutionMap,
 	typemap:       TypeMap,
@@ -13,6 +13,7 @@ TypeChecker :: struct {
 	current_token: Token,
 	return_type:   Type,
 	pipeline_type: Type,
+	allocator:     mem.Allocator,
 }
 
 TypeMap :: map[Expr]TypeScheme
@@ -348,9 +349,9 @@ when ODIN_DEBUG {
 }
 
 push_function_scope :: proc(tc: ^TypeChecker) {
-	ctx := new(TypeContext)
-	ctx.bindings = make([dynamic]TypedBinding)
-	ctx.scope_boundaries = make([dynamic]int)
+	ctx := new(TypeContext, tc.allocator)
+	ctx.bindings = make([dynamic]TypedBinding, tc.allocator)
+	ctx.scope_boundaries = make([dynamic]int, tc.allocator)
 	ctx.enclosing = tc.ctx
 	ctx.scope_depth = 0
 	tc.ctx = ctx
@@ -1882,7 +1883,7 @@ ctx_string :: proc(ctx: ^TypeContext, $debugging: bool) -> string {
 	return fmt.tprint(strings.to_string(sb))
 }
 
-typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bool) {
+typecheck_inner :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: bool) {
 	_, ty, err := infer_type(tc, expr)
 	if err != nil {
 		typecheck_error(tc, err.?)
@@ -1892,30 +1893,39 @@ typecheck_without_arena :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, su
 	return ty, true
 }
 
-typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, success: bool) {
-	// create separate arena to allocate everything for typechecker
-	arena: vmem.Arena
-	arena_err := vmem.arena_init_growing(&arena)
-	ensure(arena_err == nil)
-	defer vmem.arena_destroy(&arena)
-
-	arena_alloc := vmem.arena_allocator(&arena)
-	prev_alloc := context.allocator
-	context.allocator = arena_alloc
-
-	tc := TypeChecker {
-		ctx           = nil,
-		resolutions   = resolutions,
-		typemap       = make(TypeMap, prev_alloc),
-		typevar_count = 0,
-		current_token = {},
-		pipeline_type = {},
-		return_type   = {},
+typecheck :: proc(
+	expr: Expr,
+	resolutions: ResolutionMap,
+	persistent_typechecker: ^TypeChecker = nil,
+) -> (
+	typemap: TypeMap,
+	success: bool,
+) {
+	tc: ^TypeChecker
+	if persistent_typechecker != nil {
+		tc = persistent_typechecker
+		tc.resolutions = resolutions
+		tc.typemap = make(TypeMap)
+	} else {
+		tc = new(TypeChecker)
+		tc^ = TypeChecker {
+			ctx           = nil,
+			resolutions   = resolutions,
+			typemap       = make(TypeMap),
+			typevar_count = 0,
+			current_token = {},
+			pipeline_type = {},
+			return_type   = {},
+			allocator     = context.allocator,
+		}
+		push_function_scope(tc)
 	}
-	push_function_scope(&tc)
-	defer pop_function_scope(&tc)
+	defer if persistent_typechecker == nil {
+		pop_function_scope(tc)
+	}
 
-	_, ok := typecheck_without_arena(&tc, expr)
+	context.allocator = tc.allocator
+	_, ok := typecheck_inner(tc, expr)
 	if !ok {
 		delete_typemap(tc.typemap)
 		return nil, false
@@ -1927,6 +1937,7 @@ typecheck_full :: proc(
 	vm: ^VM,
 	expr: Expr,
 	resolutions: ResolutionMap,
+	persistent_typechecker: ^TypeChecker = nil,
 ) -> (
 	typemap: TypeMap,
 	success: bool,
@@ -1940,5 +1951,5 @@ typecheck_full :: proc(
 		}
 	}
 
-	return typecheck(expr, resolutions)
+	return typecheck(expr, resolutions, persistent_typechecker)
 }

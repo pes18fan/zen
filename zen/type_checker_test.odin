@@ -123,10 +123,7 @@ test_tapp :: proc(t: ^tt.T) {
 test_unify_var_with_primitives :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
-	tc := TypeChecker {
-		ctx           = nil,
-		typevar_count = 0,
-	}
+	tc := TypeChecker{}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
 
@@ -405,10 +402,7 @@ test_types_equal_different :: proc(t: ^tt.T) {
 test_scope_push_pop :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
-	tc := TypeChecker {
-		ctx           = nil,
-		typevar_count = 0,
-	}
+	tc := TypeChecker{}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
 
@@ -429,10 +423,7 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 test_generalize_instantiate :: proc(t: ^tt.T) {
 	context.allocator = context.temp_allocator
 	defer free_all(context.temp_allocator)
-	tc := TypeChecker {
-		ctx           = nil,
-		typevar_count = 0,
-	}
+	tc := TypeChecker{}
 	push_function_scope(&tc)
 	defer pop_function_scope(&tc)
 
