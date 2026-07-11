@@ -853,6 +853,7 @@ interpret :: proc(
 	source: string,
 	importer: Maybe(ImportingModule) = nil,
 	persistent_globals: ^map[string]^UntypedVariable = nil,
+	persistent_typechecker: ^TypeChecker = nil,
 ) -> InterpretResult {
 	/* If the name of the VM and the importing module are both the same (if the
      * importing module is not nil), then we have a cyclic import, which causes
@@ -978,7 +979,7 @@ interpret :: proc(
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		if !should_not_typecheck {
-			_, tc_ok := typecheck_full(vm, expr, reso)
+			_, tc_ok := typecheck_full(vm, expr, reso, persistent_typechecker)
 
 			if !tc_ok {
 				return .INTERPRET_COMPILE_ERROR
