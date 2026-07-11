@@ -1,1 +1,1 @@
-val x: Number   // ERR: Expect '=' after type annotation.
+val x: Number   // ERR: Final variables must be initialized.

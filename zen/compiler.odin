@@ -682,14 +682,20 @@ compile_var_declaration :: proc(
 
 	for binding in bindings {
 		global := try2(cg, compile_binding(cg, binding.name, is_final, is_loop_variable)) or_return
+		defer define_variable(cg, global)
+		if _, ok := binding.initializer.?; !ok {
+			// TODO: remove this later
+			emit_opcode(cg, .OP_NIL)
+			continue
+		}
+		init := binding.initializer.?
+
 		/* Allow anonymous functions to recurse by referring to the name they've
-			 * been bound to. */
-		if _, ok := binding.initializer.(^FunctionExpr); ok {
+		been bound to. */
+		if _, ok := init.(^FunctionExpr); ok {
 			mark_initialized(cg)
 		}
-		compile_expression(cg, binding.initializer) or_return
-
-		define_variable(cg, global)
+		compile_expression(cg, init) or_return
 	}
 
 	emit_opcode(cg, .OP_NIL) // return value of a var declaration
@@ -1552,8 +1558,11 @@ collect_expr_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
 	#partial switch e in expr {
 	case ^VarDeclExpr:
 		for binding in e.bindings {
+			if _, ok := binding.initializer.?; !ok {continue}
+			init := binding.initializer.?
+
 			// just hoist function declarations and bound lambdas
-			if _, ok := binding.initializer.(^FunctionExpr); !ok {
+			if _, ok := init.(^FunctionExpr); !ok {
 				continue
 			}
 

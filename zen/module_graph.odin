@@ -104,25 +104,9 @@ add_imports :: proc(mr: ^ModuleResolver, expr: Expr, curr: ^Module) -> bool {
 		}
 
 		source := read_file(e.fullpath) or_return
-		tokens, lex_ok := lex(source)
-		if !lex_ok {
-			delete(source)
-			return false
-		}
-
-		ast, parse_ok := parse(tokens)
-		if !parse_ok {
-			delete(source)
-			delete(tokens)
-			return false
-		}
-
-		if !semcheck(ast) {
-			delete(source)
-			delete(tokens)
-			free_expr(ast)
-			return false
-		}
+		tokens := lex(source) or_return
+		ast := parse(tokens) or_return
+		semcheck(ast) or_return
 
 		mod := new(Module)
 		fullpath := strings.clone(e.fullpath)
@@ -132,7 +116,8 @@ add_imports :: proc(mr: ^ModuleResolver, expr: Expr, curr: ^Module) -> bool {
 		queue.enqueue(&mr.module_queue, mod)
 	case ^VarDeclExpr:
 		for binding in e.bindings {
-			add_imports(mr, binding.initializer, curr) or_return
+			init := binding.initializer.? or_continue
+			add_imports(mr, init, curr) or_return
 		}
 	case ^WhileExpr:
 		add_imports(mr, e.condition, curr) or_return
@@ -162,7 +147,6 @@ create_module_graph :: proc(
 	ok: bool,
 ) {
 	mr := init_module_resolver()
-	defer destroy_module_resolver(&mr)
 
 	root_mod := new(Module)
 	root_mod^ = {
@@ -183,8 +167,6 @@ create_module_graph :: proc(
 
 	sorted, cycled := toposort.sort(&mr.sorter)
 	if len(cycled) > 0 {
-		defer destroy_module_graph(cycled[:])
-
 		sb := strings.builder_make()
 		defer strings.builder_destroy(&sb)
 
@@ -216,22 +198,4 @@ init_module_resolver :: proc() -> ModuleResolver {
 		module_queue = module_queue,
 		resolved = make(map[string]^Module),
 	}
-}
-
-destroy_module_resolver :: proc(m: ^ModuleResolver) {
-	toposort.destroy(&m.sorter)
-	queue.destroy(&m.module_queue)
-	delete(m.resolved)
-}
-
-destroy_module_graph :: proc(graph: []^Module) {
-	for &module in graph {
-		delete(module.name)
-		delete(module.fullpath)
-		free_expr(module.ast)
-		delete(module.tokens)
-		delete(module.source)
-		free(module)
-	}
-	delete(graph)
 }

@@ -223,7 +223,7 @@ UnaryExpr :: struct {
 
 VarBinding :: struct {
 	name:        Token,
-	initializer: Expr,
+	initializer: Maybe(Expr),
 	type:        Maybe(Type),
 }
 
@@ -526,11 +526,12 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	if parser_match(p, .FUNC) {
 		expr := parse_function(p, can_assign)
-		if var_e, v_ok := expr.(^VarDeclExpr); v_ok {
-			if len(var_e.bindings) > 0 {
-				if lambda, l_ok := var_e.bindings[0].initializer.(^FunctionExpr); l_ok {
-					lambda.public = true
-				}
+		outer: if var_e, v_ok := expr.(^VarDeclExpr); v_ok {
+			if len(var_e.bindings) == 0 {break outer}
+
+			init := var_e.bindings[0].initializer.? or_break outer
+			if lambda, l_ok := init.(^FunctionExpr); l_ok {
+				lambda.public = true
 			}
 		}
 		return expr
@@ -621,7 +622,6 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(VarDeclExpr)
 	expr.token = parser_previous(p)
 	expr.is_final = expr.token.type == .VAL
-	var_type_str := "final variable" if expr.is_final else "variable"
 	bindings := make([dynamic]VarBinding, 0)
 
 	for {
@@ -634,24 +634,25 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			binding.type = nil
 		}
 
-		parser_consume(
-			p,
-			.EQUAL,
-			fmt.tprintf(
-				"Expect '=' after %s.",
-				"type annotation" if binding.type != nil else fmt.tprintf("%s name", var_type_str),
-			),
-		)
-		binding.initializer = parse_expression(p)
+		if parser_match(p, .EQUAL) {
+			binding.initializer = parse_expression(p)
+		} else {
+			if expr.is_final {
+				parser_error(p, parser_previous(p), "Final variables must be initialized.")
+			}
+
+			binding.initializer = nil
+		}
 
 		// to allow named lambdas to recurse when we get to resolving and
 		// typechecking
-		if fn, ok := binding.initializer.(^FunctionExpr); ok {
-			fn.bound_to = binding.name
+		if init, ok := binding.initializer.?; ok {
+			if fn, ok2 := init.(^FunctionExpr); ok2 {
+				fn.bound_to = binding.name
+			}
 		}
 
 		append(&bindings, binding)
-
 		parser_match(p, .COMMA) or_break
 	}
 	expr.bindings = bindings[:]
@@ -1267,6 +1268,8 @@ parser_synchronize :: proc(p: ^Parser) {
 }
 
 // AST freeing functions
+// Not necessary because the AST is allocated via an arena; but kept for
+// completeness
 free_expr :: proc(expr: Expr) {
 	if expr == nil {
 		return
@@ -1388,7 +1391,9 @@ free_expr :: proc(expr: Expr) {
 		free(e)
 	case ^VarDeclExpr:
 		for binding in e.bindings {
-			free_expr(binding.initializer)
+			if init, ok := binding.initializer.?; ok {
+				free_expr(init)
+			}
 
 			type := binding.type.? or_continue
 			free_type(&type)
@@ -1665,7 +1670,7 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 				type := binding.type.(Type)
 				fmt.sbprintf(b, ": %v", type_string(type, debugging = false))
 			}
-			init: Expr = binding.initializer
+			init := binding.initializer.? or_continue
 			strings.write_string(b, " =\n")
 			print_expr(b, init, indent + 1)
 		}
