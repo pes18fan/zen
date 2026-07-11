@@ -1678,21 +1678,25 @@ check_type :: proc(
 		for binding in e.bindings {
 			beta := binding.type.? or_else fresh(tc)
 
-			s1 := check_type(tc, binding.initializer, beta, "variable initializer") or_return
+			if init, ok := binding.initializer.?; ok {
+				s1 := check_type(tc, init, beta, "variable initializer") or_return
 
-			s = combine_substitutions(s1, s)
-			apply_substitution(s, tc.ctx)
-			inferred := apply_substitution(s, beta)
+				s = combine_substitutions(s1, s)
+				apply_substitution(s, tc.ctx)
+				inferred := apply_substitution(s, beta)
 
-			// only generalize if the thing is a syntactic 'value' (the
-			// value restriction)
-			gen: TypeScheme
-			if is_value(binding.initializer) {
-				gen = generalize(tc, inferred)
+				// only generalize if the thing is a syntactic 'value' (the
+				// value restriction)
+				gen: TypeScheme
+				if is_value(init) {
+					gen = generalize(tc, inferred)
+				} else {
+					gen = inferred
+				}
+				bind_type(tc.ctx, strings.clone(binding.name.lexeme), gen)
 			} else {
-				gen = inferred
+				bind_type(tc.ctx, strings.clone(binding.name.lexeme), beta)
 			}
-			bind_type(tc.ctx, strings.clone(binding.name.lexeme), gen)
 		}
 		sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return // VarDeclExpr itself evaluates to nil
 

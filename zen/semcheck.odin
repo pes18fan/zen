@@ -295,8 +295,9 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 		sm.current_token = e.token
 
 		for binding in e.bindings {
+			init := binding.initializer.? or_continue
 			sm.current_token = binding.name
-			semcheck_expr(sm, binding.initializer) or_return
+			semcheck_expr(sm, init) or_return
 		}
 	case ^WhileExpr:
 		sm.current_token = e.token

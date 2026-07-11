@@ -1,1 +1,1 @@
-val x   // ERR: Expect '=' after final variable name.
+val x   // ERR: Final variables must be initialized.

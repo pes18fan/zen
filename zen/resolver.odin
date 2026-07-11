@@ -153,13 +153,69 @@ in_global_scope :: proc(rs: ^Resolver) -> bool {
 }
 
 @(require_results)
+declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType) -> ErrorMessage {
+	if in_global_scope(rs) {
+		_, exists := rs.globals[name]
+		if exists {
+			return nil
+		}
+
+		new_var := new(UntypedVariable)
+		new_var^ = {
+			shadower         = nil,
+			name             = fmt.tprint(name),
+			kind             = .GLOBAL,
+			is_final         = true,
+			is_loop_variable = false,
+			is_captured      = false,
+			is_module        = true,
+			is_native_value  = true if type == .BUILTIN else false,
+			initialized      = true,
+			scope_depth      = 0,
+			local_index      = 0,
+		}
+		rs.globals[name] = new_var
+		return nil
+	}
+
+	var, exists := rs.function_scope.variables[name]
+	if exists && var.scope_depth == rs.function_scope.scope_depth {
+		return "A variable with this name in this scope already exists."
+	}
+
+	new_var := new(UntypedVariable)
+	new_var^ = {
+		shadower         = nil,
+		name             = fmt.tprint(name),
+		kind             = .LOCAL,
+		is_final         = true,
+		is_loop_variable = false,
+		is_captured      = false,
+		is_module        = true,
+		is_native_value  = true if type == .BUILTIN else false,
+		initialized      = true,
+		scope_depth      = rs.function_scope.scope_depth,
+		local_index      = rs.function_scope.local_count,
+	}
+	rs.function_scope.local_count += 1
+
+	// if the variable exists in a different scope we just shadow the thing
+	if exists {
+		var.shadower = new_var
+	} else {
+		rs.function_scope.variables[fmt.tprint(name)] = new_var
+	}
+
+	return nil
+}
+
+@(require_results)
 declare_variable :: proc(
 	rs: ^Resolver,
 	name: string,
 	is_final: bool,
 	is_loop_variable: bool = false,
 ) -> ErrorMessage {
-	// TODO: handle later
 	if in_global_scope(rs) {
 		var, exists := rs.globals[name]
 		if exists {
@@ -411,25 +467,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^UseExpr:
 		rs.current_token = e.token
 		name := e.name
-		if _, exists := rs.globals[name]; exists {
-			resolver_error(rs, fmt.tprintf("Module '%s' is already defined.", name))
-			return false
-		}
-		new_var := new(UntypedVariable)
-		new_var^ = {
-			shadower         = nil,
-			name             = fmt.tprint(name),
-			kind             = .GLOBAL,
-			is_final         = true,
-			is_loop_variable = false,
-			is_captured      = false,
-			is_module        = true,
-			is_native_value  = true if e.type == .BUILTIN else false,
-			initialized      = true,
-			scope_depth      = 0,
-			local_index      = 0,
-		}
-		rs.globals[fmt.tprint(name)] = new_var
+		type := e.type
+		try(rs, declare_and_define_module(rs, name, type)) or_return
 	case ^VariableExpr:
 		rs.current_token = e.token
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
@@ -443,13 +482,15 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 
 		for binding in bindings {
 			try(rs, declare_variable(rs, binding.name.lexeme, is_final)) or_return
+			init := binding.initializer.? or_continue
+
 			is_fn := false
 			// allow recursion
-			if _, ok := binding.initializer.(^FunctionExpr); ok {
+			if _, ok := init.(^FunctionExpr); ok {
 				is_fn = true
 				define_variable(rs, binding.name.lexeme)
 			}
-			resolve_with_resolver(rs, binding.initializer) or_return
+			resolve_with_resolver(rs, init) or_return
 			if !is_fn {
 				define_variable(rs, binding.name.lexeme)
 			}
@@ -510,7 +551,9 @@ collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 
 		for binding in e.bindings {
 			// only hoist functions
-			if _, ok := binding.initializer.(^FunctionExpr); !ok {continue}
+			init := binding.initializer.? or_continue
+			_ = init.(^FunctionExpr) or_continue
+
 			name := binding.name
 
 			// ONLY declare the variable; it is defined in the main resolver pass
