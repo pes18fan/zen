@@ -1581,8 +1581,11 @@ check_type :: proc(
 			s = combine_substitutions(s1, s)
 
 			if right == nil {
-				// seq evaluates to nil if there is no right side
-				sn := try_unify(type, tapp(.NIL), expected_expression_name) or_return
+				sn := try_unify(
+					apply_substitution(s, type),
+					tapp(.NIL),
+					expected_expression_name,
+				) or_return
 				s = combine_substitutions(sn, s)
 				break
 			}
@@ -1594,7 +1597,11 @@ check_type :: proc(
 				s2, last_t := infer_type(tc, right) or_return
 				apply_substitution(s2, tc.ctx)
 				s = combine_substitutions(s2, s)
-				sn := try_unify(type, last_t, expected_expression_name) or_return
+				sn := try_unify(
+					apply_substitution(s, type),
+					last_t,
+					expected_expression_name,
+				) or_return
 				s = combine_substitutions(sn, s)
 				break
 			}
