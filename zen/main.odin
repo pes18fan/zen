@@ -118,6 +118,7 @@ repl :: proc(vm: ^VM) -> uint {
 			importer = nil,
 			persistent_globals = &globals,
 			persistent_typechecker = tc,
+			persistent_allocator = arena_allocator,
 		)
 		ic.ic_free(rawptr(raw))
 	}

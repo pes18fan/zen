@@ -32,6 +32,7 @@ Resolver :: struct #all_or_none {
 	globals:        map[string]^UntypedVariable,
 	function_scope: ^UntypedContext,
 	current_token:  Token,
+	allocator:      mem.Allocator,
 }
 
 UntypedContext :: struct {
@@ -232,7 +233,7 @@ declare_variable :: proc(
 			}
 		}
 
-		new_var := new(UntypedVariable)
+		new_var := new(UntypedVariable, rs.allocator)
 		new_var^ = {
 			shadower         = nil,
 			name             = fmt.tprint(name),
@@ -246,8 +247,8 @@ declare_variable :: proc(
 			scope_depth      = rs.function_scope.scope_depth,
 			local_index      = 0,
 		}
-		// do NOT remove the fmt.tprint, idk why but the REPL won't work without
-		// explicitly allocating the key
+
+		// do NOT remove the tprint
 		key := fmt.tprint(name)
 		rs.globals[key] = new_var
 		return nil
@@ -577,10 +578,19 @@ resolve :: proc(
 	expr: Expr,
 	existing_globals: ^map[string]^UntypedVariable = nil,
 	setup_native_fns: bool = true,
+	persistent_allocator: mem.Allocator = {},
 ) -> (
 	resolutions: ResolutionMap,
 	success: bool,
 ) {
+
+	allocator: mem.Allocator
+	if persistent_allocator != {} {
+		allocator = persistent_allocator
+	} else {
+		allocator = context.allocator
+	}
+
 	globals: map[string]^UntypedVariable
 	if existing_globals != nil {
 		globals = existing_globals^
@@ -597,6 +607,7 @@ resolve :: proc(
 		globals        = globals,
 		function_scope = nil,
 		current_token  = {},
+		allocator      = allocator,
 	}
 	push_function_scope_untyped(&rs)
 	defer pop_function_scope_untyped(&rs)
@@ -634,6 +645,7 @@ resolve_full :: proc(
 	vm: ^VM,
 	expr: Expr,
 	persistent_globals: ^map[string]^UntypedVariable = nil,
+	persistent_allocator: mem.Allocator = {},
 ) -> (
 	resolutions: ResolutionMap,
 	ok: bool,
@@ -641,9 +653,10 @@ resolve_full :: proc(
 	out := resolve(
 		expr,
 		existing_globals = persistent_globals,
-		// persistently existing globals are assumed to already have setup their
+		// persistently existing globals are assumed to have already set up their
 		// native function definitions
 		setup_native_fns = true if persistent_globals == nil else false,
+		persistent_allocator = persistent_allocator,
 	) or_return
 
 	return out, true
