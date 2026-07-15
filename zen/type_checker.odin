@@ -1,7 +1,6 @@
 package zen
 
 import "core:fmt"
-import "core:mem"
 import "core:slice"
 import "core:strings"
 
@@ -13,7 +12,6 @@ TypeChecker :: struct #all_or_none {
 	current_token: Token,
 	return_type:   Type,
 	pipeline_type: Type,
-	allocator:     mem.Allocator,
 }
 
 TypeMap :: map[Expr]TypeScheme
@@ -349,9 +347,9 @@ when ODIN_DEBUG {
 }
 
 push_function_scope :: proc(tc: ^TypeChecker) {
-	ctx := new(TypeContext, tc.allocator)
-	ctx.bindings = make([dynamic]TypedBinding, tc.allocator)
-	ctx.scope_boundaries = make([dynamic]int, tc.allocator)
+	ctx := new(TypeContext)
+	ctx.bindings = make([dynamic]TypedBinding)
+	ctx.scope_boundaries = make([dynamic]int)
 	ctx.enclosing = tc.ctx
 	ctx.scope_depth = 0
 	tc.ctx = ctx
@@ -1900,38 +1898,20 @@ typecheck_inner :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: b
 	return ty, true
 }
 
-typecheck :: proc(
-	expr: Expr,
-	resolutions: ResolutionMap,
-	persistent_typechecker: ^TypeChecker = nil,
-) -> (
-	typemap: TypeMap,
-	success: bool,
-) {
-	tc: ^TypeChecker
-	if persistent_typechecker != nil {
-		tc = persistent_typechecker
-		tc.resolutions = resolutions
-		tc.typemap = make(TypeMap)
-	} else {
-		tc = new(TypeChecker)
-		tc^ = TypeChecker {
-			ctx           = nil,
-			resolutions   = resolutions,
-			typemap       = make(TypeMap),
-			typevar_count = 0,
-			current_token = {},
-			pipeline_type = {},
-			return_type   = {},
-			allocator     = context.allocator,
-		}
-		push_function_scope(tc)
+typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, success: bool) {
+	tc := new(TypeChecker)
+	tc^ = TypeChecker {
+		ctx           = nil,
+		resolutions   = resolutions,
+		typemap       = make(TypeMap),
+		typevar_count = 0,
+		current_token = {},
+		pipeline_type = {},
+		return_type   = {},
 	}
-	defer if persistent_typechecker == nil {
-		pop_function_scope(tc)
-	}
+	push_function_scope(tc)
+	defer pop_function_scope(tc)
 
-	context.allocator = tc.allocator
 	_, ok := typecheck_inner(tc, expr)
 	if !ok {
 		delete_typemap(tc.typemap)
@@ -1944,7 +1924,6 @@ typecheck_full :: proc(
 	vm: ^VM,
 	expr: Expr,
 	resolutions: ResolutionMap,
-	persistent_typechecker: ^TypeChecker = nil,
 ) -> (
 	typemap: TypeMap,
 	success: bool,
@@ -1958,5 +1937,5 @@ typecheck_full :: proc(
 		}
 	}
 
-	return typecheck(expr, resolutions, persistent_typechecker)
+	return typecheck(expr, resolutions)
 }
