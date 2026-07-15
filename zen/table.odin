@@ -71,7 +71,7 @@ find_entry :: proc(entries: []Entry, capacity: int, key: ^ObjString) -> ^Entry {
 			if is_nil(entry.value) {
 				return tombstone if tombstone != nil else entry
 			} else {
-				if tombstone == nil do tombstone = entry
+				if tombstone == nil {tombstone = entry}
 			}
 		} else if entry.key == key {
 			return entry
@@ -106,10 +106,10 @@ adjust_capacity :: proc(table: ^Table, capacity: int) {
 }
 
 table_delete :: proc(table: ^Table, key: ^ObjString) -> bool {
-	if table.count == 0 do return false
+	if table.count == 0 {return false}
 
 	entry := find_entry(table.entries, table.capacity, key)
-	if entry.key == nil do return false
+	if entry.key == nil {return false}
 
 	entry.key = nil
 	entry.value = bool_val(true)
