@@ -852,9 +852,6 @@ interpret :: proc(
 	gc: ^GC,
 	source: string,
 	importer: Maybe(ImportingModule) = nil,
-	persistent_globals: ^map[string]^UntypedVariable = nil,
-	persistent_typechecker: ^TypeChecker = nil,
-	persistent_allocator: mem.Allocator = {},
 ) -> InterpretResult {
 	/* If the name of the VM and the importing module are both the same (if the
      * importing module is not nil), then we have a cyclic import, which causes
@@ -959,7 +956,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	reso, rs_ok := resolve_full(vm, expr, persistent_globals, persistent_allocator)
+	reso, rs_ok := resolve_full(vm, expr)
 	if !rs_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
@@ -972,15 +969,15 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
+	TYPE_CHECK :: true
 	when TYPE_CHECK {
 		should_not_typecheck := has_user_modules(expr)
 	}
 
-	TYPE_CHECK :: true
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		if !should_not_typecheck {
-			_, tc_ok := typecheck_full(vm, expr, reso, persistent_typechecker)
+			_, tc_ok := typecheck_full(vm, expr, reso)
 
 			if !tc_ok {
 				return .INTERPRET_COMPILE_ERROR
@@ -1132,7 +1129,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 	return false
 }
 
-/* Invoke a method or a function in a module. */
+/* Invoke a function in a module. */
 @(private = "file")
 invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
 	receiver := vm_peek(vm, arg_count)

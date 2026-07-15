@@ -130,7 +130,6 @@ test_unify_var_with_primitives :: proc(t: ^tt.T) {
 		typemap       = nil,
 		return_type   = {},
 		pipeline_type = {},
-		allocator     = context.allocator,
 		current_token = {},
 	}
 	push_function_scope(&tc)
@@ -418,7 +417,6 @@ test_scope_push_pop :: proc(t: ^tt.T) {
 		typemap       = nil,
 		return_type   = {},
 		pipeline_type = {},
-		allocator     = context.allocator,
 		current_token = {},
 	}
 	push_function_scope(&tc)
@@ -448,7 +446,6 @@ test_generalize_instantiate :: proc(t: ^tt.T) {
 		typemap       = nil,
 		return_type   = {},
 		pipeline_type = {},
-		allocator     = context.allocator,
 		current_token = {},
 	}
 	push_function_scope(&tc)

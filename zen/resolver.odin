@@ -32,7 +32,6 @@ Resolver :: struct #all_or_none {
 	globals:        map[string]^UntypedVariable,
 	function_scope: ^UntypedContext,
 	current_token:  Token,
-	allocator:      mem.Allocator,
 }
 
 UntypedContext :: struct {
@@ -233,7 +232,7 @@ declare_variable :: proc(
 			}
 		}
 
-		new_var := new(UntypedVariable, rs.allocator)
+		new_var := new(UntypedVariable)
 		new_var^ = {
 			shadower         = nil,
 			name             = fmt.tprint(name),
@@ -583,31 +582,14 @@ resolve :: proc(
 	resolutions: ResolutionMap,
 	success: bool,
 ) {
-
-	allocator: mem.Allocator
-	if persistent_allocator != {} {
-		allocator = persistent_allocator
-	} else {
-		allocator = context.allocator
-	}
-
-	globals: map[string]^UntypedVariable
-	if existing_globals != nil {
-		globals = existing_globals^
-	} else {
-		globals = make(map[string]^UntypedVariable)
-	}
-
-	if setup_native_fns {
-		add_native_fns_to_variable_map(&globals, context.allocator)
-	}
+	globals := make(map[string]^UntypedVariable)
+	add_native_fns_to_variable_map(&globals, context.allocator)
 
 	rs := Resolver {
 		resolutions    = nil,
 		globals        = globals,
 		function_scope = nil,
 		current_token  = {},
-		allocator      = allocator,
 	}
 	push_function_scope_untyped(&rs)
 	defer pop_function_scope_untyped(&rs)
@@ -641,23 +623,8 @@ add_native_fns_to_variable_map :: #force_inline proc(
 }
 
 @(require_results)
-resolve_full :: proc(
-	vm: ^VM,
-	expr: Expr,
-	persistent_globals: ^map[string]^UntypedVariable = nil,
-	persistent_allocator: mem.Allocator = {},
-) -> (
-	resolutions: ResolutionMap,
-	ok: bool,
-) {
-	out := resolve(
-		expr,
-		existing_globals = persistent_globals,
-		// persistently existing globals are assumed to have already set up their
-		// native function definitions
-		setup_native_fns = true if persistent_globals == nil else false,
-		persistent_allocator = persistent_allocator,
-	) or_return
+resolve_full :: proc(vm: ^VM, expr: Expr) -> (resolutions: ResolutionMap, ok: bool) {
+	out := resolve(expr) or_return
 
 	return out, true
 }

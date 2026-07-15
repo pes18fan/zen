@@ -2,7 +2,6 @@ package zen
 
 import "core:fmt"
 import "core:mem"
-import vmem "core:mem/virtual"
 import "core:os"
 import "core:path/filepath"
 import ic "isocline"
@@ -60,29 +59,6 @@ repl :: proc(vm: ^VM) -> uint {
 	vm.name = "REPL"
 	vm.path = "REPL"
 
-	repl_arena: vmem.Arena
-	err := vmem.arena_init_growing(&repl_arena)
-	ensure(err == nil)
-	defer vmem.arena_destroy(&repl_arena)
-	arena_allocator := vmem.arena_allocator(&repl_arena)
-
-	globals := make(map[string]^UntypedVariable, arena_allocator)
-	add_native_fns_to_variable_map(&globals, arena_allocator)
-
-	tc := new(TypeChecker, arena_allocator)
-	tc^ = TypeChecker {
-		ctx           = nil,
-		resolutions   = nil,
-		typemap       = nil,
-		typevar_count = 0,
-		current_token = {},
-		pipeline_type = {},
-		return_type   = {},
-		allocator     = arena_allocator,
-	}
-	push_function_scope(tc)
-	defer pop_function_scope(tc)
-
 	when CHAOTIC {
 		fmt.print("Welcome to zen!")
 		fmt.println(color_red(" (chaotic mode)"))
@@ -111,15 +87,7 @@ repl :: proc(vm: ^VM) -> uint {
 
 		ic.ic_history_add(raw)
 
-		interpret(
-			vm,
-			vm.gc,
-			line_str,
-			importer = nil,
-			persistent_globals = &globals,
-			persistent_typechecker = tc,
-			persistent_allocator = arena_allocator,
-		)
+		interpret(vm, vm.gc, line_str, importer = nil)
 		ic.ic_free(rawptr(raw))
 	}
 
