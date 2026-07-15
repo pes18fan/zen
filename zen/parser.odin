@@ -228,9 +228,10 @@ VarBinding :: struct {
 }
 
 VarDeclExpr :: struct {
-	token:    Token,
-	is_final: bool,
-	bindings: []VarBinding,
+	token:     Token,
+	is_final:  bool,
+	is_public: bool,
+	bindings:  []VarBinding,
 }
 
 VariableExpr :: struct {
@@ -527,6 +528,8 @@ parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	if parser_match(p, .FUNC) {
 		expr := parse_function(p, can_assign)
 		outer: if var_e, v_ok := expr.(^VarDeclExpr); v_ok {
+			var_e.is_public = true
+
 			if len(var_e.bindings) == 0 {break outer}
 
 			init := var_e.bindings[0].initializer.? or_break outer
@@ -535,8 +538,16 @@ parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			}
 		}
 		return expr
+	} else if parser_match(p, .VAR, .VAL) {
+		expr := parse_var_decl_expression(p, can_assign).(^VarDeclExpr)
+		expr.is_public = true
+		return expr
 	} else {
-		parser_error(p, parser_peek(p), "Only functions can be set as public.")
+		parser_error(
+			p,
+			parser_peek(p),
+			"Only function or variable declarations can be set as public.",
+		)
 		return nil
 	}
 }
@@ -1099,6 +1110,7 @@ rules: [TokenType]ParseRule = {
 	.RSQUARE               = {nil, nil, .NONE},
 	.COMMA                 = {nil, nil, .NONE},
 	.COLON                 = {nil, nil, .NONE},
+	.COLON_COLON           = {nil, nil, .NONE},
 	.DOT                   = {nil, parse_dot, .CALL},
 	.DOT_DOT               = {nil, parse_binary, .CONCATENATION},
 	.MINUS                 = {parse_unary, parse_binary, .TERM},

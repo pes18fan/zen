@@ -1898,7 +1898,17 @@ typecheck_inner :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: b
 	return ty, true
 }
 
+@(require_results)
 typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, success: bool) {
+	when ODIN_DEBUG {
+		if config.log_type {
+			fmt.eprintln("-- typechecker begin")
+		}
+		defer if config.log_type {
+			fmt.eprintln("\n-- typechecker end")
+		}
+	}
+
 	tc := new(TypeChecker)
 	tc^ = TypeChecker {
 		ctx           = nil,
@@ -1918,24 +1928,4 @@ typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, 
 		return nil, false
 	}
 	return tc.typemap, true
-}
-
-typecheck_full :: proc(
-	vm: ^VM,
-	expr: Expr,
-	resolutions: ResolutionMap,
-) -> (
-	typemap: TypeMap,
-	success: bool,
-) {
-	when ODIN_DEBUG {
-		if config.log_type {
-			fmt.eprintln("-- typechecker begin")
-		}
-		defer if config.log_type {
-			fmt.eprintln("\n-- typechecker end")
-		}
-	}
-
-	return typecheck(expr, resolutions)
 }

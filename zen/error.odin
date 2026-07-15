@@ -1,7 +1,7 @@
 package zen
 
 import "core:fmt"
-import "core:path/filepath"
+
 ErrorMessage :: Maybe(string)
 
 // Helper to avoid a billion `if err != nil`s everywhere
@@ -74,12 +74,27 @@ try2_resolver :: #force_inline proc(rs: ^Resolver, ret: $T, err: ErrorMessage) -
 	return ret, true
 }
 
-print_error :: #force_inline proc(token: Token, message: string, details: string = "") {
+print_error :: #force_inline proc(
+	token: Token,
+	message: string,
+	file: string = "",
+	details: string = "",
+) {
 	fmt.eprint(color_red("error"))
 	fmt.eprintfln(": %s", style_bold(message))
 
 	fmt.eprint(color_blue(" --> "))
-	fmt.eprintf(style_bold("%s"), "REPL" if config.repl else filepath.base(zen_get_path()))
+
+	path: string
+	if config.repl {
+		path = "REPL"
+	} else if file != "" {
+		path = file
+	} else {
+		path = zen_get_path()
+	}
+
+	fmt.eprintf(style_bold("%s"), path)
 	if token.type == .EOF {
 		fmt.eprintln(" at end of file")
 	} else {
@@ -99,6 +114,7 @@ print_error :: #force_inline proc(token: Token, message: string, details: string
 	fmt.eprintln(color_red("^"))
 
 	if details != "" {
+		fmt.eprintln()
 		fmt.eprint(color_blue("note: "))
 		fmt.eprintln(details)
 	}
