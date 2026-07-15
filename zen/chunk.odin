@@ -109,7 +109,7 @@ Returns the line number for the instruction at the given offset.
 get_line :: proc(lines: [dynamic]int, offset: int) -> int {
 	j := 0
 	for line, idx in lines {
-		if idx % 2 != 0 do continue
+		if idx % 2 != 0 {continue}
 
 		for _ in 0 ..< line {
 			if j == offset {
