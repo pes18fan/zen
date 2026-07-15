@@ -189,8 +189,7 @@ mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
 	if is_obj(vm.it) {mark_object(gc, as_obj(vm.it))}
 	if is_obj(vm.save) {mark_object(gc, as_obj(vm.save))}
 
-	/* Mark the command line args, we don't want these to be freed till the
-    whole execution is done */
+	/* Mark the ObjList of command line arguments. */
 	mark_object(gc, vm.args)
 
 	/* Mark closure objects in the CallFrames. These need to be marked to 

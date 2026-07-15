@@ -359,6 +359,8 @@ parse_argv :: proc(vm: ^VM) -> (status: uint) {
 			res := interpret(vm, vm.gc, string(buf[:n]))
 			return interpret_result_exit_code(res)
 		} else {
+			// NOTE: REPL should start here; this is temporary till I figure
+			// out the best way to do the REPL
 			config.repl = true
 			return repl(vm)
 		}

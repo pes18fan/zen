@@ -82,6 +82,16 @@ STD_MODULE_FUNCTIONS: [BuiltinModule][]BuiltinFunction = {
 	},
 }
 
+function_exists_in_builtin_module :: proc(m: BuiltinModule, name: string) -> bool {
+	mod := STD_MODULE_FUNCTIONS[m]
+
+	for fn in mod {
+		if fn.name == name {return true}
+	}
+
+	return false
+}
+
 /* Get all the information required to import a builtin module into the global
  * scope. */
 get_builtin_module :: #force_inline proc(gc: ^GC, module: BuiltinModule) -> []BuiltinFunction {

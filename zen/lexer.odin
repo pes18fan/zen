@@ -27,6 +27,7 @@ TokenType :: enum {
 	// one or two character tokens
 	BANG_EQUAL,
 	BAR_GREATER, // |>
+	COLON_COLON,
 	DOT_DOT,
 	EQUAL,
 	EQUAL_EQUAL,
@@ -496,7 +497,7 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case ']':
 		return make_token(l, .RSQUARE)
 	case ':':
-		return make_token(l, .COLON)
+		return make_token(l, lexer_match(l, ':') ? .COLON_COLON : .COLON)
 	case ';':
 		return make_token(l, .SEMI)
 	case ',':

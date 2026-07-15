@@ -943,7 +943,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	_, mod_ok := create_module_graph(zen_get_path(), source, tokens, expr)
+	graph, mod_ok := create_module_graph(zen_get_path(), source, tokens, expr)
 	if !mod_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
@@ -956,7 +956,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	reso, rs_ok := resolve_full(vm, expr)
+	reso, rs_ok := resolve_graph(graph)
 	if !rs_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
@@ -977,8 +977,7 @@ interpret :: proc(
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		if !should_not_typecheck {
-			_, tc_ok := typecheck_full(vm, expr, reso)
-
+			_, tc_ok := typecheck(expr, reso)
 			if !tc_ok {
 				return .INTERPRET_COMPILE_ERROR
 			}
