@@ -105,3 +105,9 @@ Man page: `pandoc -s -t man ./etc/zen.1.md -o zen.1`
   (`has_user_modules` proc at `zen/semcheck.odin:342`, called at
   `zen/vm.odin:974`; the skip happens at `vm.odin:979` — forced by the lack
   of a module resolution pass after parsing). This is the next thing to fix.
+- Information that the typechecker and other compile-time passes made alongside it
+    (resolver, module resolver) produce are not provided to the codegen and VM,
+    which still work via the old clox-style. For instance, the codegen pass
+    re-resolves variables itself in the clox style, and the VM fully re-parses
+    and compiles module imports before running them. This will be fixed in a
+    future refactor; not prioritized as this is less incorrect and more redundant.
