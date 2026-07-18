@@ -538,24 +538,13 @@ parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
 			}
 		}
 		return expr
-	} else if parser_match(p, .VAR, .VAL) {
-		expr := parse_var_decl_expression(p, can_assign).(^VarDeclExpr)
-		expr.is_public = true
-		return expr
 	} else {
-		parser_error(
-			p,
-			parser_peek(p),
-			"Only function or variable declarations can be set as public.",
-		)
+		// TODO: make variables public-able as well
+		parser_error(p, parser_peek(p), "Only functions can be set as public.")
 		return nil
 	}
 }
 
-// NOTE: Very important to note that this function allocates the type arguments
-// on the general-purpose allocator used for the overall AST (unlike the
-// typechecker which uses its own arena) and therefore the types
-// created here MUST be freed when the AST nodes are being freed
 parse_type_annotation :: proc(p: ^Parser, type_variable_map: map[string]int = nil) -> Type {
 	if parser_check(p, .IDENT) {
 		type: Type
@@ -1278,147 +1267,6 @@ parser_synchronize :: proc(p: ^Parser) {
 		parser_advance(p)
 	}
 }
-
-// AST freeing functions
-// Not necessary because the AST is allocated via an arena; but kept for
-// completeness
-free_expr :: proc(expr: Expr) {
-	if expr == nil {
-		return
-	}
-
-	switch e in expr {
-	case ^AssignExpr:
-		free_expr(e.value)
-		free(e)
-	case ^BinaryExpr:
-		free_expr(e.left)
-		free_expr(e.right)
-		free(e)
-	case ^BreakExpr:
-		free(e)
-	case ^BlockExpr:
-		free_expr(e.expression)
-		free(e)
-	case ^ContinueExpr:
-		free(e)
-	case ^CallExpr:
-		for arg in e.arguments {
-			free_expr(arg)
-		}
-		delete(e.arguments)
-		free_expr(e.callee)
-		free(e)
-	case ^ExitExpr:
-		free_expr(e.code)
-		free(e)
-	case ^ForInExpr:
-		free_expr(e.iterable)
-		if e.body != nil {free_expr(e.body)}
-		free(e)
-	case ^ForExpr:
-		free_expr(e.initializer)
-		if e.body != nil {free_expr(e.body)}
-		free_expr(e.condition)
-		free_expr(e.increment)
-		free(e)
-	case ^GetExpr:
-		free_expr(e.receiver)
-		free(e)
-	case ^GroupingExpr:
-		free_expr(e.expression)
-		free(e)
-	case ^IfExpr:
-		free_expr(e.condition)
-		if e.then_branch != nil {free_expr(e.then_branch)}
-		if e.else_branch != nil {free_expr(e.else_branch)}
-		free(e)
-	case ^ItExpr:
-		free(e)
-	case ^FunctionExpr:
-		for param in e.params {
-			type := param.type.? or_continue
-			free_type(&type)
-		}
-
-		free_expr(e.body)
-		delete(e.params)
-		free(e)
-	case ^ListExpr:
-		for element in e.elements {
-			free_expr(element)
-		}
-		delete(e.elements)
-		free(e)
-	case ^LiteralExpr:
-		if v, ok := e.value.(string); ok {
-			/* This was allocated when adding escape sequences */
-			delete(v)
-		}
-		free(e)
-	case ^LogicalExpr:
-		free_expr(e.left)
-		free_expr(e.right)
-		free(e)
-	case ^PipeExpr:
-		free_expr(e.left)
-		free_expr(e.right)
-		free(e)
-	case ^EchoExpr:
-		free_expr(e.expr)
-		free(e)
-	case ^ReturnExpr:
-		free_expr(e.value)
-		free(e)
-	case ^SequenceExpr:
-		free_expr(e.left)
-		free_expr(e.right)
-		free(e)
-	case ^SubscriptExpr:
-		free_expr(e.receiver)
-		free_expr(e.index)
-		free(e)
-	case ^SubscriptSetExpr:
-		free_expr(e.receiver)
-		free_expr(e.index)
-		free_expr(e.value)
-		free(e)
-	case ^SwitchExpr:
-		free_expr(e.condition)
-		for c in e.cases {
-			free_expr(c.condition)
-			free_expr(c.body)
-		}
-		delete(e.cases)
-		free_expr(e.else_branch)
-		free(e)
-	case ^UnaryExpr:
-		free_expr(e.right)
-		free(e)
-	case ^UseExpr:
-		delete(e.name)
-		delete(e.fullpath)
-		free(e)
-	case ^VariableExpr:
-		free(e)
-	case ^VarDeclExpr:
-		for binding in e.bindings {
-			if init, ok := binding.initializer.?; ok {
-				free_expr(init)
-			}
-
-			type := binding.type.? or_continue
-			free_type(&type)
-		}
-		delete(e.bindings)
-		free(e)
-	case ^WhileExpr:
-		if e.body != nil {free_expr(e.body)}
-		free_expr(e.condition)
-		free(e)
-	}
-}
-
 
 // AST pretty-printer
 

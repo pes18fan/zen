@@ -26,17 +26,8 @@ add_to_typemap_after_substitution :: #force_inline proc(
 	subst: Substitution,
 	typescheme: TypeScheme,
 ) {
-	context.allocator = tc.typemap.allocator
 	t := apply_substitution(subst, typescheme)
 	add_to_typemap(tc, expr, t)
-}
-
-delete_typemap :: proc(typemap: TypeMap) {
-	context.allocator = typemap.allocator
-	for _, &scheme in typemap {
-		free_typescheme(&scheme)
-	}
-	delete(typemap)
 }
 
 TypedBinding :: struct {
@@ -164,35 +155,6 @@ tapp :: proc(constructor: TypeConstructor, args: []Type = nil) -> TypeFunctionAp
 	}
 
 	fmt.panicf("invalid type constructor %v", constructor)
-}
-
-// not necessary for the type checker as it just uses an arena; but the
-// parser needs it because it allocates types for annotations
-free_type :: proc(type: ^Type) {
-	switch t in type {
-	case TypeVariable: // nothing
-	case TypeFunctionApplication:
-		switch t.constructor {
-		case .NUMBER, .STRING, .NIL, .BOOL: // nothing to free
-		case .FUNCTION, .LIST, .RESULT, .RECORD:
-			for &arg in t.args {
-				free_type(&arg)
-			}
-			delete(t.args)
-		}
-	case TypeAny: // nothing
-	case TypeNever: // nothing
-	}
-}
-
-free_typescheme :: proc(scheme: ^TypeScheme) {
-	switch &type in scheme {
-	case Type:
-		free_type(&type)
-	case TypeQuantified:
-		delete(type.bound)
-		free_type(&type.type)
-	}
 }
 
 type_any :: TypeAny{}
@@ -394,19 +356,6 @@ pop_scope :: proc(ctx: ^TypeContext) {
 		if config.log_type {
 			fmt.eprintfln("-- exit block %d\n", ctx.scope_depth + 1)
 		}
-	}
-}
-
-destroy_type_context :: proc(ctx: ^TypeContext) {
-	c := ctx
-	for c != nil {
-		for i in 0 ..< len(c.bindings) {
-			free_typescheme(&c.bindings[i].scheme)
-		}
-		delete(c.bindings)
-		delete(c.scope_boundaries)
-		free(c)
-		c = c.enclosing
 	}
 }
 
@@ -1924,7 +1873,6 @@ typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, 
 
 	_, ok := typecheck_inner(tc, expr)
 	if !ok {
-		delete_typemap(tc.typemap)
 		return nil, false
 	}
 	return tc.typemap, true

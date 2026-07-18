@@ -870,6 +870,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
+	// make arena for the compiler frontend
 	arena: vmem.Arena
 	err := vmem.arena_init_growing(&arena)
 	ensure(err == nil)
@@ -956,7 +957,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	reso, rs_ok := resolve_graph(graph)
+	reso, rs_ok := resolve(graph)
 	if !rs_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
@@ -977,7 +978,7 @@ interpret :: proc(
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		if !should_not_typecheck {
-			_, tc_ok := typecheck(expr, reso)
+			_, tc_ok := typecheck(expr, reso.resolution_map)
 			if !tc_ok {
 				return .INTERPRET_COMPILE_ERROR
 			}
@@ -997,6 +998,7 @@ interpret :: proc(
 	// keep just the last push), remove instructions that make no difference
 	// to the final (correct) result
 
+	// use the default heap allocator for codegen and the VM
 	context.allocator = prev_alloc
 	collect_globals(&vm.compiler_globals, gc, expr)
 	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
