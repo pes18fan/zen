@@ -11,7 +11,7 @@ boundaries to respect.
 | Branch | Purpose |
 |---|---|
 | `main` | Stable: no type inference |
-| `typechecker` | Active: HM type inference (`TYPE_CHECK :: true` at `zen/vm.odin:972`), classes & OOP fully removed from language |
+| `typechecker` | Active: HM type inference (`TYPE_CHECK :: true` hardcoded at `zen/vm.odin:973`), classes & OOP fully removed from language |
 
 ## Build
 
@@ -30,11 +30,10 @@ Requires Odin and Python (stdlib only, no pip deps).
 - First build auto-clones+compiles `isocline` (the REPL line-editing lib)
   into `./isocline/`; this needs a C compiler and network access to
   `github.com/daanx/isocline`, and only happens once (cached after).
-- `-vet` is always on (baked into `DEBUG_FLAGS`/`RELEASE_FLAGS` in `x.py`) —
-  there is no separate lint step/command. `x.py` also passes
-  `-warnings-as-errors -strict-style -vet-style -disallow-do` for **both**
-  debug and release builds, so any code you add must: pass strict style, have
-  no warnings, and **never use `do`** (`do ...` is disallowed).
+- `-vet -vet-tabs -strict-style -vet-style -warnings-as-errors -disallow-do`
+  is baked into **both** debug and release flags in `x.py` — there is no
+  separate lint step. Any code you add must pass strict style, have no
+  warnings, and **never use `do`** (`do ...` is disallowed).
 - Release uses `-o:aggressive`; a comment in `x.py` notes to switch to
   `-o:speed` if that shows weird codegen behavior.
 - `CHAOTIC=true` unlocks joke features (`ifn't`, `whilen't`) that are
@@ -67,9 +66,10 @@ Requires Odin and Python (stdlib only, no pip deps).
   - `test/__tests_new__` (`--new`) — the active suite for the ongoing
     typechecker work; has a `typechecking/` subdir and no OOP tests.
     **This is the working suite. Use `--new`.**
-- To run a single `.zn` test file directly: build, then
-  `bin/test/zen path/to/file.zn` and compare to `// expect:`/`// ERR:`
-  comments by hand. No built-in single-file flag in `run_tests.py`.
+- No built-in single-file flag in `run_tests.py`, but you can point it at a
+  subfolder via `python test/run_tests.py -d <relpath>` (run from `test/`).
+  To run one file by hand: build, then `bin/test/zen path/to/file.zn` and
+  compare to `// expect:`/`// ERR:` comments yourself.
 - Test file format: `// expect: <line>` = expected stdout (line-for-line
   match); `// ERR: <text>` = exit must be non-zero and **only first stderr
   line** is checked (substring). `// DRAFT` anywhere in the file skips it.
