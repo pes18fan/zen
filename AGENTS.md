@@ -11,7 +11,7 @@ boundaries to respect.
 | Branch | Purpose |
 |---|---|
 | `main` | Stable: no type inference |
-| `typechecker` | Active: HM type inference (`TYPE_CHECK :: true` at `zen/vm.odin:1042`), classes & OOP fully removed from language |
+| `typechecker` | Active: HM type inference (`TYPE_CHECK :: true` at `zen/vm.odin:972`), classes & OOP fully removed from language |
 
 ## Build
 
@@ -31,7 +31,10 @@ Requires Odin and Python (stdlib only, no pip deps).
   into `./isocline/`; this needs a C compiler and network access to
   `github.com/daanx/isocline`, and only happens once (cached after).
 - `-vet` is always on (baked into `DEBUG_FLAGS`/`RELEASE_FLAGS` in `x.py`) —
-  there is no separate lint step/command.
+  there is no separate lint step/command. `x.py` also passes
+  `-warnings-as-errors -strict-style -vet-style -disallow-do` for **both**
+  debug and release builds, so any code you add must: pass strict style, have
+  no warnings, and **never use `do`** (`do ...` is disallowed).
 - Release uses `-o:aggressive`; a comment in `x.py` notes to switch to
   `-o:speed` if that shows weird codegen behavior.
 - `CHAOTIC=true` unlocks joke features (`ifn't`, `whilen't`) that are
@@ -99,6 +102,6 @@ Man page: `pandoc -s -t man ./etc/zen.1.md -o zen.1`
 
 - Type inference is **gated on user-defined modules**: if a program uses
   `use` with a `.USER` module, the typechecker is skipped entirely
-  (`has_user_modules` proc at `zen/semcheck.odin:350`, called at
-  `zen/vm.odin:1038-1046` — forced by the lack of a module resolution pass
-  after parsing). This is the next thing to fix.
+  (`has_user_modules` proc at `zen/semcheck.odin:342`, called at
+  `zen/vm.odin:974`; the skip happens at `vm.odin:979` — forced by the lack
+  of a module resolution pass after parsing). This is the next thing to fix.
