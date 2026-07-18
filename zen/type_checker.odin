@@ -119,7 +119,7 @@ fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	idx := tc.typevar_count
 	var := TypeVariable{idx}
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln("-- create fresh type variable %v", type_string(var, true))
 		}
 	}
@@ -262,7 +262,7 @@ resolve_type_with_module_info :: proc(
 			b := ctx.bindings[i]
 			if b.name == name && b.scope_depth <= ctx.scope_depth {
 				when ODIN_DEBUG {
-					if config.log_type {
+					if opt.log_checker {
 						fmt.eprintfln(
 							"-- grab type %v of %s from current context",
 							type_string(b.scheme, true),
@@ -298,7 +298,7 @@ bind_type :: proc(ctx: ^TypeContext, name: string, scheme: TypeScheme, is_module
 	append(&ctx.bindings, make_typed_binding(ctx, name, scheme, is_module))
 
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln("-- update current context with %s: %v", name, type_string(scheme, true))
 		}
 	}
@@ -318,7 +318,7 @@ push_function_scope :: proc(tc: ^TypeChecker) {
 
 	when ODIN_DEBUG {
 		fn_scope_counter += 1
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln("\n-- enter fn %d", fn_scope_counter)
 		}
 	}
@@ -328,7 +328,7 @@ pop_function_scope :: proc(tc: ^TypeChecker) {
 	tc.ctx = tc.ctx.enclosing
 
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln("-- exit fn %d\n", fn_scope_counter)
 		}
 		fn_scope_counter -= 1
@@ -340,7 +340,7 @@ push_scope :: proc(ctx: ^TypeContext) {
 	ctx.scope_depth += 1
 
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln("\n-- enter block %d", ctx.scope_depth)
 		}
 	}
@@ -353,7 +353,7 @@ pop_scope :: proc(ctx: ^TypeContext) {
 	ctx.scope_depth -= 1
 
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln("-- exit block %d\n", ctx.scope_depth + 1)
 		}
 	}
@@ -558,7 +558,7 @@ apply_substitution_context :: proc(subst: Substitution, ctx: ^TypeContext) {
 	}
 
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln("-- apply subst %v to current context", subst_string(subst, true))
 		}
 	}
@@ -592,7 +592,7 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 	}
 
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln(
 				"-- combine subst %v with %v to get %v",
 				subst_string(s2, true),
@@ -618,7 +618,7 @@ instantiate :: proc(tc: ^TypeChecker, scheme: TypeScheme) -> Type {
 		res := apply_substitution(subst, type.type)
 
 		when ODIN_DEBUG {
-			if config.log_type {
+			if opt.log_checker {
 				quant := type_string(type, true)
 				reduced := type_string(res, true)
 				fmt.eprintfln("-- instantiate %v to %v", quant, reduced)
@@ -653,7 +653,7 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 	res := tquant(bound[:], ty)
 
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			mono := type_string(ty, true)
 			quant := type_string(res, true)
 			fmt.eprintfln("-- generalize %v to %v", mono, quant)
@@ -688,7 +688,7 @@ try_unify :: proc(
 	// result
 	if is_type_never(checking) {
 		when ODIN_DEBUG {
-			if config.log_type {
+			if opt.log_checker {
 				fmt.eprintfln(
 					"-- unify %v with %v trivially",
 					type_string(expected, true),
@@ -788,7 +788,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		}
 
 		when ODIN_DEBUG {
-			if config.log_type {
+			if opt.log_checker {
 				fmt.eprintfln(
 					"-- unify %v with %v trivially",
 					type_string(a, true),
@@ -817,7 +817,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 	if is_type_variable(a) {
 		if types_equal(a, b) {
 			when ODIN_DEBUG {
-				if config.log_type {
+				if opt.log_checker {
 					fmt.eprintfln(
 						"-- unify %v with %v trivially",
 						type_string(a, true),
@@ -837,7 +837,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		s[as_type_variable(a)] = b
 
 		when ODIN_DEBUG {
-			if config.log_type {
+			if opt.log_checker {
 				fmt.eprintfln(
 					"-- unify %v with %v through %v",
 					type_string(a, true),
@@ -862,7 +862,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		}
 
 		when ODIN_DEBUG {
-			if config.log_type {
+			if opt.log_checker {
 				fmt.eprintfln(
 					"-- unify %v with %v trivially",
 					type_string(a, true),
@@ -899,7 +899,7 @@ unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationE
 		}
 
 		when ODIN_DEBUG {
-			if config.log_type {
+			if opt.log_checker {
 				fmt.eprintfln(
 					"-- unify %v with %v %s",
 					type_string(a, true),
@@ -950,7 +950,7 @@ infer_type :: proc(
 	res := apply_substitution(s, alpha)
 
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintfln(
 				"-- infer %v as %v via %v",
 				type_string(alpha, true),
@@ -1850,10 +1850,10 @@ typecheck_inner :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: b
 @(require_results)
 typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, success: bool) {
 	when ODIN_DEBUG {
-		if config.log_type {
+		if opt.log_checker {
 			fmt.eprintln("-- typechecker begin")
 		}
-		defer if config.log_type {
+		defer if opt.log_checker {
 			fmt.eprintln("\n-- typechecker end")
 		}
 	}

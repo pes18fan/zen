@@ -44,11 +44,14 @@ current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^UntypedV
 }
 
 UntypedContext :: struct #all_or_none {
-	enclosing:   ^UntypedContext,
-	within:      [dynamic]^UntypedContext,
-	variables:   map[string]^UntypedVariable,
-	scope_depth: int,
-	local_count: int,
+	enclosing:            ^UntypedContext,
+	within:               [dynamic]^UntypedContext,
+	variables:            map[string]^UntypedVariable,
+	total_scope_depth:    int,
+	local_count:          int,
+
+	// private
+	_current_scope_depth: int,
 }
 
 UntypedVariable :: struct #all_or_none {
@@ -213,7 +216,7 @@ assert_variable_exists_and_resolve_it :: proc(
 in_file_scope :: proc(rs: ^Resolver) -> bool {
 	return(
 		rs.resolutions.function_scope.enclosing == nil &&
-		rs.resolutions.function_scope.scope_depth == 0 \
+		rs.resolutions.function_scope._current_scope_depth == 0 \
 	)
 }
 
@@ -245,7 +248,7 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 	}
 
 	var, exists := rs.resolutions.function_scope.variables[name]
-	if exists && var.scope_depth == rs.resolutions.function_scope.scope_depth {
+	if exists && var.scope_depth == rs.resolutions.function_scope._current_scope_depth {
 		return "A variable with this name in this scope already exists."
 	}
 
@@ -261,7 +264,7 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		is_native_value  = true if type == .BUILTIN else false,
 		is_public        = false,
 		initialized      = true,
-		scope_depth      = rs.resolutions.function_scope.scope_depth,
+		scope_depth      = rs.resolutions.function_scope._current_scope_depth,
 		local_index      = rs.resolutions.function_scope.local_count,
 	}
 	rs.resolutions.function_scope.local_count += 1
@@ -312,7 +315,7 @@ declare_variable :: proc(
 			is_native_value  = false,
 			is_public        = is_public,
 			initialized      = false,
-			scope_depth      = rs.resolutions.function_scope.scope_depth,
+			scope_depth      = rs.resolutions.function_scope._current_scope_depth,
 			local_index      = 0,
 		}
 
@@ -323,7 +326,7 @@ declare_variable :: proc(
 	}
 
 	var, exists := rs.resolutions.function_scope.variables[name]
-	if exists && var.scope_depth == rs.resolutions.function_scope.scope_depth {
+	if exists && var.scope_depth == rs.resolutions.function_scope._current_scope_depth {
 		return "A variable with this name in this scope already exists."
 	}
 
@@ -339,7 +342,7 @@ declare_variable :: proc(
 		is_native_value  = false,
 		is_public        = is_public,
 		initialized      = false,
-		scope_depth      = rs.resolutions.function_scope.scope_depth,
+		scope_depth      = rs.resolutions.function_scope._current_scope_depth,
 		local_index      = rs.resolutions.function_scope.local_count,
 	}
 	rs.resolutions.function_scope.local_count += 1
@@ -620,6 +623,11 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^VariableExpr:
 		rs.current_token = e.token
 		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
+		if var.is_module {
+			resolver_error(rs, "Cannot use a module as a value.")
+			return false
+		}
+
 		resolved := new_clone(var^)
 		resolved.shadower = nil
 		rs.resolutions.resolution_map[e] = resolved
@@ -658,11 +666,12 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 push_function_scope_untyped :: proc(rs: ^Resolver) {
 	fs := new(UntypedContext)
 	fs^ = {
-		enclosing   = rs.resolutions.function_scope,
-		within      = make([dynamic]^UntypedContext),
-		scope_depth = 0,
-		local_count = 1, // starts at 1 cuz the first local is the function itself
-		variables   = make(map[string]^UntypedVariable),
+		enclosing            = rs.resolutions.function_scope,
+		within               = make([dynamic]^UntypedContext),
+		total_scope_depth    = 0,
+		local_count          = 1, // starts at 1 cuz the first local is the function itself
+		variables            = make(map[string]^UntypedVariable),
+		_current_scope_depth = 0,
 	}
 
 	if rs.resolutions.function_scope != nil {
@@ -676,15 +685,16 @@ pop_function_scope_untyped :: proc(rs: ^Resolver) {
 }
 
 push_block_scope_untyped :: proc(rs: ^Resolver) {
-	rs.resolutions.function_scope.scope_depth += 1
+	rs.resolutions.function_scope.total_scope_depth += 1
+	rs.resolutions.function_scope._current_scope_depth += 1
 }
 
 pop_block_scope_untyped :: proc(rs: ^Resolver) {
 	assert(
-		rs.resolutions.function_scope.scope_depth > 0,
+		rs.resolutions.function_scope._current_scope_depth > 0,
 		"cannot have less than zero block scopes",
 	)
-	depth := rs.resolutions.function_scope.scope_depth
+	depth := rs.resolutions.function_scope._current_scope_depth
 	to_delete: [dynamic]string
 	for name, var in rs.resolutions.function_scope.variables {
 		if var.scope_depth == depth {
@@ -694,7 +704,7 @@ pop_block_scope_untyped :: proc(rs: ^Resolver) {
 	for name in to_delete {
 		delete_key(&rs.resolutions.function_scope.variables, name)
 	}
-	rs.resolutions.function_scope.scope_depth -= 1
+	rs.resolutions.function_scope._current_scope_depth -= 1
 }
 
 add_native_fns :: #force_inline proc(m: ^map[string]^UntypedVariable) {

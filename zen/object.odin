@@ -207,7 +207,7 @@ allocate_obj :: proc(
 ) -> ^Obj where intrinsics.type_is_subtype_of(T, Obj) {
 	gc.bytes_allocated += size_of(T)
 	when ODIN_DEBUG {
-		if config.stress_gc {
+		if opt.stress_gc {
 			collect_garbage(gc)
 		}
 	}
@@ -226,7 +226,7 @@ allocate_obj :: proc(
 	gc.objects = obj
 
 	when ODIN_DEBUG {
-		if config.log_gc {
+		if opt.log_gc {
 			fmt.eprintf("%p allocate %d for type %v\n", obj, size_of(obj), type_of_obj(obj))
 		}
 	}
@@ -412,7 +412,7 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 	gc.bytes_allocated -= size_of(obj)
 
 	when ODIN_DEBUG {
-		if config.log_gc {
+		if opt.log_gc {
 			str := stringify_object(obj)
 			fmt.eprintf("%p free %s of type %v", obj, str, type_of_obj(obj))
 		}

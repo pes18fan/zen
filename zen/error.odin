@@ -86,7 +86,7 @@ print_error :: #force_inline proc(
 	fmt.eprint(color_blue(" --> "))
 
 	path: string
-	if config.repl {
+	if in_repl() {
 		path = "REPL"
 	} else if file != "" {
 		path = file
