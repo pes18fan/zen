@@ -131,9 +131,6 @@ add_imports :: proc(mr: ^ModuleResolver, expr: Expr, curr: ^Module) -> bool {
 // AST, recursively parse all module imports within it and return a topologically
 // sorted array of modules, meaning this array is guaranteed to have all
 // dependents appearing AFTER their dependencies.
-// The created modules take full ownership of the source, tokens and AST; they
-// are all freed when the module is freed. They must not be individually freed
-// after module resolution.
 // Returns the array of modules and `true` on success. Returns `nil` and `false`
 // if there was an error lexing, parsing or doing semantic analysis on an inner
 // module, or if there was a cyclic import.
