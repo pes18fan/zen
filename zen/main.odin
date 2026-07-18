@@ -13,7 +13,6 @@ VERSION :: string(#load("../.zen_version"))
 CHAOTIC :: #config(CHAOTIC, false)
 
 /* Fire up a REPL. */
-@(private = "file")
 repl :: proc(vm: ^VM) -> int {
 	vm.name = "REPL"
 	vm.path = "REPL"
@@ -92,14 +91,6 @@ run_file :: proc(
 	return interpret(vm, vm.gc, source, importer)
 }
 
-/* Print the version message in `stream`. */
-@(private = "file")
-print_version_message :: proc() {
-	fmt.print(color_green("zen "))
-	fmt.println(VERSION)
-	fmt.println("written with <3 by pes18fan")
-}
-
 run_with_opts :: proc(opt: ^Options) -> int {
 	gc := init_gc()
 	defer free_gc(&gc)
@@ -110,13 +101,6 @@ run_with_opts :: proc(opt: ^Options) -> int {
 	vm.gc = &gc
 
 	init_natives(&gc)
-
-	/* Create a ObjList for the args. Don't worry about freeing it, GC will handle it */
-	args_list := new_list(vm.gc)
-	for arg in opt.overflow {
-		write_value_array(&args_list.items, obj_val(copy_string(vm.gc, arg)))
-	}
-	vm.args = args_list
 
 	script := opt.script
 	if script == "" {
@@ -188,7 +172,7 @@ interpret_result_exit_code :: proc(result: InterpretResult) -> int {
 	}
 }
 
-
+@(cold)
 internal_compiler_error :: proc(prefix, message: string, loc := #caller_location) -> ! {
 	fmt.eprintln(color_red("Internal compiler error!"))
 	fmt.eprint(prefix)
@@ -262,7 +246,9 @@ main :: proc() {
 	}
 
 	if opt.version {
-		print_version_message()
+		fmt.print(color_green("zen "))
+		fmt.println(VERSION)
+		fmt.println("written with <3 by pes18fan")
 		return
 	}
 

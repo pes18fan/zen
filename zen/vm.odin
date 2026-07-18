@@ -36,7 +36,7 @@ CallFrame :: struct {
 }
 
 /* The virtual machine that interprets the bytecode. */
-VM :: struct {
+VM :: struct #all_or_none {
 	/* The path of the running program. Used to distinguish programs since they
      * can import each other as modules, and so it is necessary to disallow
      * cyclic imports. Value is the file path for a file and "REPL" for a REPL
@@ -175,8 +175,12 @@ init_VM :: proc() -> VM {
 		compiler_globals = init_table(),
 		stack_top        = -1,
 		frame_count      = 0,
+		args             = nil,
 		it               = nil_val(),
 		save             = nil_val(),
+		gc               = nil,
+		frames           = [FRAMES_MAX]CallFrame{},
+		stack            = [STACK_MAX]Value{},
 	}
 
 	return vm

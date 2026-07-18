@@ -337,7 +337,7 @@ allocate_string :: proc(gc: ^GC, str: string, hash: u32) -> ^ObjString {
 	return zstring
 }
 
-hash_string :: proc(str: string) -> u32 {
+hash_string :: #force_inline proc(str: string) -> u32 {
 	hash: u32 = 2166136261
 	for c in str {
 		hash ~= u32(c)
