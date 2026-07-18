@@ -32,7 +32,7 @@ Resolver :: struct #all_or_none {
 	current_token:  Token,
 }
 
-Resolutions :: struct {
+Resolutions :: struct #all_or_none {
 	file_scopes:    map[string]map[string]^UntypedVariable, // global scopes for each file
 	function_scope: ^UntypedContext, // chain of local scopes of a file
 	builtin_scope:  map[string]^UntypedVariable, // topmost scope; common to all files
