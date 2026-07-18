@@ -5,13 +5,16 @@ import "core:sync"
 @(private = "file")
 Global :: struct {
 	/* Value that a program exits with. Defaults to zero. */
-	exit_code:    uint,
+	exit_code:    int,
 
 	/* Path to the file invoked by the interpreter. */
 	root_path:    string,
 
 	/* Directory the invoked file is in. */
 	root_dirname: string,
+
+	/* Is the REPL being run? */
+	repl:         bool,
 	mutex:        sync.Mutex,
 }
 
@@ -42,7 +45,7 @@ zen_update_path :: proc(new: string) {
 	g.root_path = new
 }
 
-zen_update_exit_code :: proc(new: uint) {
+zen_update_exit_code :: proc(new: int) {
 	sync.lock(&g.mutex)
 	defer sync.unlock(&g.mutex)
 
@@ -63,7 +66,7 @@ zen_get_path :: proc() -> string {
 	return g.root_path
 }
 
-zen_get_exit_code :: proc() -> uint {
+zen_get_exit_code :: proc() -> int {
 	sync.lock(&g.mutex)
 	defer sync.unlock(&g.mutex)
 

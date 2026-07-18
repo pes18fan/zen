@@ -1,5 +1,6 @@
 package zen
 
+import "core:flags"
 import "core:fmt"
 import "core:mem"
 import "core:os"
@@ -11,51 +12,9 @@ VERSION :: string(#load("../.zen_version"))
 /* Chaotic mode is obviously false by default */
 CHAOTIC :: #config(CHAOTIC, false)
 
-when ODIN_DEBUG {
-	/* Config values set on start, most are for debugging, but some have use in
-    the actual program. */
-	Config :: struct {
-		compile_only:     bool,
-		dump_disassembly: bool,
-		dump_tokens:      bool,
-		dump_ast:         bool,
-		trace_exec:       bool,
-		stress_gc:        bool,
-		log_type:         bool,
-		log_gc:           bool,
-		record_time:      bool,
-		repl:             bool,
-	}
-} else {
-	Config :: struct {
-		record_time: bool,
-		repl:        bool,
-	}
-}
-
-when ODIN_DEBUG {
-	config := Config {
-		compile_only     = false,
-		dump_tokens      = false,
-		dump_ast         = false,
-		dump_disassembly = false,
-		trace_exec       = false,
-		stress_gc        = false,
-		log_type         = false,
-		log_gc           = false,
-		record_time      = false,
-		repl             = false,
-	}
-} else {
-	config := Config {
-		record_time = false,
-		repl        = false,
-	}
-}
-
 /* Fire up a REPL. */
 @(private = "file")
-repl :: proc(vm: ^VM) -> uint {
+repl :: proc(vm: ^VM) -> int {
 	vm.name = "REPL"
 	vm.path = "REPL"
 
@@ -133,208 +92,33 @@ run_file :: proc(
 	return interpret(vm, vm.gc, source, importer)
 }
 
-/* Print a help string in `stream`. */
-@(private = "file")
-print_help :: proc(stream: ^os.File) {
-	usage :: `zen <options> <path>`
-	when ODIN_DEBUG {
-		options :: `
-    -h, -?, --help      Print this help message and exit
-    -v, --version       Print version information and exit
-
-    -t, --time          Record time taken to compile and run
-    -C, --compile       Compile only, useful with -D
-    --dump-tokens       Dump tokens from lexer and exit
-    --dump-ast          Dump the abstract syntax tree from the parser and exit
-    -D, --dump          Dump disassembled bytecode
-    -T, --trace         Trace script execution
-    -L, --log-gc        Log garbage collection
-    -S, --stress-gc     Collect garbage on every allocation
-    --log-type          Log type inference`
-	} else {
-		options :: `
-    -h, -?, --help      Print this help message and exit
-    -v, --version       Print version information and exit
-
-    -t, --time          Record time taken to compile and run`
-	}
-
-	fmt.fprint(stream, color_green("zen "))
-	fmt.fprintfln(stream, "%s", VERSION)
-	fmt.fprintln(stream, "Interpreter for the zen programming language.")
-	fmt.fprintln(stream)
-
-	fmt.fprint(stream, color_green("Usage:"))
-	fmt.fprintln(stream)
-	fmt.fprintln(stream, "    ", usage)
-	fmt.fprintln(stream)
-
-	fmt.fprint(stream, color_green("Options:"))
-	fmt.fprintln(stream, options)
-}
-
 /* Print the version message in `stream`. */
 @(private = "file")
-print_version_message :: proc(stream: ^os.File) {
-	fmt.fprint(stream, color_green("zen "))
-	fmt.fprintln(stream, VERSION)
-	fmt.fprintln(stream, "written with <3 by pes18fan")
+print_version_message :: proc() {
+	fmt.print(color_green("zen "))
+	fmt.println(VERSION)
+	fmt.println("written with <3 by pes18fan")
 }
 
-@(private = "file")
-set_debug_flag :: proc(flag: string) -> bool {
-	when ODIN_DEBUG {
-		switch flag {
-		case "--compile":
-			config.compile_only = true
-		case "--dump":
-			config.dump_disassembly = true
-		case "--dump-tokens":
-			config.dump_tokens = true
-		case "--dump-ast":
-			config.dump_ast = true
-		case "--trace":
-			config.trace_exec = true
-		case "--time":
-			config.record_time = true
-		case "--log-type":
-			config.log_type = true
-		case "--log-gc":
-			config.log_gc = true
-		case "--stress-gc":
-			config.stress_gc = true
-		case:
-			fmt.eprintf("Unknown option: %s\n", flag)
-			print_help(os.stderr)
-			return false
-		}
+run_with_opts :: proc(opt: ^Options) -> int {
+	gc := init_gc()
+	defer free_gc(&gc)
+	vm := init_VM()
+	defer free_VM(&vm)
 
-		return true
-	} else {
-		fmt.eprintf("Unknown option: %s\n", flag)
-		print_help(os.stderr)
-		return false
-	}
-}
+	gc.mark_roots_arg = &vm
+	vm.gc = &gc
 
-@(private = "file")
-set_debug_flag_short :: proc(flag: rune) -> bool {
-	when ODIN_DEBUG {
-		switch flag {
-		case 'C':
-			config.compile_only = true
-		case 'D':
-			config.dump_disassembly = true
-		case 'T':
-			config.trace_exec = true
-		case 'L':
-			config.log_gc = true
-		case 'S':
-			config.stress_gc = true
-		case:
-			fmt.eprintf("Unknown option: %c\n", flag)
-			print_help(os.stderr)
-			return false
-		}
-
-		return true
-	} else {
-		fmt.eprintf("Unknown option: %c\n", flag)
-		print_help(os.stderr)
-		return false
-	}
-}
-
-/* Parse the arguments passed to the program. */
-@(private = "file")
-parse_argv :: proc(vm: ^VM) -> (status: uint) {
-	argc := len(os.args)
-	argv := os.args
-	script := ""
-	args_passed := false
-
-	outer: for len(argv) > 1 {
-		switch argv[1] {
-		case "--":
-			{
-				argv = argv[2:] /* Skip both the current arg and the "--" */
-				argc -= 1
-				args_passed = true
-				break outer
-			}
-		case "--version":
-			{
-				print_version_message(os.stdout)
-				return 0
-			}
-		case "--help":
-			{
-				print_help(os.stdout)
-				return 0
-			}
-		case "--compile",
-		     "--dump",
-		     "--dump-tokens",
-		     "--dump-ast",
-		     "--trace",
-		     "--stress-gc",
-		     "--log-gc",
-		     "--log-type":
-			ok := set_debug_flag(argv[1])
-			if !ok {return 1}
-		case "--time":
-			config.record_time = true
-		case:
-			{
-				if argv[1][0] == '-' {
-					if len(argv[1]) == 1 {
-						script = argv[1]
-						break outer
-					}
-					arg := argv[1][1:]
-					for c in arg {
-						switch c {
-						case 'v':
-							print_version_message(os.stdout)
-							return 0
-						case '?', 'h':
-							print_help(os.stdout)
-							return 0
-						case 'C', 'D', 'T', 'L', 'S':
-							ok := set_debug_flag_short(c)
-							if !ok {return 1}
-						case 't':
-							config.record_time = true
-						case:
-							fmt.eprintf("Unknown option: %c\n", c)
-							print_help(os.stderr)
-							return 1
-						}
-					}
-				} else if argv[1][:2] == "--" {
-					fmt.eprintf("Unknown option: %s\n", argv[1])
-					print_help(os.stderr)
-					return 1
-				} else {
-					script = argv[1]
-					argv = argv[1:]
-					continue outer
-				}
-			}
-		}
-		argv = argv[1:]
-		argc -= 1
-	}
+	init_natives(&gc)
 
 	/* Create a ObjList for the args. Don't worry about freeing it, GC will handle it */
 	args_list := new_list(vm.gc)
-	for i in 0 ..< len(argv) {
-		if args_passed {
-			write_value_array(&args_list.items, obj_val(copy_string(vm.gc, argv[i])))
-		}
+	for arg in opt.overflow {
+		write_value_array(&args_list.items, obj_val(copy_string(vm.gc, arg)))
 	}
 	vm.args = args_list
 
+	script := opt.script
 	if script == "" {
 		info, stat_err := os.fstat(os.stdin, context.allocator)
 		if stat_err != nil {
@@ -355,13 +139,12 @@ parse_argv :: proc(vm: ^VM) -> (status: uint) {
 			zen_update_path("Piped input")
 			vm.name = "Piped input"
 			vm.path = "Piped input"
-			res := interpret(vm, vm.gc, string(buf[:n]))
+			res := interpret(&vm, vm.gc, string(buf[:n]))
 			return interpret_result_exit_code(res)
 		} else {
 			// TODO: repl currently has no persistence, figure out a way to make
 			// that possible
-			config.repl = true
-			return repl(vm)
+			return repl(&vm)
 		}
 	} else {
 		current_dir, wkdir_err := os.get_working_directory(context.temp_allocator)
@@ -379,12 +162,12 @@ parse_argv :: proc(vm: ^VM) -> (status: uint) {
 		dirname, _ := filepath.split(path)
 		zen_update_dirname(dirname)
 
-		result := run_file(vm, script)
+		result := run_file(&vm, script)
 		return interpret_result_exit_code(result)
 	}
 }
 
-interpret_result_exit_code :: proc(result: InterpretResult) -> uint {
+interpret_result_exit_code :: proc(result: InterpretResult) -> int {
 	switch result {
 	case .INTERPRET_LEX_ERROR:
 		return 65
@@ -405,6 +188,7 @@ interpret_result_exit_code :: proc(result: InterpretResult) -> uint {
 	}
 }
 
+
 internal_compiler_error :: proc(prefix, message: string, loc := #caller_location) -> ! {
 	fmt.eprintln(color_red("Internal compiler error!"))
 	fmt.eprint(prefix)
@@ -419,11 +203,29 @@ internal_compiler_error :: proc(prefix, message: string, loc := #caller_location
 	os.exit(1)
 }
 
-/* The entry point for the compiler. */
-main :: proc() {
-	status: int
-	defer os.exit(status)
+opt: Options
 
+/* Template for command-line args. */
+Options :: struct {
+	script:      string `args:"pos=0" usage:"Input script, omit to use REPL instead."`,
+	compile:     bool `usage:"Compile only, useful with -dump"`,
+	dump:        bool `usage:"Dump disasembled bytecode"`,
+	dump_tokens: bool `usage:"Dump tokens from lexer and exit"`,
+	dump_ast:    bool `usage:"Dump the abstract syntax tree from the parser and exit"`,
+	trace:       bool `usage:"Trace script execution"`,
+	stress_gc:   bool `usage:"Run the garbage collector on every allocation"`,
+	log_gc:      bool `usage:"Log garbage collection"`,
+	log_checker: bool `usage:"Log the type checker"`,
+	time:        bool `usage:"Record time taken to run various stages of the compiler"`,
+	version:     bool `usage:"Print version information and exit."`,
+	overflow:    [dynamic]string `usage:"Arguments to the program"`,
+}
+
+in_repl :: proc() -> bool {
+	return opt.script == ""
+}
+
+main :: proc() {
 	// need to add this otherwise -vet would complain on release builds
 	_ = mem.Allocator
 
@@ -454,15 +256,16 @@ main :: proc() {
 	// free all temp allocator (arena) allocations (like in tprintf)
 	defer free_all(context.temp_allocator)
 
-	gc := init_gc()
-	defer free_gc(&gc)
-	vm := init_VM()
-	defer free_VM(&vm)
+	flags.parse_or_exit(&opt, os.args, .Unix)
+	defer {
+		delete(opt.overflow)
+	}
 
-	gc.mark_roots_arg = &vm
-	vm.gc = &gc
+	if opt.version {
+		print_version_message()
+		return
+	}
 
-	init_natives(&gc)
-
-	status = int(parse_argv(&vm))
+	status := run_with_opts(&opt)
+	if status != 0 {os.exit(status)}
 }

@@ -256,7 +256,7 @@ function is an initializer make it return its receiver.
 */
 @(private = "file")
 emit_return :: proc(cg: ^Codegen) {
-	if config.repl && cg.current_compiler.type == .SCRIPT {
+	if in_repl() && cg.current_compiler.type == .SCRIPT {
 		emit_opcode(cg, .OP_PRINT_REPL)
 	}
 
@@ -1479,7 +1479,7 @@ end_compiler :: proc(cg: ^Codegen) -> ^ObjFunction {
 	}
 
 	when ODIN_DEBUG {
-		if config.dump_disassembly {
+		if opt.dump {
 			if !cg.had_error {
 				disassemble(current_chunk(cg), fn.name != nil ? fn.name.chars : "<script>")
 			}

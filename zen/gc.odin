@@ -118,7 +118,7 @@ mark_object :: proc(gc: ^GC, object: ^Obj) {
 	if object.is_marked {return}
 
 	when ODIN_DEBUG {
-		if config.log_gc {
+		if opt.log_gc {
 			fmt.eprintf("%p mark ", object)
 			print_value(os.stderr, obj_val(object))
 			fmt.eprintf(" of type %s\n", type_of_obj(object))
@@ -239,7 +239,7 @@ fix_weak :: proc(gc: ^GC) {
 /* Blacken a `Obj`, indicating that it is reachable. */
 blacken_object :: proc(gc: ^GC, object: ^Obj) {
 	when ODIN_DEBUG {
-		if config.log_gc {
+		if opt.log_gc {
 			fmt.eprintf("%p blacken ", object)
 			print_value(os.stderr, obj_val(object))
 			fmt.eprintf(" of type %s\n", type_of_obj(object))
@@ -344,7 +344,7 @@ sweep :: proc(gc: ^GC) {
 /* Run a GC cycle. */
 collect_garbage :: proc(gc: ^GC) {
 	when ODIN_DEBUG {
-		if config.log_gc {
+		if opt.log_gc {
 			fmt.eprintln("-- gc begin")
 		}
 
@@ -363,7 +363,7 @@ collect_garbage :: proc(gc: ^GC) {
 	gc.next_gc = gc.bytes_allocated * GC_HEAP_GROW_FACTOR
 
 	when ODIN_DEBUG {
-		if config.log_gc {
+		if opt.log_gc {
 			fmt.eprintln("-- gc end")
 			fmt.eprintf(
 				"-- collected %d bytes (from %d to %d), next collection at %d\n",

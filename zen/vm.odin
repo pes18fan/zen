@@ -306,7 +306,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 	for {
 		when ODIN_DEBUG {
-			if config.trace_exec {
+			if opt.trace {
 				print_stack(vm)
 				offset := mem.ptr_sub(frame.ip, &frame.closure.function.chunk.code[0])
 				disassemble_instruction(&frame.closure.function.chunk, offset)
@@ -839,7 +839,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				// clear the stack
 				reset_stack(vm)
 
-				zen_update_exit_code(uint(code))
+				zen_update_exit_code(int(code))
 				return .INTERPRET_VOLUNTARY_EXIT
 			}
 		}
@@ -866,7 +866,7 @@ interpret :: proc(
 
 	/* Start the stopwatch. */
 	sw: time.Stopwatch
-	if config.record_time {
+	if opt.time {
 		time.stopwatch_start(&sw)
 	}
 
@@ -887,7 +887,7 @@ interpret :: proc(
 	}
 
 	/* Time the lexer. */
-	if config.record_time {
+	if opt.time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Lexer: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
@@ -895,7 +895,7 @@ interpret :: proc(
 	}
 
 	when ODIN_DEBUG {
-		if config.dump_tokens {
+		if opt.dump_tokens {
 			fmt.println("TOKENS:")
 			for token in tokens {
 				fmt.printf("    %v", token.type)
@@ -915,7 +915,7 @@ interpret :: proc(
 	}
 
 	/* Time the parser. */
-	if config.record_time {
+	if opt.time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Parser: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
@@ -923,7 +923,7 @@ interpret :: proc(
 	}
 
 	when ODIN_DEBUG {
-		if config.dump_ast {
+		if opt.dump_ast {
 			str := ast_string(expr)
 			fmt.println(str)
 
@@ -937,7 +937,7 @@ interpret :: proc(
 	}
 
 	/* Time semantic analysis. */
-	if config.record_time {
+	if opt.time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Semantic analyzer: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
@@ -950,7 +950,7 @@ interpret :: proc(
 	}
 
 	/* Time module resolution. */
-	if config.record_time {
+	if opt.time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Module resolver: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
@@ -963,7 +963,7 @@ interpret :: proc(
 	}
 
 	/* Time the resolver. */
-	if config.record_time {
+	if opt.time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Resolver: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
@@ -984,7 +984,7 @@ interpret :: proc(
 			}
 
 			/* Time the typechecker. */
-			if config.record_time {
+			if opt.time {
 				time.stopwatch_stop(&sw)
 				fmt.eprintf("Typechecker: %v\n", time.stopwatch_duration(sw))
 				time.stopwatch_reset(&sw)
@@ -1007,7 +1007,7 @@ interpret :: proc(
 	}
 
 	/* Time the compiler. */
-	if config.record_time {
+	if opt.time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("Compiler: %v\n", time.stopwatch_duration(sw))
 		time.stopwatch_reset(&sw)
@@ -1020,14 +1020,14 @@ interpret :: proc(
 	}
 
 	/* Time the VM. */
-	defer if config.record_time {
+	defer if opt.time {
 		time.stopwatch_stop(&sw)
 		fmt.eprintf("\nVM: %v\n", time.stopwatch_duration(sw))
 	}
 
 	/* If the user only wants to compile the script, then we can stop here. */
 	when ODIN_DEBUG {
-		if config.compile_only {
+		if opt.compile {
 			return .INTERPRET_OK
 		}
 	}

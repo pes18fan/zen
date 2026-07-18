@@ -489,6 +489,13 @@ parse_use_expr :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	}
 	relative_path_str := parser_advance(p).lexeme
 	relative_path := strings.trim(relative_path_str[1:len(relative_path_str) - 1], " ")
+
+	if relative_path == "__main__" {
+		free(expr)
+		parser_error(p, parser_previous(p), "Imported file cannot have reserved name '__main__'.")
+		return nil
+	}
+
 	abs_path, join_err := filepath.join(
 		[]string{zen_get_dirname(), relative_path},
 		context.allocator,
