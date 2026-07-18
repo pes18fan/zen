@@ -78,17 +78,16 @@ repl :: proc(vm: ^VM) -> uint {
 			fmt.println("\n")
 			break
 		}
+		defer ic.ic_free(rawptr(raw))
 
 		line_str := string(raw)
 		if len(line_str) == 0 {
-			ic.ic_free(rawptr(raw))
 			continue
 		}
 
 		ic.ic_history_add(raw)
 
 		interpret(vm, vm.gc, line_str, importer = nil)
-		ic.ic_free(rawptr(raw))
 	}
 
 	return 0
@@ -359,8 +358,8 @@ parse_argv :: proc(vm: ^VM) -> (status: uint) {
 			res := interpret(vm, vm.gc, string(buf[:n]))
 			return interpret_result_exit_code(res)
 		} else {
-			// NOTE: REPL should start here; this is temporary till I figure
-			// out the best way to do the REPL
+			// TODO: repl currently has no persistence, figure out a way to make
+			// that possible
 			config.repl = true
 			return repl(vm)
 		}
