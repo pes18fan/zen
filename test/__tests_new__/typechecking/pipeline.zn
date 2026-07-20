@@ -1,5 +1,5 @@
 use "string";
 
 echo "hello"
-    |> string.upcase()
+    |> string\upcase()
     |> it .. ", world" // expect: "HELLO, world"

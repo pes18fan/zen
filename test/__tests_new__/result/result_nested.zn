@@ -3,7 +3,7 @@
 // is another Result.
 use "result";
 
-val unwrap = result.unwrap;
+val unwrap = result\unwrap;
 
 val nested = ok(ok(5));
 puts(unwrap(unwrap(nested))); // expect: 5

@@ -7,6 +7,6 @@ func wrap(x) {
     ok(x)
 };
 
-puts(result.unwrap(wrap(1)))   ; // expect: 1
-puts(result.unwrap(wrap("hi"))); // expect: hi
-puts(result.unwrap(wrap(0.25))); // expect: 0.250
+puts(result\unwrap(wrap(1)))   ; // expect: 1
+puts(result\unwrap(wrap("hi"))); // expect: hi
+puts(result\unwrap(wrap(0.25))); // expect: 0.250

@@ -1,7 +1,7 @@
 use "result";
 
 func fallback_wrap(x) {
-    result.unwrap_or(err("nope"), x)
+    result\unwrap_or(err("nope"), x)
 };
 
 puts(fallback_wrap(1)); // expect: 1

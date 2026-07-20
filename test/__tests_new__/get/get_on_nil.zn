@@ -1,1 +1,1 @@
-nil.foo // ERR: Expected dot-accessed value to be a module, got Nil.
+nil\foo // ERR: `\` operator can only be used on a module.

@@ -13,4 +13,4 @@ func make_validator(min) {
 
 val at_least_5 = make_validator(5);
 
-puts(result.unwrap(at_least_5(10))); // expect: 10
+puts(result\unwrap(at_least_5(10))); // expect: 10

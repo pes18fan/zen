@@ -1,6 +1,6 @@
 use "string";
 
 echo "hello"
-    |> string.upcase()
+    |> string\upcase()
     |> it .. ", " .. it .. "!"
     |> it .. "!!" // expect: "HELLO, HELLO!!!"
