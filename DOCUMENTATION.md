@@ -99,6 +99,20 @@ It is important to not consider a semicolon as a "terminator" but rather as a
 "chaining operator" for expressions; two expressions separated by a semicolon
 is itself one expression known as a **sequence**. 
 
+For example, this piece of code
+
+```zen
+var x = 1;
+puts(x)
+```
+
+Does not parse as two separate disjoint expressions, but rather as something
+like this:
+
+```
+Sequence(VarDecl(x, 1), Call(puts, x))
+```
+
 A sequence can either end with an expression or a semicolon. As a sequence itself 
 is an expression, it evaluates to some value, which is either whatever expression
 is at its end, or to `nil` if it ends with a semicolon.
@@ -479,14 +493,15 @@ use "time";
 puts(time\clock())
 ```
 
-Further information on what builtin modules are present is provided below.
+Further information on what builtin modules are present is provided later in
+the file.
 
 ### User-defined modules
 
-User-defined modules basically mean a file of code that can be imported with
-`use`. It will run the file and package all of its functions prefixed
-with the `pub` keyword within the imported file's name (e.g. the module will
-be called `foo` if the imported file is `foo.zn`.)
+A user-defined module is a file of code that can be imported with `use`. It
+will run the file and package all of its functions prefixed with the `pub`
+keyword within the imported file's name (e.g. the module will be called `foo`
+if the imported file is `foo.zn`.)
 
 ```zen
 // a.zn
@@ -504,7 +519,10 @@ pub func foo() {
 
 Running `a.zn` will print out "bar".
 
-Functions without the `pub` keyword will NOT be imported when a file is `use`d.
+Functions without the `pub` keyword will not be imported when a file is `use`d,
+and cannot be accessed outside that file.
+
+For now, only functions can be marked as `pub`.
 
 ## Operators
 
@@ -535,8 +553,9 @@ precedence level, the more precedence the operator has.
 ## Type system
 
 zen is statically typed. It uses Hindley-Milner type inference, allowing it
-to automatically infer types of expressions. However, type annotations may
-still be provided where desired for readability or to constrain inference.
+to automatically infer types of expressions, with no need for annotations. However,
+type annotations may still be provided where desired for readability or to 
+constrain inference.
 
 ### Primitive types
 
@@ -627,10 +646,10 @@ is a type error. This prevents you from doing something like `var a: Never = 1`.
 
 The opposite however is allowed; doing something like `var a: Number = panic("message")`
 is perfectly valid because the program panics before `a` can ever be assigned.
-The branching expressions `if` and `switch` expressions are even more permissive
-with `Never`, while normally all branches of such an expression need to be
-the same type, an exception is present for `Never` which allows it to be used
-in any branch no matter what type the other branches have.
+The branching expressions `if` and `switch` are even more permissive with 
+`Never`, while normally all branches of such an expression need to be the same
+type, an exception is present for `Never` which allows it to be used in any
+branch no matter what type the other branches have.
 
 #### `Any`
 
@@ -657,7 +676,7 @@ var k = ok(1);
 var e = err("some error")
 ```
 
-The `result` builtin module has a couple of functions for working with results.
+The `result` builtin module includes functions for working with results.
 
 You can check if a result is an `ok` variant or an `err` variant using the
 `result.ok?` and `result.err?` predicates.
@@ -788,6 +807,8 @@ for you to use.
 - `index(s, k)`: Get the `k`th character (UTF-8 codepoint) of the string `s`.
 - `chars(s)`: Turn the string `s` into a list consisting of strings, each
     being one character (UTF-8 codepoint) of the string.
+- `split_lines(s)`: Split the string `s` into multiple strings delimited by
+    the newline, and return a list with these strings.
 - `upcase(s)`: Turn the characters of a string `s` into uppercase.
 - `downcase(s)`: Turn the characters of a string `s` into lowercase.
 - `reverse(s)`: Reverse a string `s`.
@@ -821,7 +842,8 @@ for you to use.
 ### Classes
 
 zen had a basic OOP system inherited from clox, with classes and inheritance.
-This however was removed as the language became more functional-styled.
+This however was removed as the language after the introduction of the type 
+checker.
 
 ## The chaotic stuff
 
