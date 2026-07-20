@@ -57,10 +57,7 @@ UntypedContext :: struct #all_or_none {
 Symbol :: struct #all_or_none {
 	shadower:         ^Symbol,
 	name:             string,
-	kind:             enum {
-		LOCAL,
-		GLOBAL,
-	},
+	kind:             SymbolKind,
 	is_final:         bool,
 	is_loop_variable: bool, // not used here but important for codegen
 	is_captured:      bool,
@@ -70,6 +67,12 @@ Symbol :: struct #all_or_none {
 	initialized:      bool,
 	scope_depth:      int,
 	local_index:      int,
+	type_scheme:      TypeScheme,
+}
+
+SymbolKind :: enum {
+	LOCAL,
+	GLOBAL,
 }
 
 ResolvingNode :: union #no_nil {
