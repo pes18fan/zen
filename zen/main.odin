@@ -210,9 +210,11 @@ in_repl :: proc() -> bool {
 }
 
 main :: proc() {
+
 	// need to add this otherwise -vet would complain on release builds
 	_ = mem.Allocator
 
+	// Setup custom panic
 	context.assertion_failure_proc = internal_compiler_error
 
 	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
@@ -237,13 +239,8 @@ main :: proc() {
 		}
 	}
 
-	// free all temp allocator (arena) allocations (like in tprintf)
-	defer free_all(context.temp_allocator)
-
 	flags.parse_or_exit(&opt, os.args, .Unix)
-	defer {
-		delete(opt.overflow)
-	}
+	defer delete(opt.overflow)
 
 	if opt.version {
 		fmt.print(color_green("zen "))
@@ -251,6 +248,9 @@ main :: proc() {
 		fmt.println("written with <3 by pes18fan")
 		return
 	}
+
+	// free all temp allocator (arena) allocations (like in tprintf)
+	defer free_all(context.temp_allocator)
 
 	status := run_with_opts(&opt)
 	if status != 0 {os.exit(status)}
