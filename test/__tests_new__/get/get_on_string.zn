@@ -1,1 +1,1 @@
-"str".foo // ERR: Expected dot-accessed value to be a module, got String.
+"str"\foo // ERR: `\` operator can only be used on a module.

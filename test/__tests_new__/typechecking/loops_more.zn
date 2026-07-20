@@ -7,7 +7,7 @@ for var i = 0; i < 5; i = i + 1 {
 puts(sum); // expect: 10
 
 var count = 0;
-for ch in string.chars("abc") {
+for ch in string\chars("abc") {
     count = count + 1
 };
 puts(count); // expect: 3

@@ -1,4 +1,4 @@
 use "result";
 
 val x = 123;
-result.ok?(x) // ERR: Expected argument to be of type Result[a, b], got Number.
+result\ok?(x) // ERR: Expected argument to be of type Result[a, b], got Number.
