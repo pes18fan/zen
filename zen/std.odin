@@ -60,6 +60,7 @@ STD_MODULE_FUNCTIONS: [BuiltinModule][]BuiltinFunction = {
 		{"slice", slice_native, 3},
 		{"index", index_native, 2},
 		{"chars", chars_native, 1},
+		{"split_lines", split_lines_native, 1},
 		{"upcase", upcase_native, 1},
 		{"downcase", downcase_native, 1},
 		{"reverse", reverse_native, 1},
@@ -228,6 +229,8 @@ get_module_function_signature :: proc(
 		case "index":
 			return tapp(.FUNCTION, {string_t, number_t, string_t}), nil
 		case "chars":
+			return tapp(.FUNCTION, {string_t, tapp(.LIST, {string_t})}), nil
+		case "split_lines":
 			return tapp(.FUNCTION, {string_t, tapp(.LIST, {string_t})}), nil
 		case "upcase":
 			return tapp(.FUNCTION, {string_t, string_t}), nil
@@ -828,13 +831,39 @@ chars_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	list := new_list(vm.gc)
-
+	vm_push(vm, obj_val(list))
 	for r in as_string(args[0]).chars {
 		res := utf8.runes_to_string([]rune{r})
 		str := take_string(vm.gc, res)
 		vm_push(vm, obj_val(str))
 		write_value_array(&list.items, vm_pop(vm))
 	}
+	vm_pop(vm)
+	return obj_val(list), true
+}
+
+// Split a multiline string into a list containing each line.
+split_lines_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+	if !is_string(args[0]) {
+		vm_panic(
+			vm,
+			"Argument to split_lines() must be a string, got %v instead.",
+			type_of_value(args[0]),
+		)
+		return nil_val(), false
+	}
+
+	s := as_string(args[0]).chars
+	split := strings.split_lines(s)
+	defer delete(split)
+
+	list := new_list(vm.gc)
+	vm_push(vm, obj_val(list))
+	for line in split {
+		vm_push(vm, obj_val(copy_string(vm.gc, line)))
+		write_value_array(&list.items, vm_pop(vm))
+	}
+	vm_pop(vm)
 	return obj_val(list), true
 }
 

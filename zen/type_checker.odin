@@ -925,7 +925,7 @@ is_value :: proc(expr: Expr) -> bool {
 	if expr == nil {return false}
 
 	#partial switch e in expr {
-	case ^LiteralExpr, ^FunctionExpr, ^VariableExpr, ^GetExpr:
+	case ^LiteralExpr, ^FunctionExpr, ^VariableExpr, ^ModuleAccessExpr:
 		return true
 	case ^ListExpr:
 		// technically a value but due to its mutability, it is kept as a non-value
@@ -1105,7 +1105,7 @@ check_type :: proc(
 			if fn_name, ok := e.bound_to.?; ok {
 				callee_name = fmt.tprintf("function '%s'", fn_name.lexeme)
 			}
-		case ^GetExpr:
+		case ^ModuleAccessExpr:
 			callee_name = fmt.tprintf("'%s'", e.property.lexeme)
 		}
 		s_callee := check_type(tc, callee, func_type, callee_name) or_return
@@ -1218,7 +1218,7 @@ check_type :: proc(
 
 		add_to_typemap_after_substitution(tc, expr, s, type)
 		return s, nil
-	case ^GetExpr:
+	case ^ModuleAccessExpr:
 		tc.current_token = e.property
 		receiver := e.receiver
 		property := e.property
@@ -1230,7 +1230,7 @@ check_type :: proc(
 			if !is_module {
 				_, t := infer_type(tc, receiver) or_return
 				return nil, fmt.tprintf(
-					"Expected dot-accessed value to be a module, got %v.",
+					"Expected value to be a module, got %v.",
 					type_string(t, false),
 				)
 			}
@@ -1249,7 +1249,7 @@ check_type :: proc(
 			// error message some extra context
 			_, t := infer_type(tc, receiver) or_return
 			return nil, fmt.tprintf(
-				"Expected dot-accessed value to be a module, got %v.",
+				"Expected value to be a module, got %v.",
 				type_string(t, false),
 			)
 		}

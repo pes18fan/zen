@@ -1265,27 +1265,14 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 
 		arg_count := len(arguments)
 
-		if get_expr, ok := e.callee.(^GetExpr); ok {
-			// This branch compiles a method invocation.
-			compile_expression(cg, get_expr.receiver) or_return
-			name := try2(cg, identifier_constant(cg, get_expr.property)) or_return
+		// Compile the callee.
+		compile_expression(cg, callee) or_return
 
-			for arg in e.arguments {
-				compile_expression(cg, arg) or_return
-			}
-
-			emit_op_with_constant(cg, .OP_INVOKE, .OP_INVOKE_LONG, name)
-			emit_byte(cg, u8(arg_count))
-		} else {
-			// Compile the callee.
-			compile_expression(cg, callee) or_return
-
-			for arg in arguments {
-				compile_expression(cg, arg) or_return
-			}
-
-			emit_instruction(cg, .OP_CALL, u8(arg_count))
+		for arg in arguments {
+			compile_expression(cg, arg) or_return
 		}
+
+		emit_instruction(cg, .OP_CALL, u8(arg_count))
 	case ^ContinueExpr:
 		cg.current_token = e.token
 		compile_continue_expression(cg, e) or_return
@@ -1298,7 +1285,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ForInExpr:
 		cg.current_token = e.token
 		compile_for_in_expression(cg, e) or_return
-	case ^GetExpr:
+	case ^ModuleAccessExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
 		property := e.property
@@ -1306,7 +1293,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_expression(cg, receiver) or_return
 
 		property_name := try2(cg, identifier_constant(cg, property)) or_return
-		emit_op_with_constant(cg, .OP_GET_PROPERTY, .OP_GET_PROPERTY_LONG, property_name)
+		emit_op_with_constant(cg, .OP_MODULE_ACCESS, .OP_MODULE_ACCESS_LONG, property_name)
 	case ^GroupingExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expression) or_return

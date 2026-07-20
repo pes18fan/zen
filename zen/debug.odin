@@ -70,32 +70,6 @@ user_module_instruction :: proc($name: string, c: ^Chunk, offset: int, long: boo
 	}
 }
 
-/* Print debug info for the OP_INVOKE opcode. */
-@(private = "file")
-invoke_instruction :: proc($name: string, c: ^Chunk, offset: int, long: bool) -> int {
-	constant: int
-	arg_count: byte
-	if long {
-		constant = int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
-		arg_count = c.code[offset + 3]
-	} else {
-		constant = int(c.code[offset + 1])
-		arg_count = c.code[offset + 2]
-	}
-
-	fmt.eprintf("%-16s (%d args) %4d '", name, arg_count, constant)
-
-	str := stringify_value(c.constants[constant])
-	fmt.eprint(str)
-	fmt.eprint("'\n")
-
-	if long {
-		return offset + 4
-	} else {
-		return offset + 3
-	}
-}
-
 /* Disassembles the instruction at the provided offset. */
 disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 	fmt.eprintf("%04d", offset)
@@ -146,10 +120,10 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return byte_instruction("OP_GET_UPVALUE", c, offset)
 	case .OP_SET_UPVALUE:
 		return byte_instruction("OP_SET_UPVALUE", c, offset)
-	case .OP_GET_PROPERTY:
-		return constant_instruction("OP_GET_PROPERTY", c, offset)
-	case .OP_GET_PROPERTY_LONG:
-		return long_constant_instruction("OP_GET_PROPERTY_LONG", c, offset)
+	case .OP_MODULE_ACCESS:
+		return constant_instruction("OP_MODULE_ACCESS", c, offset)
+	case .OP_MODULE_ACCESS_LONG:
+		return long_constant_instruction("OP_MODULE_ACCESS_LONG", c, offset)
 	case .OP_GET_IT:
 		return simple_instruction("OP_GET_IT", offset)
 	case .OP_SET_IT:
@@ -192,10 +166,6 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return jump_instruction("OP_LOOP", -1, c, offset)
 	case .OP_CALL:
 		return byte_instruction("OP_CALL", c, offset)
-	case .OP_INVOKE:
-		return invoke_instruction("OP_INVOKE", c, offset, long = false)
-	case .OP_INVOKE_LONG:
-		return invoke_instruction("OP_INVOKE_LONG", c, offset, long = true)
 	case .OP_LIST:
 		return byte_instruction("OP_LIST", c, offset)
 	case .OP_SUBSCRIPT:

@@ -14,6 +14,7 @@ TokenType :: enum {
 	RSQUIRLY,
 	LSQUARE,
 	RSQUARE,
+	BACKSLASH,
 	COMMA,
 	COLON,
 	DOT,
@@ -27,7 +28,6 @@ TokenType :: enum {
 	// one or two character tokens
 	BANG_EQUAL,
 	BAR_GREATER, // |>
-	COLON_COLON,
 	DOT_DOT,
 	EQUAL,
 	EQUAL_EQUAL,
@@ -451,8 +451,8 @@ lexer_lex_string :: proc(l: ^Lexer, starts_with: rune) -> Maybe(Token) {
 			return nil
 		}
 
-		// don't end at escaped quotes
-		if lexer_peek(l) == '\\' && lexer_peek_next(l) == starts_with {
+		// handle escapes
+		if lexer_peek(l) == '\\' {
 			lexer_advance(l)
 		}
 
@@ -497,7 +497,7 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case ']':
 		return make_token(l, .RSQUARE)
 	case ':':
-		return make_token(l, lexer_match(l, ':') ? .COLON_COLON : .COLON)
+		return make_token(l, .COLON)
 	case ';':
 		return make_token(l, .SEMI)
 	case ',':
@@ -538,6 +538,8 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case '\\':
 		if lexer_match(l, '\\') {
 			return lexer_lex_multiline_string_line(l)
+		} else {
+			return make_token(l, .BACKSLASH)
 		}
 	}
 

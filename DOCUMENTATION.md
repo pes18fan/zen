@@ -471,12 +471,12 @@ are of two types, builtin and user-defined modules.
 Builtin modules are a set of modules built into the language itself with various
 useful functions. A builtin module can be imported by simply using `use "mod"`
 where `mod` is the name of the module. Any function in the builtin module can be
-accessed and called using dot notation.
+accessed and called using the `\` operator.
 
 ```zen
 use "time";
 
-puts(time.clock())
+puts(time\clock())
 ```
 
 Further information on what builtin modules are present is provided below.
@@ -492,7 +492,7 @@ be called `foo` if the imported file is `foo.zn`.)
 // a.zn
 use "./b.zn";
 
-b.foo()
+b\foo()
 ```
 
 ```zen
