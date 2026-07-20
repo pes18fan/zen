@@ -1,30 +1,30 @@
 // This program prints itself as its output.
 use 'string';
-val q = string.asciichar(34);
-val l = [
-    "// This program prints itself as its output.",
-    "use 'string';",
-    "val q = string.asciichar(34);",
-    "val l = [",
-    "",
-    "];",
-    "for var i = 0; i < 4; i = i + 1 {",
-    "    puts(l[i])",
-    "};",
-    "for var i = 0; i < len(l); i = i + 1 {",
-    "    if i == len(l) - 1 { puts('    ' .. q .. l[i] .. q) }",
-    "    else { puts('    ' .. q .. l[i] .. q .. ',') }",
-    "};",
-    "for var i = 5; i < len(l); i = i + 1 {",
-    "    puts(l[i])",
-    "}"
-];
+val b = string\asciichar(92);
+val s =
+    \\// This program prints itself as its output.
+    \\use 'string';
+    \\val b = string\asciichar(92);
+    \\val s =
+    \\
+    \\;
+    \\val l = string\split_lines(s);
+    \\for var i = 0; i < 4; i = i + 1 {
+    \\    puts(l[i])
+    \\};
+    \\for var i = 0; i < len(l); i = i + 1 {
+    \\    puts('    ' .. b .. b .. l[i])
+    \\};
+    \\for var i = 5; i < len(l); i = i + 1 {
+    \\    puts(l[i])
+    \\}
+;
+val l = string\split_lines(s);
 for var i = 0; i < 4; i = i + 1 {
     puts(l[i])
 };
 for var i = 0; i < len(l); i = i + 1 {
-    if i == len(l) - 1 { puts('    ' .. q .. l[i] .. q) }
-    else { puts('    ' .. q .. l[i] .. q .. ',') }
+    puts('    ' .. b .. b .. l[i])
 };
 for var i = 5; i < len(l); i = i + 1 {
     puts(l[i])

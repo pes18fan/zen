@@ -387,7 +387,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
 			}
 		// This opcode is used to get values in a module.
-		case .OP_GET_PROPERTY:
+		case .OP_MODULE_ACCESS:
 			{
 				if is_module(vm_peek(vm, 0)) {
 					module := as_module(vm_peek(vm, 0))
@@ -410,11 +410,11 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						return .INTERPRET_RUNTIME_ERROR
 					}
 				} else {
-					vm_panic(vm, "Only modules allow dot access.")
+					vm_panic(vm, "Cannot use module access operator on a non-module.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
-		case .OP_GET_PROPERTY_LONG:
+		case .OP_MODULE_ACCESS_LONG:
 			{
 				if is_module(vm_peek(vm, 0)) {
 					module := as_module(vm_peek(vm, 0))
@@ -436,7 +436,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 						return .INTERPRET_RUNTIME_ERROR
 					}
 				} else {
-					vm_panic(vm, "Only modules allow dot access.")
+					vm_panic(vm, "Cannot use module access operator on a non-module.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
@@ -526,28 +526,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				// Return with an error if the call fails.
 				if !call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count)) {
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				frame = &vm.frames[vm.frame_count - 1]
-			}
-		case .OP_INVOKE:
-			{
-				method := read_string(frame)
-				arg_count := read_byte(frame)
-
-				if !invoke(vm, method, int(arg_count)) {
-					return .INTERPRET_RUNTIME_ERROR
-				}
-
-				frame = &vm.frames[vm.frame_count - 1]
-			}
-		case .OP_INVOKE_LONG:
-			{
-				method := read_string_long(frame)
-				arg_count := read_byte(frame)
-
-				if !invoke(vm, method, int(arg_count)) {
 					return .INTERPRET_RUNTIME_ERROR
 				}
 

@@ -75,7 +75,7 @@ Symbol :: struct #all_or_none {
 ResolvingNode :: union #no_nil {
 	^AssignExpr,
 	^VariableExpr,
-	^GetExpr,
+	^ModuleAccessExpr,
 }
 
 ResolutionMap :: map[ResolvingNode]^Symbol
@@ -426,7 +426,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^ExitExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.code) or_return
-	case ^GetExpr:
+	case ^ModuleAccessExpr:
 		rs.current_token = e.token
 
 		if var_e, ok := e.receiver.(^VariableExpr); ok {
@@ -437,7 +437,11 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			if !receiver_var.is_module {
 				resolver_error(
 					rs,
-					fmt.tprintf("Dot-accessed value '%v' must be a module.", receiver_var.name),
+					fmt.tprintf(
+						"`%v` operator cannot be used on '%v' as it is not a module.",
+						e.token.lexeme,
+						receiver_var.name,
+					),
 				)
 				return false
 			}
@@ -493,7 +497,11 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 
 			rs.resolutions.resolution_map[e] = resolved
 		} else {
-			resolve_with_resolver(rs, e.receiver) or_return
+			resolver_error(
+				rs,
+				fmt.tprintf("`%v` operator can only be used on a module.", e.token.lexeme),
+			)
+			return false
 		}
 	case ^GroupingExpr:
 		rs.current_token = e.token

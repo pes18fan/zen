@@ -48,7 +48,7 @@ add_imports :: proc(mr: ^ModuleResolver, expr: Expr, curr: ^Module) -> bool {
 	case ^ForInExpr:
 		add_imports(mr, e.iterable, curr) or_return
 		add_imports(mr, e.body, curr) or_return
-	case ^GetExpr:
+	case ^ModuleAccessExpr:
 		add_imports(mr, e.receiver, curr) or_return
 	case ^GroupingExpr:
 		add_imports(mr, e.expression, curr) or_return
