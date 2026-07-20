@@ -982,7 +982,7 @@ interpret :: proc(
 	// TODO: type checker pass, in progress
 	when TYPE_CHECK {
 		if !should_not_typecheck {
-			_, tc_ok := typecheck(expr, reso.resolution_map)
+			_, tc_ok := typecheck(expr, reso)
 			if !tc_ok {
 				return .INTERPRET_COMPILE_ERROR
 			}

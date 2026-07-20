@@ -33,20 +33,20 @@ Resolver :: struct #all_or_none {
 }
 
 Resolutions :: struct #all_or_none {
-	file_scopes:    map[string]map[string]^UntypedVariable, // global scopes for each file
+	file_scopes:    map[string]map[string]^Symbol, // global scopes for each file
 	function_scope: ^UntypedContext, // chain of local scopes of a file
-	builtin_scope:  map[string]^UntypedVariable, // topmost scope; common to all files
+	builtin_scope:  map[string]^Symbol, // topmost scope; common to all files
 	resolution_map: ResolutionMap,
 }
 
-current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^UntypedVariable {
+current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^Symbol {
 	return &rs.resolutions.file_scopes[rs.current_module.name]
 }
 
 UntypedContext :: struct #all_or_none {
 	enclosing:            ^UntypedContext,
 	within:               [dynamic]^UntypedContext,
-	variables:            map[string]^UntypedVariable,
+	variables:            map[string]^Symbol,
 	total_scope_depth:    int,
 	local_count:          int,
 
@@ -54,8 +54,8 @@ UntypedContext :: struct #all_or_none {
 	_current_scope_depth: int,
 }
 
-UntypedVariable :: struct #all_or_none {
-	shadower:         ^UntypedVariable,
+Symbol :: struct #all_or_none {
+	shadower:         ^Symbol,
 	name:             string,
 	kind:             enum {
 		LOCAL,
@@ -78,10 +78,10 @@ ResolvingNode :: union #no_nil {
 	^GetExpr,
 }
 
-ResolutionMap :: map[ResolvingNode]^UntypedVariable
+ResolutionMap :: map[ResolvingNode]^Symbol
 
 @(require_results)
-resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^UntypedVariable, ErrorMessage) {
+resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^Symbol, ErrorMessage) {
 	var, ok := fs.variables[name]
 	if !ok {
 		return nil, nil
@@ -100,13 +100,7 @@ resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^UntypedVariable, E
 }
 
 @(require_results)
-resolve_upvalue :: proc(
-	fs: ^UntypedContext,
-	name: string,
-) -> (
-	v: ^UntypedVariable,
-	e: ErrorMessage,
-) {
+resolve_upvalue :: proc(fs: ^UntypedContext, name: string) -> (v: ^Symbol, e: ErrorMessage) {
 	// nothing found in function scopes, the thing is probably a global variable
 	if fs.enclosing == nil {
 		return nil, nil
@@ -130,7 +124,7 @@ resolve_upvalue :: proc(
 }
 
 @(require_results)
-resolve_variable :: proc(rs: ^Resolver, name: string) -> (^UntypedVariable, bool) {
+resolve_variable :: proc(rs: ^Resolver, name: string) -> (^Symbol, bool) {
 	var, _ := resolve_local(rs.resolutions.function_scope, name)
 	up, _ := resolve_upvalue(rs.resolutions.function_scope, name)
 	if var != nil {
@@ -161,7 +155,7 @@ resolve_variable_in_module :: proc(
 	module_name: string,
 	variable_name: string,
 ) -> (
-	^UntypedVariable,
+	^Symbol,
 	bool,
 ) {
 	file_scope := rs.resolutions.file_scopes[module_name]
@@ -182,7 +176,7 @@ assert_module_variable_exists_and_resolve_it :: proc(
 	module_name: string,
 	variable_name: string,
 ) -> (
-	^UntypedVariable,
+	^Symbol,
 	ErrorMessage,
 ) {
 	var, ok := resolve_variable_in_module(rs, module_name, variable_name)
@@ -202,7 +196,7 @@ assert_variable_exists_and_resolve_it :: proc(
 	rs: ^Resolver,
 	name: string,
 ) -> (
-	^UntypedVariable,
+	^Symbol,
 	ErrorMessage,
 ) {
 	var, ok := resolve_variable(rs, name)
@@ -228,7 +222,7 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 			return nil
 		}
 
-		new_var := new(UntypedVariable)
+		new_var := new(Symbol)
 		new_var^ = {
 			shadower         = nil,
 			name             = fmt.tprint(name),
@@ -252,7 +246,7 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		return "A variable with this name in this scope already exists."
 	}
 
-	new_var := new(UntypedVariable)
+	new_var := new(Symbol)
 	new_var^ = {
 		shadower         = nil,
 		name             = fmt.tprint(name),
@@ -303,7 +297,7 @@ declare_variable :: proc(
 			}
 		}
 
-		new_var := new(UntypedVariable)
+		new_var := new(Symbol)
 		new_var^ = {
 			shadower         = nil,
 			name             = fmt.tprint(name),
@@ -330,7 +324,7 @@ declare_variable :: proc(
 		return "A variable with this name in this scope already exists."
 	}
 
-	new_var := new(UntypedVariable)
+	new_var := new(Symbol)
 	new_var^ = {
 		shadower         = nil,
 		name             = fmt.tprint(name),
@@ -448,7 +442,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 				return false
 			}
 
-			resolved: ^UntypedVariable
+			resolved: ^Symbol
 			if receiver_var.is_native_value {
 				mod, mod_ok := as_builtin_module(receiver_var.name)
 				if !mod_ok {
@@ -670,7 +664,7 @@ push_function_scope_untyped :: proc(rs: ^Resolver) {
 		within               = make([dynamic]^UntypedContext),
 		total_scope_depth    = 0,
 		local_count          = 1, // starts at 1 cuz the first local is the function itself
-		variables            = make(map[string]^UntypedVariable),
+		variables            = make(map[string]^Symbol),
 		_current_scope_depth = 0,
 	}
 
@@ -694,22 +688,12 @@ pop_block_scope_untyped :: proc(rs: ^Resolver) {
 		rs.resolutions.function_scope._current_scope_depth > 0,
 		"cannot have less than zero block scopes",
 	)
-	depth := rs.resolutions.function_scope._current_scope_depth
-	to_delete: [dynamic]string
-	for name, var in rs.resolutions.function_scope.variables {
-		if var.scope_depth == depth {
-			append(&to_delete, name)
-		}
-	}
-	for name in to_delete {
-		delete_key(&rs.resolutions.function_scope.variables, name)
-	}
 	rs.resolutions.function_scope._current_scope_depth -= 1
 }
 
-add_native_fns :: #force_inline proc(m: ^map[string]^UntypedVariable) {
+add_native_fns :: #force_inline proc(m: ^map[string]^Symbol) {
 	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
-		native_var := new(UntypedVariable)
+		native_var := new(Symbol)
 		native_var^ = {
 			shadower         = nil,
 			name             = fn.name,
@@ -766,9 +750,9 @@ resolve :: proc(graph: []^Module) -> (resolutions: Resolutions, success: bool) {
 	rs := Resolver {
 		resolutions = Resolutions {
 			resolution_map = make(ResolutionMap),
-			file_scopes = make(map[string]map[string]^UntypedVariable),
+			file_scopes = make(map[string]map[string]^Symbol),
 			function_scope = nil,
-			builtin_scope = make(map[string]^UntypedVariable),
+			builtin_scope = make(map[string]^Symbol),
 		},
 		current_module = nil,
 		current_token = {},
@@ -781,7 +765,7 @@ resolve :: proc(graph: []^Module) -> (resolutions: Resolutions, success: bool) {
 			return {}, false
 		}
 
-		globals := make(map[string]^UntypedVariable)
+		globals := make(map[string]^Symbol)
 		rs.resolutions.file_scopes[module.name] = globals
 
 		rs.current_module = module
