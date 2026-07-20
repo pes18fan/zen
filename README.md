@@ -1,6 +1,6 @@
 # zen
 
-A lightweight dynamically typed programming language written in Odin.
+A lightweight programming language written in Odin.
 
 <p align="center">
     <img src="https://github.com/pes18fan/zen/raw/main/example.png" alt="zen code example" />
