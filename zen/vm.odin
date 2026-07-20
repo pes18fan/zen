@@ -1112,47 +1112,6 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 	return false
 }
 
-/* Invoke a function in a module. */
-@(private = "file")
-invoke :: proc(vm: ^VM, name: ^ObjString, arg_count: int) -> bool {
-	receiver := vm_peek(vm, arg_count)
-
-	if is_module(receiver) {
-		module := as_module(receiver)
-
-		value: Value; ok: bool
-
-		if value, ok = table_get(&module.values, name); ok {
-			args := make([dynamic]Value)
-			defer delete(args)
-
-			for _ in 0 ..< int(arg_count) {
-				append(&args, vm_pop(vm)) /* Temporarily pop off all the args. */
-			}
-
-			vm_pop(vm) /* Module. */
-			vm_push(vm, value) /* Push the invoked function on the stack. */
-
-			#reverse for a in args {
-				vm_push(vm, a) /* Push back all the args on the stack. */
-			}
-
-			return call_value(vm, vm_peek(vm, int(arg_count)), int(arg_count))
-		} else {
-			panic_str := fmt.tprintf(
-				"Value '%s' does not exist on module '%s'.",
-				name.chars,
-				module.name.chars,
-			)
-			vm_panic(vm, panic_str)
-			return false
-		}
-	}
-
-	vm_panic(vm, "Cannot invoke on a non-module value.")
-	return false
-}
-
 /* Capture the provided stack slot as an upvalue. */
 @(private = "file")
 capture_upvalue :: proc(vm: ^VM, local: ^Value) -> ^ObjUpvalue {
