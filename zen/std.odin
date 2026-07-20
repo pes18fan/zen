@@ -364,7 +364,7 @@ len_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if is_string(args[0]) {
 		return number_val(f64(as_string(args[0]).len)), true
 	} else {
-		return number_val(f64(as_list(args[0]).items.count)), true
+		return number_val(f64(len(as_list(args[0]).items))), true
 	}
 }
 
@@ -958,7 +958,7 @@ remove_last_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bo
 
 	list := as_list(args[0])
 
-	if list.items.count == 0 {
+	if len(list.items) == 0 {
 		vm_panic(vm, "Cannot pop an empty list.")
 		return nil_val(), false
 	}
@@ -976,7 +976,7 @@ pop_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	list := as_list(args[0])
 
-	if list.items.count == 0 {
+	if len(list.items) == 0 {
 		vm_panic(vm, "Cannot pop an empty list.")
 		return nil_val(), false
 	}
@@ -1030,7 +1030,7 @@ sort_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	}
 
 	list := as_list(args[0])
-	_sort(&list.items.values, 0, list.items.count - 1)
+	_sort(&list.items, 0, len(list.items) - 1)
 	return args[0], true
 }
 
@@ -1043,7 +1043,7 @@ sum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 	list := as_list(args[0])
 	sum: f64 = 0
-	for value in list.items.values {
+	for value in list.items {
 		if !is_number(value) {
 			vm_panic(vm, "Can only sum up a list of numbers.")
 			return nil_val(), false

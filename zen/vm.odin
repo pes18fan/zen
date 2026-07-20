@@ -208,11 +208,11 @@ read_short :: #force_inline proc(frame: ^CallFrame) -> int #no_bounds_check {
 
 /* Reads a constant from the chunk and pushes it onto the stack. */
 read_constant :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
-	return frame.closure.function.chunk.constants.values[read_byte(frame)]
+	return frame.closure.function.chunk.constants[read_byte(frame)]
 }
 
 read_constant_long :: #force_inline proc(frame: ^CallFrame) -> Value #no_bounds_check {
-	return frame.closure.function.chunk.constants.values[read_short(frame)]
+	return frame.closure.function.chunk.constants[read_short(frame)]
 }
 
 read_string :: #force_inline proc(frame: ^CallFrame) -> ^ObjString {
@@ -564,7 +564,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				/* The list needs to be reversed since the list elements
 				 * were popped off the stack in reverse order. */
-				slice.reverse(list.items.values[:])
+				slice.reverse(list.items[:])
 
 				vm_push(vm, obj_val(list))
 			}
@@ -592,19 +592,19 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				list := as_list(a)
 
-				if int(index) >= list.items.count {
+				if int(index) >= len(list.items) {
 					vm_panic(
 						vm,
 						fmt.tprintf(
 							"Index out of bounds, attempted indexing %d in a size %d list.",
 							int(index),
-							list.items.count,
+							len(list.items),
 						),
 					)
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
-				vm_push(vm, list.items.values[int(index)])
+				vm_push(vm, list.items[int(index)])
 			}
 		case .OP_SUBSCRIPT_SET:
 			{
@@ -631,20 +631,20 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 				list := as_list(a)
 
-				if int(index) >= list.items.count {
+				if int(index) >= len(list.items) {
 					vm_panic(
 						vm,
 						fmt.tprintf(
 							"Index out of bounds, attempted indexing %d in a %d list.",
 							int(index),
-							list.items.count,
+							len(list.items),
 						),
 					)
 					return .INTERPRET_RUNTIME_ERROR
 				}
 
 				// Update the list and push it back
-				list.items.values[int(index)] = c
+				list.items[int(index)] = c
 				vm_push(vm, obj_val(list))
 			}
 		case .OP_CLOSURE:
@@ -813,8 +813,8 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				if is_list(iterable) {
 					list := as_list(iterable)
 
-					if int(idx) < len(list.items.values) {
-						vm_push(vm, list.items.values[int(idx)])
+					if int(idx) < len(list.items) {
+						vm_push(vm, list.items[int(idx)])
 						vm_push(vm, number_val(idx + 1))
 						vm_push(vm, bool_val(true))
 					} else {
