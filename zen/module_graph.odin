@@ -12,7 +12,6 @@ ModuleResolver :: struct #all_or_none {
 	resolved:     map[string]^Module,
 }
 
-// a module struct has full ownership over the source, tokens and the AST
 Module :: struct #all_or_none {
 	name:     string,
 	fullpath: string,

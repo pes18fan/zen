@@ -1848,7 +1848,7 @@ typecheck_inner :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: b
 }
 
 @(require_results)
-typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, success: bool) {
+typecheck :: proc(expr: Expr, resolutions: Resolutions) -> (typemap: TypeMap, success: bool) {
 	when ODIN_DEBUG {
 		if opt.log_checker {
 			fmt.eprintln("-- typechecker begin")
@@ -1861,7 +1861,7 @@ typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, 
 	tc := new(TypeChecker)
 	tc^ = TypeChecker {
 		ctx           = nil,
-		resolutions   = resolutions,
+		resolutions   = resolutions.resolution_map,
 		typemap       = make(TypeMap),
 		typevar_count = 0,
 		current_token = {},
