@@ -145,7 +145,7 @@ associated with it is evaluated and returned as the value of the entire expressi
 ```
 use "math";
 
-var a = math.rand() * 10 |> math.floor();
+var a = math\rand() * 10 |> math\floor();
 
 switch a {
     0 => print "zero!",
@@ -201,7 +201,7 @@ You can also iterate over strings by converting them into lists:
 ```
 use "string";
 
-for x in string.chars("hello") {
+for x in string\chars("hello") {
     puts(x)
 }
 ```
@@ -375,8 +375,8 @@ or pass values to functions; in chains known as pipelines.
 use "string";
 
 // These two are equivalent:
-print string.upcase("hello");
-print "hello" |> string.upcase()
+print string\upcase("hello");
+print "hello" |> string\upcase()
 ```
 
 When the right side of a pipe is a function call, the piped value is implicitly
@@ -433,10 +433,10 @@ Lists work well with pipelines as well!
 
 ```zen
 [4, 3, 2, 1]
-    |> list.push(5)
-    |> list.push(6)
-    |> list.remove_last()
-    |> list.sort()  //=> [1, 2, 3, 4, 5]
+    |> list\push(5)
+    |> list\push(6)
+    |> list\remove_last()
+    |> list\sort()  //=> [1, 2, 3, 4, 5]
 ```
 
 > [!NOTE]
@@ -448,7 +448,7 @@ Lists work well with pipelines as well!
 >
 > ```zen
 > var a = [1, 2, 3];
-> var b = a |> list.push(4);
+> var b = a |> list\push(4);
 > puts(a)   //=> [1, 2, 3, 4]
 > ```
 > 
@@ -457,7 +457,7 @@ Lists work well with pipelines as well!
 >
 > ```zen
 > var a = [1, 2, 3];
-> var b = copy(a) |> list.push(4);
+> var b = copy(a) |> list\push(4);
 > puts(a)   //=> [1, 2, 3]
 > ```
 
@@ -665,10 +665,10 @@ You can check if a result is an `ok` variant or an `err` variant using the
 ```zen
 use "result";
 
-result.ok?(ok(1));                  //=> true
-result.ok?(err("something bad"));   //=> false
-result.err?(ok("all good"));        //=> false
-result.err?(err(-1))                //=> true
+result\ok?(ok(1));                  //=> true
+result\ok?(err("something bad"));   //=> false
+result\err?(ok("all good"));        //=> false
+result\err?(err(-1))                //=> true
 ```
 
 The `result.unwrap` native function takes in a result and returns the value inside it
@@ -677,8 +677,8 @@ if it is an `Ok` variant. If it is a `Err` variant, the function will panic.
 ```zen
 use "result"
 
-result.unwrap(ok(1));         //=> 1
-result.unwrap(err("uh oh"))   //=> panic: Unwrapped an Err variant.
+result\unwrap(ok(1));         //=> 1
+result\unwrap(err("uh oh"))   //=> panic: Unwrapped an Err variant.
 ```
 
 To avoid panicking, you can use the `unwrap_or` function to provide a fallback.
@@ -686,8 +686,8 @@ To avoid panicking, you can use the `unwrap_or` function to provide a fallback.
 ```zen
 use "result"
 
-result.unwrap_or(ok(1), 2);          //=> 1
-result.unwrap_or(err("uh oh"), -1)   //=> -1
+result\unwrap_or(ok(1), 2);          //=> 1
+result\unwrap_or(err("uh oh"), -1)   //=> -1
 ```
 
 ## Echo
@@ -697,7 +697,7 @@ passed to it. It returns whatever value it printed.
 
 ```zen
 val number = echo 3;        //=> 3
-println(number + 1);        //=> 4
+puts(number + 1);        //=> 4
 ```
 
 ## Exiting early
