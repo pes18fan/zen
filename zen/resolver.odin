@@ -688,6 +688,16 @@ pop_block_scope_untyped :: proc(rs: ^Resolver) {
 		rs.resolutions.function_scope._current_scope_depth > 0,
 		"cannot have less than zero block scopes",
 	)
+	depth := rs.resolutions.function_scope._current_scope_depth
+	to_delete: [dynamic]string
+	for name, var in rs.resolutions.function_scope.variables {
+		if var.scope_depth == depth {
+			append(&to_delete, name)
+		}
+	}
+	for name in to_delete {
+		delete_key(&rs.resolutions.function_scope.variables, name)
+	}
 	rs.resolutions.function_scope._current_scope_depth -= 1
 }
 
