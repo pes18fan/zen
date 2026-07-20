@@ -144,12 +144,12 @@ add_constant :: proc(c: ^Chunk, gc: ^GC, value: Value) -> int {
 	temp_push(gc, value)
 	write_value_array(&c.constants, value)
 	temp_pop(gc)
-	return len(c.constants.values) - 1
+	return len(c.constants) - 1
 }
 
 /* Frees a chunk's memory. */
 free_chunk :: proc(c: ^Chunk) {
 	delete(c.code)
 	delete(c.lines)
-	free_value_array(&c.constants)
+	free_value_array(c.constants)
 }

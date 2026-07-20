@@ -101,7 +101,8 @@ ObjModule :: struct {
 	values:    Table,
 }
 
-/* The result type. */
+/* The result type. Wraps a value that may either be of a `ok` state or an
+`err` state, based on the value of `is_ok`. */
 ObjResult :: struct {
 	using obj: Obj,
 	is_ok:     bool,
@@ -369,11 +370,11 @@ stringify_object :: proc(obj: ^Obj, quote_strings: bool = false) -> string {
 
 			strings.write_string(&sb, "[")
 
-			for i := 0; i < list.items.count; i += 1 {
-				value := stringify_value(list.items.values[i], quote_strings = true)
+			for i := 0; i < len(list.items); i += 1 {
+				value := stringify_value(list.items[i], quote_strings = true)
 				strings.write_string(&sb, value)
 
-				if i != list.items.count - 1 {
+				if i != len(list.items) - 1 {
 					strings.write_string(&sb, ", ")
 				}
 			}
@@ -429,7 +430,7 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 		free(fn)
 	case .LIST:
 		list := (^ObjList)(obj)
-		free_value_array(&list.items)
+		free_value_array(list.items)
 		free(list)
 	case .MODULE:
 		module := (^ObjModule)(obj)

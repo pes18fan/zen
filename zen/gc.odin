@@ -151,8 +151,8 @@ mark_value :: proc(gc: ^GC, value: Value) {
 
 /* Mark all values in an array. */
 mark_array :: proc(gc: ^GC, array: ^ValueArray) {
-	for i in 0 ..< array.count {
-		mark_value(gc, array.values[i])
+	for i in 0 ..< len(array) {
+		mark_value(gc, array[i])
 	}
 }
 

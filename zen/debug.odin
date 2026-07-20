@@ -32,7 +32,7 @@ jump_instruction :: proc($name: string, sign: int, c: ^Chunk, offset: int) -> in
 constant_instruction :: proc($name: string, c: ^Chunk, offset: int) -> int {
 	constant := c.code[offset + 1]
 	fmt.eprintf("%-16s %4d '", name, constant)
-	str := stringify_value(c.constants.values[constant])
+	str := stringify_value(c.constants[constant])
 	fmt.eprint(str)
 	fmt.eprint("'\n")
 	return offset + 2
@@ -42,7 +42,7 @@ constant_instruction :: proc($name: string, c: ^Chunk, offset: int) -> int {
 long_constant_instruction :: proc($name: string, c: ^Chunk, offset: int) -> int {
 	constant := int(c.code[offset + 1]) << 8 | int(c.code[offset + 2])
 	fmt.eprintf("%-16s %4d '", name, constant)
-	str := stringify_value(c.constants.values[constant])
+	str := stringify_value(c.constants[constant])
 	fmt.eprint(str)
 	fmt.eprintf("'\n")
 	return offset + 3
@@ -59,8 +59,8 @@ user_module_instruction :: proc($name: string, c: ^Chunk, offset: int, long: boo
 		module_path_idx = int(c.code[offset + 2])
 	}
 
-	module_name := stringify_value(c.constants.values[module_name_idx])
-	module_path := stringify_value(c.constants.values[module_path_idx])
+	module_name := stringify_value(c.constants[module_name_idx])
+	module_path := stringify_value(c.constants[module_path_idx])
 	fmt.eprintf("%-16s (module '%s', path '%s')\n", name, module_name, module_path)
 
 	if long {
@@ -85,7 +85,7 @@ invoke_instruction :: proc($name: string, c: ^Chunk, offset: int, long: bool) ->
 
 	fmt.eprintf("%-16s (%d args) %4d '", name, arg_count, constant)
 
-	str := stringify_value(c.constants.values[constant])
+	str := stringify_value(c.constants[constant])
 	fmt.eprint(str)
 	fmt.eprint("'\n")
 
@@ -208,14 +208,14 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 			offset += 1
 			constant := int(c.code[offset]) << 8 | int(c.code[offset + 1])
 			fmt.eprintf("%-16s %4d ", "OP_CLOSURE", constant)
-			str := stringify_value(c.constants.values[constant])
+			str := stringify_value(c.constants[constant])
 			fmt.eprint(str)
 			offset += 2
 			public := bool(c.code[offset])
 			fmt.eprintfln(", %s", public ? "public" : "private")
 			offset += 1
 
-			function := as_function(c.constants.values[constant])
+			function := as_function(c.constants[constant])
 			for _ in 0 ..< function.upvalue_count {
 				is_local := bool(c.code[offset])
 				offset += 1

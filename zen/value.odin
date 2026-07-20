@@ -171,43 +171,38 @@ when NAN_BOXING {
 }
 
 /* 
-A wrapper around a dynamic array that works as a constant pool for values. 
+An alias for a dynamic array that works as a constant pool for values. 
 */
-ValueArray :: struct {
-	values: [dynamic]Value,
-	count:  int,
-}
+ValueArray :: [dynamic]Value
 
 /* Initialize the constant pool. */
 init_value_array :: proc() -> ValueArray {
-	return ValueArray{values = make([dynamic]Value, 0, 0), count = 0}
+	return make([dynamic]Value, 0, 0)
 }
 
 /* Write to the constant pool. */
 write_value_array :: proc(a: ^ValueArray, value: Value) {
-	append(&a.values, value)
-	a.count += 1
+	append(a, value)
 }
 
 /* Pop a value off the constant pool. */
 pop_value_array :: proc(a: ^ValueArray) -> Value {
-	assert(a.count > 0, "value array count cannot be less than 0\n")
-	defer a.count -= 1
-	return pop(&a.values)
+	assert(len(a) > 0, "value array count cannot be less than 0\n")
+	return pop(a)
 }
 
 /* Free the constant pool's memory. */
-free_value_array :: proc(a: ^ValueArray) {
-	delete(a.values)
+free_value_array :: proc(a: ValueArray) {
+	delete(a)
 }
 
 /* For debug purposes */
-print_value_array :: proc(a: ^ValueArray) {
+print_value_array :: proc(a: ValueArray) {
 	fmt.eprint("[ ")
-	for i in 0 ..< a.count {
+	for i in 0 ..< len(a) {
 		fmt.eprint(" ")
 
-		str := stringify_value(a.values[i])
+		str := stringify_value(a[i])
 		fmt.eprint(str)
 		fmt.eprintf(" at %d,", i)
 	}
@@ -295,10 +290,10 @@ copy_value :: proc(gc: ^GC, value: Value) -> Value {
 			new := new_list(gc)
 
 			/* Copy all the list's items over. */
-			for i := 0; i < list.items.count; i += 1 {
+			for i := 0; i < len(list.items); i += 1 {
 				/* _copy_item may be called recursively if we're deep copying a
                  * list within a list. */
-				write_value_array(&new.items, copy_value(gc, list.items.values[i]))
+				write_value_array(&new.items, copy_value(gc, list.items[i]))
 			}
 
 			return obj_val(new)
