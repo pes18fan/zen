@@ -59,10 +59,10 @@ ResolvingNode :: union #no_nil {
 ResolutionMap :: map[ResolvingNode]^Symbol
 
 @(require_results)
-resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^Symbol, ErrorMessage) {
+resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^Symbol, bool) {
 	var, ok := fs.variables[name]
 	if !ok {
-		return nil, nil
+		return nil, false
 	}
 
 	actual := var
@@ -70,61 +70,66 @@ resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^Symbol, ErrorMessa
 		actual = actual.shadower
 	}
 
-	if !actual.initialized {
-		return nil, "Cannot read local variable in its own initializer."
-	}
-
-	return var, nil
+	return var, true
 }
 
 @(require_results)
-resolve_upvalue :: proc(fs: ^UntypedContext, name: string) -> (v: ^Symbol, e: ErrorMessage) {
+resolve_upvalue :: proc(fs: ^UntypedContext, name: string) -> (v: ^Symbol, ok: bool) {
 	// nothing found in function scopes, the thing is probably a global variable
 	if fs.enclosing == nil {
-		return nil, nil
+		return nil, false
 	}
 
 	// look for a local in the enclosing one, capture if its there
-	local := resolve_local(fs.enclosing, name) or_return
-	if local != nil {
+	if local, local_ok := resolve_local(fs.enclosing, name); local_ok {
 		local.is_captured = true
-		return local, nil
+		return local, true
 	}
 
 	// recursively look for the value in the enclosing fn
-	up := resolve_upvalue(fs.enclosing, name) or_return
-	if up != nil {
-		return up, nil
+	if up, up_ok := resolve_upvalue(fs.enclosing, name); up_ok {
+		return up, true
 	}
 
 	// nothing found at all
-	return nil, nil
+	return nil, false
 }
 
+// Looks up a variable through all the scopes one-by-one: local scope, enclosing
+// function scopes, current file's global scope, and finally the builtin value
+// scope. Returns the variable if it was found in any of these scopes, else
+// it returns `nil` without an error.
+// If the variable is uninitialized and the caller has disallowed that by keeping
+// the `allow_uninitialized` parameter false, the function returns with the
+// relevant error.
 @(require_results)
-resolve_variable :: proc(rs: ^Resolver, name: string) -> (^Symbol, bool) {
-	var, _ := resolve_local(rs.resolutions.function_scope, name)
-	up, _ := resolve_upvalue(rs.resolutions.function_scope, name)
-	if var != nil {
-		return var, true
-	} else if up != nil {
-		return up, true
+resolve_variable :: proc(
+	rs: ^Resolver,
+	name: string,
+	allow_uninitialized: bool = false,
+) -> (
+	^Symbol,
+	ErrorMessage,
+) {
+	var: ^Symbol
+
+	if local, local_ok := resolve_local(rs.resolutions.function_scope, name); local_ok {
+		var = local
+	} else if up, up_ok := resolve_upvalue(rs.resolutions.function_scope, name); up_ok {
+		var = up
+	} else if global, global_ok := current_file_scope(rs)[name]; global_ok {
+		var = global
+	} else if builtin, builtin_ok := rs.resolutions.builtin_scope[name]; builtin_ok {
+		var = builtin
 	} else {
-		// look in the file scope
-		global, global_ok := current_file_scope(rs)[name]
-		if global_ok {
-			return global, true
-		}
-
-		// look in the builtin scope
-		builtin, builtin_ok := rs.resolutions.builtin_scope[name]
-		if builtin_ok {
-			return builtin, true
-		}
-
-		// not found anywhere
-		return nil, false
+		return nil, nil
 	}
+
+	if !allow_uninitialized && !var.initialized {
+		return nil, fmt.tprintf("Cannot use uninitialized variable '%v'.", var.name)
+	}
+
+	return var, nil
 }
 
 @(require_results)
@@ -132,20 +137,24 @@ resolve_variable_in_module :: proc(
 	rs: ^Resolver,
 	module_name: string,
 	variable_name: string,
+	allow_uninitialized: bool = false,
 ) -> (
 	^Symbol,
-	bool,
+	ErrorMessage,
 ) {
 	file_scope := rs.resolutions.file_scopes[module_name]
 
 	// look in the file scope
 	global, global_ok := file_scope[variable_name]
-	if global_ok {
-		return global, true
+	if !global_ok {
+		return nil, nil
 	}
 
-	// not found
-	return nil, false
+	if !allow_uninitialized && !global.initialized {
+		return nil, fmt.tprintf("Cannot use uninitialized module import '%v'.", global.name)
+	}
+
+	return global, nil
 }
 
 @(require_results)
@@ -153,12 +162,18 @@ assert_module_variable_exists_and_resolve_it :: proc(
 	rs: ^Resolver,
 	module_name: string,
 	variable_name: string,
+	allow_uninitialized: bool = false,
 ) -> (
-	^Symbol,
-	ErrorMessage,
+	s: ^Symbol,
+	err: ErrorMessage,
 ) {
-	var, ok := resolve_variable_in_module(rs, module_name, variable_name)
-	if !ok {
+	var := resolve_variable_in_module(
+		rs,
+		module_name,
+		variable_name,
+		allow_uninitialized,
+	) or_return
+	if var == nil {
 		return nil, fmt.tprintf(
 			"Variable '%v' does not exist in module '%v'.",
 			variable_name,
@@ -173,12 +188,13 @@ assert_module_variable_exists_and_resolve_it :: proc(
 assert_variable_exists_and_resolve_it :: proc(
 	rs: ^Resolver,
 	name: string,
+	allow_uninitialized: bool = false,
 ) -> (
-	^Symbol,
-	ErrorMessage,
+	s: ^Symbol,
+	err: ErrorMessage,
 ) {
-	var, ok := resolve_variable(rs, name)
-	if !ok {
+	var := resolve_variable(rs, name, allow_uninitialized) or_return
+	if var == nil {
 		return nil, fmt.tprintf("Undefined variable '%v'.", name)
 	}
 
@@ -363,7 +379,10 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^AssignExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.value) or_return
-		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
+		var := try2(
+			rs,
+			assert_variable_exists_and_resolve_it(rs, e.name.lexeme, allow_uninitialized = true),
+		) or_return
 
 		if var.is_module {
 			resolver_error(rs, fmt.tprintf("Cannot reassign module '%v'.", var.name))
@@ -378,6 +397,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			}
 			return false
 		}
+
+		var.initialized = true
 
 		resolved := new_clone(var^)
 		resolved.shadower = nil
@@ -618,18 +639,33 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		is_public := e.is_public
 
 		for binding in bindings {
-			try(rs, declare_variable(rs, binding.name.lexeme, is_final, is_public)) or_return
-			init := binding.initializer.? or_continue
-
-			is_fn := false
-			// allow recursion
-			if _, ok := init.(^FunctionExpr); ok {
-				is_fn = true
-				define_variable(rs, binding.name.lexeme)
+			if _, ok := binding.initializer.?; !ok {
+				// if no initializer, just declare the variable and move on
+				try(rs, declare_variable(rs, binding.name.lexeme, is_final, is_public)) or_return
+				continue
 			}
-			resolve_with_resolver(rs, init) or_return
+
+			init := binding.initializer.?
+			_, is_fn := init.(^FunctionExpr)
+
+			// if not fn, just declare, resolve, define and move on
 			if !is_fn {
+				try(rs, declare_variable(rs, binding.name.lexeme, is_final, is_public)) or_return
+				resolve_with_resolver(rs, init) or_return
 				define_variable(rs, binding.name.lexeme)
+				continue
+			}
+
+			// if it is fn, check if in global scope
+			// if in global scope the thing was pre-declared and defined, just
+			// resolve the body. Else (fn in local scope), declare, define (for
+			// recursion) then resolve body
+			if in_file_scope(rs) {
+				resolve_with_resolver(rs, init) or_return
+			} else {
+				try(rs, declare_variable(rs, binding.name.lexeme, is_final, is_public)) or_return
+				define_variable(rs, binding.name.lexeme)
+				resolve_with_resolver(rs, init) or_return
 			}
 		}
 	case ^WhileExpr:
@@ -723,10 +759,9 @@ collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			init := binding.initializer.? or_continue
 			_ = init.(^FunctionExpr) or_continue
 
-			name := binding.name
-
 			// ONLY declare the variable; it is defined in the main resolver pass
-			try(rs, declare_variable(rs, name.lexeme, is_final, is_public)) or_return
+			try(rs, declare_variable(rs, binding.name.lexeme, is_final, is_public)) or_return
+			define_variable(rs, binding.name.lexeme)
 		}
 	case ^SequenceExpr:
 		rs.current_token = e.token
