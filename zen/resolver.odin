@@ -10,7 +10,7 @@ Resolver :: struct #all_or_none {
 
 Resolutions :: struct #all_or_none {
 	file_scopes:    map[string]map[string]^Symbol, // global scopes for each file
-	function_scope: ^UntypedContext, // chain of local scopes of a file
+	function_scope: ^Scope, // chain of local scopes of a file
 	builtin_scope:  map[string]^Symbol, // topmost scope; common to all files
 	resolution_map: ResolutionMap,
 }
@@ -19,9 +19,8 @@ current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^Symbol {
 	return &rs.resolutions.file_scopes[rs.current_module.name]
 }
 
-UntypedContext :: struct #all_or_none {
-	enclosing:            ^UntypedContext,
-	within:               [dynamic]^UntypedContext,
+Scope :: struct #all_or_none {
+	enclosing:            ^Scope,
 	variables:            map[string]^Symbol,
 	total_scope_depth:    int,
 	local_count:          int,
@@ -59,7 +58,7 @@ ResolvingNode :: union #no_nil {
 ResolutionMap :: map[ResolvingNode]^Symbol
 
 @(require_results)
-resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^Symbol, bool) {
+resolve_local :: proc(fs: ^Scope, name: string) -> (^Symbol, bool) {
 	var, ok := fs.variables[name]
 	if !ok {
 		return nil, false
@@ -74,7 +73,7 @@ resolve_local :: proc(fs: ^UntypedContext, name: string) -> (^Symbol, bool) {
 }
 
 @(require_results)
-resolve_upvalue :: proc(fs: ^UntypedContext, name: string) -> (v: ^Symbol, ok: bool) {
+resolve_upvalue :: proc(fs: ^Scope, name: string) -> (v: ^Symbol, ok: bool) {
 	// nothing found in function scopes, the thing is probably a global variable
 	if fs.enclosing == nil {
 		return nil, false
@@ -371,6 +370,81 @@ resolver_error :: proc(rs: ^Resolver, message: string, details: string = "") {
 	print_error(token, message, file = rs.current_module.fullpath, details = details)
 }
 
+resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool {
+	if var_e, ok := e.receiver.(^VariableExpr); ok {
+		receiver_var := try2(
+			rs,
+			assert_variable_exists_and_resolve_it(rs, var_e.token.lexeme),
+		) or_return
+		if !receiver_var.is_module {
+			resolver_error(
+				rs,
+				fmt.tprintf(
+					"`%v` operator cannot be used on '%v' as it is not a module.",
+					e.token.lexeme,
+					receiver_var.name,
+				),
+			)
+			return false
+		}
+
+		resolved: ^Symbol
+		if receiver_var.is_native_value {
+			mod, mod_ok := as_builtin_module(receiver_var.name)
+			if !mod_ok {
+				fmt.panicf("expected '%v' to be a builtin module but it wasn't", receiver_var.name)
+			}
+
+			found := function_exists_in_builtin_module(mod, e.property.lexeme)
+			if !found {
+				resolver_error(
+					rs,
+					fmt.tprintf(
+						"Variable '%v' does not exist in module '%v'.",
+						e.property.lexeme,
+						receiver_var.name,
+					),
+				)
+				return false
+			}
+		} else {
+			var := try2(
+				rs,
+				assert_module_variable_exists_and_resolve_it(
+					rs,
+					var_e.token.lexeme,
+					e.property.lexeme,
+				),
+			) or_return
+
+			if !var.is_public {
+				resolver_error(
+					rs,
+					fmt.tprintf(
+						"Cannot use private variable '%v' of module '%v' outside it.",
+						e.property.lexeme,
+						var_e.token.lexeme,
+					),
+					fmt.tprintf("Try marking '%v' as `pub`.", e.property.lexeme),
+				)
+				return false
+			}
+
+			resolved = new_clone(var^)
+			resolved.shadower = nil
+		}
+
+		rs.resolutions.resolution_map[e] = resolved
+		return true
+	} else {
+		resolver_error(
+			rs,
+			fmt.tprintf("`%v` operator can only be used on a module.", e.token.lexeme),
+		)
+		return false
+	}
+}
+
 @(require_results)
 resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	if expr == nil {return true}
@@ -427,81 +501,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.code) or_return
 	case ^ModuleAccessExpr:
 		rs.current_token = e.token
-
-		if var_e, ok := e.receiver.(^VariableExpr); ok {
-			receiver_var := try2(
-				rs,
-				assert_variable_exists_and_resolve_it(rs, var_e.token.lexeme),
-			) or_return
-			if !receiver_var.is_module {
-				resolver_error(
-					rs,
-					fmt.tprintf(
-						"`%v` operator cannot be used on '%v' as it is not a module.",
-						e.token.lexeme,
-						receiver_var.name,
-					),
-				)
-				return false
-			}
-
-			resolved: ^Symbol
-			if receiver_var.is_native_value {
-				mod, mod_ok := as_builtin_module(receiver_var.name)
-				if !mod_ok {
-					fmt.panicf(
-						"expected '%v' to be a builtin module but it wasn't",
-						receiver_var.name,
-					)
-				}
-
-				found := function_exists_in_builtin_module(mod, e.property.lexeme)
-				if !found {
-					resolver_error(
-						rs,
-						fmt.tprintf(
-							"Variable '%v' does not exist in module '%v'.",
-							e.property.lexeme,
-							receiver_var.name,
-						),
-					)
-					return false
-				}
-			} else {
-				var := try2(
-					rs,
-					assert_module_variable_exists_and_resolve_it(
-						rs,
-						var_e.token.lexeme,
-						e.property.lexeme,
-					),
-				) or_return
-
-				if !var.is_public {
-					resolver_error(
-						rs,
-						fmt.tprintf(
-							"Cannot use private variable '%v' of module '%v' outside it.",
-							e.property.lexeme,
-							var_e.token.lexeme,
-						),
-						fmt.tprintf("Try marking '%v' as `pub`.", e.property.lexeme),
-					)
-					return false
-				}
-
-				resolved = new_clone(var^)
-				resolved.shadower = nil
-			}
-
-			rs.resolutions.resolution_map[e] = resolved
-		} else {
-			resolver_error(
-				rs,
-				fmt.tprintf("`%v` operator can only be used on a module.", e.token.lexeme),
-			)
-			return false
-		}
+		resolve_module_access_expr(rs, e) or_return
 	case ^GroupingExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.expression) or_return
@@ -680,19 +680,15 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 }
 
 push_function_scope_untyped :: proc(rs: ^Resolver) {
-	fs := new(UntypedContext)
+	fs := new(Scope)
 	fs^ = {
 		enclosing            = rs.resolutions.function_scope,
-		within               = make([dynamic]^UntypedContext),
 		total_scope_depth    = 0,
 		local_count          = 1, // starts at 1 cuz the first local is the function itself
 		variables            = make(map[string]^Symbol),
 		_current_scope_depth = 0,
 	}
 
-	if rs.resolutions.function_scope != nil {
-		append(&rs.resolutions.function_scope.within, fs)
-	}
 	rs.resolutions.function_scope = fs
 }
 
