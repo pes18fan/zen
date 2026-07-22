@@ -953,10 +953,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	TYPE_CHECK :: true
-	when TYPE_CHECK {
-		should_not_typecheck := has_user_modules(expr)
-	}
+	should_not_typecheck := has_user_modules(expr)
 
 	// TODO: type checker pass, in progress
 	// Some problems being faced now that the checker is almost done. At the point
@@ -967,20 +964,18 @@ interpret :: proc(
 	// early on in the checker PR is now backfiring as the resolver and checker
 	// don't mesh well together. Thinking of integrating the typechecker pass
 	// with the resolver. Might need a large refactor.
-	when TYPE_CHECK {
-		if !should_not_typecheck {
-			_, tc_ok := typecheck(expr, reso)
-			if !tc_ok {
-				return .INTERPRET_COMPILE_ERROR
-			}
+	if !should_not_typecheck {
+		_, tc_ok := typecheck(expr, reso)
+		if !tc_ok {
+			return .INTERPRET_COMPILE_ERROR
+		}
 
-			/* Time the typechecker. */
-			if opt.time {
-				time.stopwatch_stop(&sw)
-				fmt.eprintf("Typechecker: %v\n", time.stopwatch_duration(sw))
-				time.stopwatch_reset(&sw)
-				time.stopwatch_start(&sw)
-			}
+		/* Time the typechecker. */
+		if opt.time {
+			time.stopwatch_stop(&sw)
+			fmt.eprintf("Typechecker: %v\n", time.stopwatch_duration(sw))
+			time.stopwatch_reset(&sw)
+			time.stopwatch_start(&sw)
 		}
 	}
 
