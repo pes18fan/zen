@@ -11,7 +11,7 @@ boundaries to respect.
 | Branch | Purpose |
 |---|---|
 | `main` | Stable: no type inference |
-| `typechecker` | Active: HM type inference (`TYPE_CHECK :: true` hardcoded at `zen/vm.odin:973`), classes & OOP fully removed from language |
+| `typechecker` | Active: HM type inference, classes & OOP fully removed from language |
 
 ## Build
 
@@ -100,14 +100,12 @@ Man page: `pandoc -s -t man ./etc/zen.1.md -o zen.1`
 
 ## Current limitations (typechecker branch)
 
-- Type inference is **gated on user-defined modules**: if a program uses
-  `use` with a `.USER` module, the typechecker is skipped entirely
-  (`has_user_modules` proc at `zen/semcheck.odin:342`, called at
-  `zen/vm.odin:974`; the skip happens at `vm.odin:979` — forced by the lack
-  of a module resolution pass after parsing). This is the next thing to fix.
-- Information that the typechecker and other compile-time passes made alongside it
-    (resolver, module resolver) produce are not provided to the codegen and VM,
-    which still work via the old clox-style. For instance, the codegen pass
-    re-resolves variables itself in the clox style, and the VM fully re-parses
-    and compiles module imports before running them. This will be fixed in a
-    future refactor; not prioritized as this is less incorrect and more redundant.
+- Type inference is **skipped for programs that `use` a `.USER` module**:
+  `has_user_modules` at `zen/semcheck.odin:341`, called at `zen/vm.odin:956`;
+  typechecker runs only when `!should_not_typecheck` (`vm.odin:967`). The
+  blocker (per TODO at `vm.odin:958-966`) is that the typechecker cannot
+  cross module boundaries — resolver and checker don't mesh across them yet.
+- Information from the typechecker, resolver, and module resolver is **not
+  consumed by codegen or the VM**. Codegen re-resolves variables clox-style
+  and the VM re-parses module imports at runtime. This is redundant but not
+  incorrect; slated for a future refactor.
