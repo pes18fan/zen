@@ -415,9 +415,8 @@ combine_substitutions :: proc(s1: Substitution, s2: Substitution) -> Substitutio
 	for var, ty in s2 {
 		when ODIN_DEBUG {
 			if var in s1 && !types_equal(s1[var], ty) {
-				fmt.eprint(color_yellow("WARNING"))
-				fmt.eprintfln(
-					": substitutions %v and %v map same variable %v to different values",
+				fmt.panicf(
+					"substitutions %v and %v map same variable %v to different values",
 					subst_string(s1, true),
 					subst_string(s2, true),
 					type_string(var, true),
