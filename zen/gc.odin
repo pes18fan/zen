@@ -3,6 +3,9 @@ package zen
 import "core:fmt"
 import "core:os"
 
+_ :: fmt
+_ :: os
+
 /* Amount of bytes to allocate before the next garbage collection. */
 GC_HEAP_GROW_FACTOR :: 2
 
@@ -350,10 +353,6 @@ collect_garbage :: proc(gc: ^GC) {
 
 		before := gc.bytes_allocated
 	}
-
-	// prevent -vet from complaining
-	_ = os.stdout
-	_ = fmt.println
 
 	mark_roots(gc, gc.mark_roots_arg)
 	trace_references(gc)
