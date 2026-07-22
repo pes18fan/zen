@@ -6,6 +6,7 @@ Resolver :: struct #all_or_none {
 	resolutions:    Resolutions,
 	current_module: ^Module,
 	current_token:  Token,
+	typevar_count:  int,
 }
 
 Resolutions :: struct #all_or_none {
@@ -779,6 +780,7 @@ resolve :: proc(graph: []^Module) -> (resolutions: Resolutions, success: bool) {
 		},
 		current_module = nil,
 		current_token = {},
+		typevar_count = 0,
 	}
 	add_native_fns(&rs.resolutions.builtin_scope)
 
