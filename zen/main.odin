@@ -7,6 +7,8 @@ import "core:os"
 import "core:path/filepath"
 import ic "isocline"
 
+_ :: mem
+
 VERSION :: string(#load("../.zen_version"))
 
 /* Chaotic mode is obviously false by default */
@@ -210,10 +212,6 @@ in_repl :: proc() -> bool {
 }
 
 main :: proc() {
-
-	// need to add this otherwise -vet would complain on release builds
-	_ = mem.Allocator
-
 	// Setup custom panic
 	context.assertion_failure_proc = internal_compiler_error
 

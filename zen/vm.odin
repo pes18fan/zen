@@ -854,8 +854,9 @@ interpret :: proc(
 
 	// make arena for the compiler frontend
 	arena: vmem.Arena
-	err := vmem.arena_init_growing(&arena)
-	ensure(err == nil)
+	if err := vmem.arena_init_growing(&arena); err != nil {
+		fmt.panicf("Failed to create arena for compiler frontend: %v", err)
+	}
 	defer vmem.arena_destroy(&arena)
 
 	arena_allocator := vmem.arena_allocator(&arena)
