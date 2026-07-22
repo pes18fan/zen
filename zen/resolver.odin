@@ -9,10 +9,10 @@ Resolver :: struct #all_or_none {
 }
 
 Resolutions :: struct #all_or_none {
-	file_scopes:    map[string]map[string]^Symbol, // global scopes for each file
-	function_scope: ^Scope, // chain of local scopes of a file
-	builtin_scope:  map[string]^Symbol, // topmost scope; common to all files
-	resolution_map: ResolutionMap,
+	file_scopes:         map[string]map[string]^Symbol, // global scopes for each file
+	current_local_scope: ^Scope, // chain of local scopes of a file
+	builtin_scope:       map[string]^Symbol, // topmost scope; common to all files
+	resolution_map:      ResolutionMap,
 }
 
 current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^Symbol {
@@ -20,13 +20,16 @@ current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^Symbol {
 }
 
 Scope :: struct #all_or_none {
-	enclosing:            ^Scope,
-	variables:            map[string]^Symbol,
-	total_scope_depth:    int,
-	local_count:          int,
+	enclosing:          ^Scope,
+	kind:               ScopeKind,
+	variables:          map[string]^Symbol,
+	current_local_slot: int,
+	scope_depth:        int,
+}
 
-	// private
-	_current_scope_depth: int,
+ScopeKind :: enum {
+	FUNCTION,
+	BLOCK,
 }
 
 Symbol :: struct #all_or_none {
@@ -112,9 +115,9 @@ resolve_variable :: proc(
 ) {
 	var: ^Symbol
 
-	if local, local_ok := resolve_local(rs.resolutions.function_scope, name); local_ok {
+	if local, local_ok := resolve_local(rs.resolutions.current_local_scope, name); local_ok {
 		var = local
-	} else if up, up_ok := resolve_upvalue(rs.resolutions.function_scope, name); up_ok {
+	} else if up, up_ok := resolve_upvalue(rs.resolutions.current_local_scope, name); up_ok {
 		var = up
 	} else if global, global_ok := current_file_scope(rs)[name]; global_ok {
 		var = global
@@ -201,10 +204,7 @@ assert_variable_exists_and_resolve_it :: proc(
 }
 
 in_file_scope :: proc(rs: ^Resolver) -> bool {
-	return(
-		rs.resolutions.function_scope.enclosing == nil &&
-		rs.resolutions.function_scope._current_scope_depth == 0 \
-	)
+	return rs.resolutions.current_local_scope.enclosing == nil
 }
 
 @(require_results)
@@ -234,8 +234,8 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		return nil
 	}
 
-	var, exists := rs.resolutions.function_scope.variables[name]
-	if exists && var.scope_depth == rs.resolutions.function_scope._current_scope_depth {
+	var, exists := rs.resolutions.current_local_scope.variables[name]
+	if exists && var.scope_depth == rs.resolutions.current_local_scope.scope_depth {
 		return "A variable with this name in this scope already exists."
 	}
 
@@ -251,16 +251,16 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		is_native_value  = true if type == .BUILTIN else false,
 		is_public        = false,
 		initialized      = true,
-		scope_depth      = rs.resolutions.function_scope._current_scope_depth,
-		local_index      = rs.resolutions.function_scope.local_count,
+		scope_depth      = rs.resolutions.current_local_scope.scope_depth,
+		local_index      = rs.resolutions.current_local_scope.current_local_slot,
 	}
-	rs.resolutions.function_scope.local_count += 1
+	rs.resolutions.current_local_scope.current_local_slot += 1
 
 	// if the variable exists in a different scope we just shadow the thing
 	if exists {
 		var.shadower = new_var
 	} else {
-		rs.resolutions.function_scope.variables[fmt.tprint(name)] = new_var
+		rs.resolutions.current_local_scope.variables[fmt.tprint(name)] = new_var
 	}
 
 	return nil
@@ -302,7 +302,7 @@ declare_variable :: proc(
 			is_native_value  = false,
 			is_public        = is_public,
 			initialized      = false,
-			scope_depth      = rs.resolutions.function_scope._current_scope_depth,
+			scope_depth      = rs.resolutions.current_local_scope.scope_depth,
 			local_index      = 0,
 		}
 
@@ -312,8 +312,8 @@ declare_variable :: proc(
 		return nil
 	}
 
-	var, exists := rs.resolutions.function_scope.variables[name]
-	if exists && var.scope_depth == rs.resolutions.function_scope._current_scope_depth {
+	var, exists := rs.resolutions.current_local_scope.variables[name]
+	if exists && var.scope_depth == rs.resolutions.current_local_scope.scope_depth {
 		return "A variable with this name in this scope already exists."
 	}
 
@@ -329,16 +329,16 @@ declare_variable :: proc(
 		is_native_value  = false,
 		is_public        = is_public,
 		initialized      = false,
-		scope_depth      = rs.resolutions.function_scope._current_scope_depth,
-		local_index      = rs.resolutions.function_scope.local_count,
+		scope_depth      = rs.resolutions.current_local_scope.scope_depth,
+		local_index      = rs.resolutions.current_local_scope.current_local_slot,
 	}
-	rs.resolutions.function_scope.local_count += 1
+	rs.resolutions.current_local_scope.current_local_slot += 1
 
 	// if the variable exists in a different scope we just shadow the thing
 	if exists {
 		var.shadower = new_var
 	} else {
-		rs.resolutions.function_scope.variables[fmt.tprint(name)] = new_var
+		rs.resolutions.current_local_scope.variables[fmt.tprint(name)] = new_var
 	}
 
 	return nil
@@ -354,7 +354,7 @@ define_variable :: proc(rs: ^Resolver, name: string) {
 		return
 	}
 
-	v, ok := rs.resolutions.function_scope.variables[name]
+	v, ok := rs.resolutions.current_local_scope.variables[name]
 	if !ok {
 		fmt.panicf("no variable with name %v exists in the function scope", name)
 	}
@@ -507,8 +507,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.expression) or_return
 	case ^FunctionExpr:
 		rs.current_token = e.token
-		push_function_scope_untyped(rs)
-		defer pop_function_scope_untyped(rs)
+		push_current_function_scope_untyped(rs)
+		defer pop_current_function_scope_untyped(rs)
 		for param in e.params {
 			try(
 				rs,
@@ -679,44 +679,40 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	return true
 }
 
-push_function_scope_untyped :: proc(rs: ^Resolver) {
+push_current_function_scope_untyped :: proc(rs: ^Resolver) {
 	fs := new(Scope)
 	fs^ = {
-		enclosing            = rs.resolutions.function_scope,
-		total_scope_depth    = 0,
-		local_count          = 1, // starts at 1 cuz the first local is the function itself
-		variables            = make(map[string]^Symbol),
-		_current_scope_depth = 0,
+		enclosing          = rs.resolutions.current_local_scope,
+		current_local_slot = 1, // starts at 1 cuz the first local is the function itself
+		variables          = make(map[string]^Symbol),
+		scope_depth        = 0 if fs.enclosing == nil else fs.enclosing.scope_depth + 1,
+		kind               = .FUNCTION,
 	}
 
-	rs.resolutions.function_scope = fs
+	rs.resolutions.current_local_scope = fs
 }
 
-pop_function_scope_untyped :: proc(rs: ^Resolver) {
-	rs.resolutions.function_scope = rs.resolutions.function_scope.enclosing
+pop_current_function_scope_untyped :: proc(rs: ^Resolver) {
+	assert(rs.resolutions.current_local_scope != nil)
+	rs.resolutions.current_local_scope = rs.resolutions.current_local_scope.enclosing
 }
 
 push_block_scope_untyped :: proc(rs: ^Resolver) {
-	rs.resolutions.function_scope.total_scope_depth += 1
-	rs.resolutions.function_scope._current_scope_depth += 1
+	fs := new(Scope)
+	fs^ = {
+		enclosing          = rs.resolutions.current_local_scope,
+		current_local_slot = 1 if fs.enclosing == nil else fs.enclosing.scope_depth + 1,
+		variables          = make(map[string]^Symbol),
+		scope_depth        = 0 if fs.enclosing == nil else fs.enclosing.scope_depth + 1,
+		kind               = .BLOCK,
+	}
+
+	rs.resolutions.current_local_scope = fs
 }
 
 pop_block_scope_untyped :: proc(rs: ^Resolver) {
-	assert(
-		rs.resolutions.function_scope._current_scope_depth > 0,
-		"cannot have less than zero block scopes",
-	)
-	depth := rs.resolutions.function_scope._current_scope_depth
-	to_delete: [dynamic]string
-	for name, var in rs.resolutions.function_scope.variables {
-		if var.scope_depth == depth {
-			append(&to_delete, name)
-		}
-	}
-	for name in to_delete {
-		delete_key(&rs.resolutions.function_scope.variables, name)
-	}
-	rs.resolutions.function_scope._current_scope_depth -= 1
+	assert(rs.resolutions.current_local_scope != nil)
+	rs.resolutions.current_local_scope = rs.resolutions.current_local_scope.enclosing
 }
 
 add_native_fns :: #force_inline proc(m: ^map[string]^Symbol) {
@@ -778,7 +774,7 @@ resolve :: proc(graph: []^Module) -> (resolutions: Resolutions, success: bool) {
 		resolutions = Resolutions {
 			resolution_map = make(ResolutionMap),
 			file_scopes = make(map[string]map[string]^Symbol),
-			function_scope = nil,
+			current_local_scope = nil,
 			builtin_scope = make(map[string]^Symbol),
 		},
 		current_module = nil,
@@ -796,8 +792,8 @@ resolve :: proc(graph: []^Module) -> (resolutions: Resolutions, success: bool) {
 		rs.resolutions.file_scopes[module.name] = globals
 
 		rs.current_module = module
-		push_function_scope_untyped(&rs)
-		defer pop_function_scope_untyped(&rs)
+		push_current_function_scope_untyped(&rs)
+		defer pop_current_function_scope_untyped(&rs)
 
 		collect_forward_references(&rs, module.ast) or_return
 		resolve_with_resolver(&rs, module.ast) or_return
