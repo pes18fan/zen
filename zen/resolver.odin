@@ -53,6 +53,37 @@ SymbolKind :: enum {
 	GLOBAL,
 }
 
+// Return a pointer to a heap-allocated symbol with the given params.
+// The symbol is set to uncaptured and unshadowed by default, with the current
+// scope depth and of the resolver and an appropriate local index. The symbol
+// is kept uninitialized by default unless it is a module or native value.
+symb :: #force_inline proc(
+	rs: ^Resolver,
+	name: string,
+	is_final: bool,
+	is_public: bool,
+	is_loop_variable: bool = false,
+	is_module: bool = false,
+	is_native_value: bool = false,
+) -> ^Symbol {
+	s := new(Symbol)
+	s^ = Symbol {
+		shadower         = nil,
+		name             = name,
+		kind             = .GLOBAL if in_file_scope(rs) else .LOCAL,
+		is_final         = is_final,
+		is_loop_variable = is_loop_variable,
+		is_captured      = false,
+		is_module        = is_module,
+		is_native_value  = is_native_value,
+		is_public        = is_public,
+		initialized      = true if (is_native_value || is_module) else false,
+		scope_depth      = 0 if in_file_scope(rs) else rs.resolutions.current_local_scope.scope_depth,
+		local_index      = 0 if in_file_scope(rs) else rs.resolutions.current_local_scope.current_local_slot,
+	}
+	return s
+}
+
 ResolvingNode :: union #no_nil {
 	^AssignExpr,
 	^VariableExpr,
@@ -61,18 +92,18 @@ ResolvingNode :: union #no_nil {
 
 ResolutionMap :: map[ResolvingNode]^Symbol
 
+prune :: #force_inline proc(var: ^Symbol) -> ^Symbol {
+	var := var
+	for var.shadower != nil {
+		var = var.shadower
+	}
+	return var
+}
+
 // Resolve a variable in the entire scope chain. Mark it captured if the variable
 // is found outside of the current function scope.
 @(require_results)
 resolve_local :: proc(fs: ^Scope, name: string, is_upvalue: bool = false) -> (^Symbol, bool) {
-	prune :: #force_inline proc(var: ^Symbol) -> ^Symbol {
-		var := var
-		for var.shadower != nil {
-			var = var.shadower
-		}
-		return var
-	}
-
 	assert(fs != nil)
 	if var, ok := fs.variables[name]; ok {
 		v := prune(var)
@@ -212,22 +243,14 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		if exists {
 			return nil
 		}
-
-		new_var := new(Symbol)
-		new_var^ = {
-			shadower         = nil,
-			name             = fmt.tprint(name),
-			kind             = .GLOBAL,
-			is_final         = true,
-			is_loop_variable = false,
-			is_captured      = false,
-			is_module        = true,
-			is_native_value  = true if type == .BUILTIN else false,
-			is_public        = false,
-			initialized      = true,
-			scope_depth      = 0,
-			local_index      = 0,
-		}
+		new_var := symb(
+			rs,
+			name,
+			is_final = true,
+			is_public = false,
+			is_module = true,
+			is_native_value = true if type == .BUILTIN else false,
+		)
 		current_file_scope(rs)[name] = new_var
 		return nil
 	}
@@ -237,28 +260,21 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		return "A variable with this name in this scope already exists."
 	}
 
-	new_var := new(Symbol)
-	new_var^ = {
-		shadower         = nil,
-		name             = fmt.tprint(name),
-		kind             = .LOCAL,
-		is_final         = true,
-		is_loop_variable = false,
-		is_captured      = false,
-		is_module        = true,
-		is_native_value  = true if type == .BUILTIN else false,
-		is_public        = false,
-		initialized      = true,
-		scope_depth      = rs.resolutions.current_local_scope.scope_depth,
-		local_index      = rs.resolutions.current_local_scope.current_local_slot,
-	}
+	new_var := symb(
+		rs,
+		name,
+		is_final = true,
+		is_public = false,
+		is_module = true,
+		is_native_value = true if type == .BUILTIN else false,
+	)
 	rs.resolutions.current_local_scope.current_local_slot += 1
 
 	// if the variable exists in a different scope we just shadow the thing
 	if exists {
 		var.shadower = new_var
 	} else {
-		rs.resolutions.current_local_scope.variables[fmt.tprint(name)] = new_var
+		rs.resolutions.current_local_scope.variables[name] = new_var
 	}
 
 	return nil
@@ -288,25 +304,8 @@ declare_variable :: proc(
 			}
 		}
 
-		new_var := new(Symbol)
-		new_var^ = {
-			shadower         = nil,
-			name             = fmt.tprint(name),
-			kind             = .GLOBAL,
-			is_final         = is_final,
-			is_loop_variable = is_loop_variable,
-			is_captured      = false,
-			is_module        = false,
-			is_native_value  = false,
-			is_public        = is_public,
-			initialized      = false,
-			scope_depth      = rs.resolutions.current_local_scope.scope_depth,
-			local_index      = 0,
-		}
-
-		// do NOT remove the tprint
-		key := fmt.tprint(name)
-		current_file_scope(rs)[key] = new_var
+		new_var := symb(rs, name, is_final, is_public, is_loop_variable)
+		current_file_scope(rs)[name] = new_var
 		return nil
 	}
 
@@ -315,28 +314,14 @@ declare_variable :: proc(
 		return "A variable with this name in this scope already exists."
 	}
 
-	new_var := new(Symbol)
-	new_var^ = {
-		shadower         = nil,
-		name             = fmt.tprint(name),
-		kind             = .LOCAL,
-		is_final         = is_final,
-		is_loop_variable = is_loop_variable,
-		is_captured      = false,
-		is_module        = false,
-		is_native_value  = false,
-		is_public        = is_public,
-		initialized      = false,
-		scope_depth      = rs.resolutions.current_local_scope.scope_depth,
-		local_index      = rs.resolutions.current_local_scope.current_local_slot,
-	}
+	new_var := symb(rs, name, is_final, is_public, is_loop_variable)
 	rs.resolutions.current_local_scope.current_local_slot += 1
 
 	// if the variable exists in a different scope we just shadow the thing
 	if exists {
 		var.shadower = new_var
 	} else {
-		rs.resolutions.current_local_scope.variables[fmt.tprint(name)] = new_var
+		rs.resolutions.current_local_scope.variables[name] = new_var
 	}
 
 	return nil
@@ -356,11 +341,7 @@ define_variable :: proc(rs: ^Resolver, name: string) {
 	if !ok {
 		fmt.panicf("no variable with name %v exists in the function scope", name)
 	}
-	actual := v
-	for actual.shadower != nil {
-		actual = actual.shadower
-	}
-	actual.initialized = true
+	prune(v).initialized = true
 }
 
 resolver_error :: proc(rs: ^Resolver, message: string, details: string = "") {
@@ -406,21 +387,13 @@ resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool 
 				return false
 			}
 
-			resolved = new(Symbol)
-			resolved^ = {
-				shadower         = nil,
-				name             = e.property.lexeme,
-				kind             = .GLOBAL,
-				is_final         = true,
-				is_loop_variable = false,
-				is_captured      = false,
-				is_module        = false,
-				is_native_value  = true,
-				is_public        = true,
-				initialized      = true,
-				scope_depth      = 0,
-				local_index      = 0,
-			}
+			resolved = symb(
+				rs,
+				e.property.lexeme,
+				is_final = true,
+				is_public = false,
+				is_native_value = true,
+			)
 		} else {
 			var := try2(
 				rs,
