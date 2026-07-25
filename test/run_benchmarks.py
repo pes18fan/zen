@@ -10,19 +10,19 @@ TEXT_BOLD = "\033[1m"
 
 class OS:
     @staticmethod
-    def is_windows():
+    def is_windows() -> bool:
         return platform.system().lower() == "windows"
 
     @staticmethod
-    def is_mac():
+    def is_mac() -> bool:
         return platform.system().lower() == "darwin"
 
     @staticmethod
-    def is_unix():
+    def is_unix() -> bool:
         return not OS.is_windows()
 
     @staticmethod
-    def is_linux():
+    def is_linux() -> bool:
         return OS.is_unix() and not OS.is_mac()
 
 
@@ -31,12 +31,12 @@ compiler = "../bin/rel/zen.exe" if OS.is_windows() else "../bin/rel/zen"
 benchmarks = 0
 
 
-def print_header():
+def print_header() -> None:
     print(f"{COL_RED}ZEN{RESET} {COL_GREEN}BENCHMARKER{RESET}\n")
     print(f"Results are in {TEXT_BOLD}milliseconds{RESET}.")
 
 
-def bench(folder):
+def bench(folder: str) -> None:
     global benchmarks
     print(f"Running benchmarks in directory {TEXT_BOLD}{folder}{RESET}...\n")
 
@@ -67,7 +67,7 @@ def bench(folder):
                 benchmarks += 1
 
 
-def check_if_draft(path):
+def check_if_draft(path: str) -> bool:
     with open(path, "r") as file:
         for line in file:
             if line.strip() == "// DRAFT":
@@ -75,7 +75,7 @@ def check_if_draft(path):
     return False
 
 
-def capture_output(command):
+def capture_output(command: str) -> tuple[str, str, int]:
     try:
         result = subprocess.run(
             command, shell=True, text=True, capture_output=True
