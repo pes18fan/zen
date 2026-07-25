@@ -961,7 +961,11 @@ check_type :: proc(
 			apply_substitution(s_arg, tc.ctx)
 			s = combine_substitutions(s_arg, s)
 		}
-		sn := try_unify(type, apply_substitution(s, ret_type), expected_expression_name) or_return
+		sn := try_unify(
+			apply_substitution(s, type),
+			apply_substitution(s, ret_type),
+			expected_expression_name,
+		) or_return
 
 		s = combine_substitutions(sn, s)
 		add_to_typemap_after_substitution(tc, expr, s, type)
@@ -1046,7 +1050,11 @@ check_type :: proc(
 				"if expression branch",
 			) or_return
 			s = combine_substitutions(s4, s)
-			sn := try_unify(type, joined, expected_expression_name) or_return
+			sn := try_unify(
+				apply_substitution(s, type),
+				joined,
+				expected_expression_name,
+			) or_return
 			s = combine_substitutions(sn, s)
 		} else {
 			// evaluate to nil if no else branch
