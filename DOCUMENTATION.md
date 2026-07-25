@@ -63,10 +63,18 @@ var
     is_cool = true
 ```
 
-Variables must be initialized.
+Variables can be left uninitialized; however they cannot be used until they
+are initialized.
 
 ```zen
-var a;  // this is not allowed!
+var a;
+puts(a + 1)     // not allowed!
+```
+
+```zen
+var a;
+a = 3;
+puts(a + 1)     //=> 4
 ```
 
 > [!NOTE]

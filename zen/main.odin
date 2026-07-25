@@ -104,8 +104,13 @@ run_with_opts :: proc(opt: ^Options) -> int {
 
 	init_natives(&gc)
 
-	script := opt.script
-	if script == "" {
+	if opt.exec != "" {
+		zen_update_path("Command-line input")
+		vm.name = "Command-line input"
+		vm.path = "Command-line input"
+		res := interpret(&vm, vm.gc, opt.exec)
+		return interpret_result_exit_code(res)
+	} else if opt.script == "" {
 		info, stat_err := os.fstat(os.stdin, context.allocator)
 		if stat_err != nil {
 			fmt.eprintfln("Failed to check stdin status: %s", os.error_string(stat_err))
@@ -139,7 +144,7 @@ run_with_opts :: proc(opt: ^Options) -> int {
 			return 1
 		}
 
-		path, join_err := filepath.join([]string{current_dir, script}, context.temp_allocator)
+		path, join_err := filepath.join([]string{current_dir, opt.script}, context.temp_allocator)
 		if join_err != nil {
 			fmt.eprintfln("Failed to get file path: %s", os.error_string(join_err))
 		}
@@ -148,7 +153,7 @@ run_with_opts :: proc(opt: ^Options) -> int {
 		dirname, _ := filepath.split(path)
 		zen_update_dirname(dirname)
 
-		result := run_file(&vm, script)
+		result := run_file(&vm, opt.script)
 		return interpret_result_exit_code(result)
 	}
 }
@@ -194,6 +199,7 @@ opt: Options
 /* Template for command-line args. */
 Options :: struct {
 	script:      string `args:"pos=0" usage:"Input script, omit to use REPL instead."`,
+	exec:        string `usage:"A string of zen code to directly execute."`,
 	compile:     bool `usage:"Compile only, useful with -dump"`,
 	dump:        bool `usage:"Dump disasembled bytecode"`,
 	dump_tokens: bool `usage:"Dump tokens from lexer and exit"`,
@@ -208,7 +214,7 @@ Options :: struct {
 }
 
 in_repl :: proc() -> bool {
-	return opt.script == ""
+	return opt.script == "" && opt.exec != ""
 }
 
 main :: proc() {

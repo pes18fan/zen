@@ -243,24 +243,13 @@ disassemble :: proc(c: ^Chunk, name: string) {
 }
 
 @(disabled = !ODIN_DEBUG)
-dbg_print :: proc(args: ..struct {
-		str:   string,
-		value: any,
-	}) {
+dbg_print :: proc(args: ..any) {
 	fmt.eprint(color_yellow("DEBUG "))
-	for d, idx in args {
-		fmt.eprint(d.str)
-		fmt.eprint("=")
-		fmt.eprint(d.value)
-		fmt.eprintf("%s", "" if idx == len(args) - 1 else ",")
-	}
+	fmt.eprint(..args)
 }
 
 @(disabled = !ODIN_DEBUG)
-dbg_println :: proc(args: ..struct {
-		str:   string,
-		value: any,
-	}) {
+dbg_println :: proc(args: ..any) {
 	dbg_print(..args)
 	fmt.eprint("\n")
 }
