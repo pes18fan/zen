@@ -174,7 +174,12 @@ run_with_opts :: proc(opt: ^Options) -> int {
 	return repl(&vm)
 }
 
-interpret_result_exit_code :: proc(result: InterpretResult) -> int {
+// Exit codes roughly based on the codes defined in Unix's `sysexits.h`, each
+// of the ones used mean the following:
+// 65 -> Input data was incorrect in some way
+// 66 -> An input file did not exist or was unreadable
+// 70 -> An internal software error occured
+interpret_result_exit_code :: #force_inline proc(result: InterpretResult) -> int {
 	switch result {
 	case .INTERPRET_LEX_ERROR:
 		return 65
@@ -185,14 +190,14 @@ interpret_result_exit_code :: proc(result: InterpretResult) -> int {
 	case .INTERPRET_RUNTIME_ERROR:
 		return 70
 	case .INTERPRET_READ_ERROR:
-		return 74
+		return 66
 	case .INTERPRET_VOLUNTARY_EXIT:
 		return zen_get_exit_code()
 	case .INTERPRET_OK:
 		return 0
-	case:
-		return 0
 	}
+
+	fmt.panicf("invalid InterpretResult value %v", result)
 }
 
 @(cold)
@@ -234,10 +239,21 @@ in_repl :: proc() -> bool {
 }
 
 main :: proc() {
+	// Parse cmdline flags first
+	flags.parse_or_exit(&opt, os.args, .Unix)
+	defer delete(opt.overflow)
+
+	if opt.version {
+		fmt.print(color_green("zen "))
+		fmt.println(VERSION)
+		fmt.println("written with <3 by pes18fan")
+		return
+	}
+
 	// Setup custom panic
 	context.assertion_failure_proc = internal_compiler_error
 
-	/* This is to detect memory leaks. Shamelessly stolen from Odin's website lol */
+	// Turn on the tracking allocator on debug mode
 	when ODIN_DEBUG {
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
@@ -259,17 +275,7 @@ main :: proc() {
 		}
 	}
 
-	flags.parse_or_exit(&opt, os.args, .Unix)
-	defer delete(opt.overflow)
-
-	if opt.version {
-		fmt.print(color_green("zen "))
-		fmt.println(VERSION)
-		fmt.println("written with <3 by pes18fan")
-		return
-	}
-
-	// free all temp allocator (arena) allocations (like in tprintf)
+	// Free all temp allocator (arena) allocations (like in tprintf)
 	defer free_all(context.temp_allocator)
 
 	status := run_with_opts(&opt)
