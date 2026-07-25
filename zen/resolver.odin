@@ -75,7 +75,12 @@ resolve_local :: proc(fs: ^Scope, name: string, is_upvalue: bool = false) -> (^S
 
 	assert(fs != nil)
 	if var, ok := fs.variables[name]; ok {
-		return prune(var), true
+		v := prune(var)
+		if is_upvalue {
+			v.is_captured = true
+		}
+
+		return v, true
 	}
 
 	// reached the end of scope chain
@@ -91,28 +96,6 @@ resolve_local :: proc(fs: ^Scope, name: string, is_upvalue: bool = false) -> (^S
 
 	return resolve_local(fs.enclosing, name, is_upvalue)
 }
-
-// @(require_results)
-// resolve_upvalue :: proc(fs: ^Scope, name: string) -> (v: ^Symbol, ok: bool) {
-// 	// nothing found in function scopes, the thing is probably a global variable
-// 	if fs.enclosing == nil {
-// 		return nil, false
-// 	}
-//
-// 	// look for a local in the enclosing one, capture if its there
-// 	if local, local_ok := resolve_local(fs.enclosing, name); local_ok {
-// 		local.is_captured = true
-// 		return local, true
-// 	}
-//
-// 	// recursively look for the value in the enclosing fn
-// 	if up, up_ok := resolve_upvalue(fs.enclosing, name); up_ok {
-// 		return up, true
-// 	}
-//
-// 	// nothing found at all
-// 	return nil, false
-// }
 
 // Looks up a variable through all the scopes one-by-one: local scope, enclosing
 // function scopes, current file's global scope, and finally the builtin value
@@ -422,6 +405,22 @@ resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool 
 				)
 				return false
 			}
+
+			resolved = new(Symbol)
+			resolved^ = {
+				shadower         = nil,
+				name             = e.property.lexeme,
+				kind             = .GLOBAL,
+				is_final         = true,
+				is_loop_variable = false,
+				is_captured      = false,
+				is_module        = false,
+				is_native_value  = true,
+				is_public        = true,
+				initialized      = true,
+				scope_depth      = 0,
+				local_index      = 0,
+			}
 		} else {
 			var := try2(
 				rs,
@@ -445,8 +444,7 @@ resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool 
 				return false
 			}
 
-			resolved = new_clone(var^)
-			resolved.shadower = nil
+			resolved = var
 		}
 
 		rs.resolutions.resolution_map[e] = resolved
@@ -489,9 +487,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 
 		var.initialized = true
 
-		resolved := new_clone(var^)
-		resolved.shadower = nil
-		rs.resolutions.resolution_map[e] = resolved
+		rs.resolutions.resolution_map[e] = var
 	case ^BinaryExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.left) or_return
@@ -644,9 +640,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			return false
 		}
 
-		resolved := new_clone(var^)
-		resolved.shadower = nil
-		rs.resolutions.resolution_map[e] = resolved
+		rs.resolutions.resolution_map[e] = var
 	case ^VarDeclExpr:
 		rs.current_token = e.token
 		is_final := e.is_final
@@ -695,12 +689,13 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 }
 
 push_current_function_scope_untyped :: proc(rs: ^Resolver) {
+	enclosing := rs.resolutions.current_local_scope
 	fs := new(Scope)
 	fs^ = {
-		enclosing          = rs.resolutions.current_local_scope,
+		enclosing          = enclosing,
 		current_local_slot = 1, // starts at 1 cuz the first local is the function itself
 		variables          = make(map[string]^Symbol),
-		scope_depth        = 0 if fs.enclosing == nil else fs.enclosing.scope_depth + 1,
+		scope_depth        = 0 if enclosing == nil else enclosing.scope_depth + 1,
 		kind               = .FUNCTION,
 	}
 
@@ -713,12 +708,13 @@ pop_current_function_scope_untyped :: proc(rs: ^Resolver) {
 }
 
 push_block_scope_untyped :: proc(rs: ^Resolver) {
+	enclosing := rs.resolutions.current_local_scope
 	fs := new(Scope)
 	fs^ = {
-		enclosing          = rs.resolutions.current_local_scope,
-		current_local_slot = 1 if fs.enclosing == nil else fs.enclosing.scope_depth + 1,
+		enclosing          = enclosing,
+		current_local_slot = 1 if enclosing == nil else enclosing.scope_depth + 1,
 		variables          = make(map[string]^Symbol),
-		scope_depth        = 0 if fs.enclosing == nil else fs.enclosing.scope_depth + 1,
+		scope_depth        = 0 if enclosing == nil else enclosing.scope_depth + 1,
 		kind               = .BLOCK,
 	}
 
