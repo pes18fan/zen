@@ -844,11 +844,14 @@ interpret :: proc(
 	}
 	defer vmem.arena_destroy(&arena)
 
+	// temporarily switch to arena
 	arena_allocator := vmem.arena_allocator(&arena)
 	prev_alloc := context.allocator
 	context.allocator = arena_allocator
 
 	source_in_arena := strings.clone(source) // clone into the arena
+
+	// Grab tokens from the source.
 	tokens, lx_ok := lex(source_in_arena)
 	if !lx_ok {
 		return .INTERPRET_LEX_ERROR
@@ -863,6 +866,7 @@ interpret :: proc(
 	}
 
 	when ODIN_DEBUG {
+		// Print tokens and exit, if the `dump-tokens` flag is provided.
 		if opt.dump_tokens {
 			fmt.println("TOKENS:")
 			for token in tokens {
@@ -877,6 +881,7 @@ interpret :: proc(
 		}
 	}
 
+	// Parse the tokens into an AST.
 	expr, ps_ok := parse(tokens)
 	if !ps_ok {
 		return .INTERPRET_PARSE_ERROR
@@ -891,6 +896,7 @@ interpret :: proc(
 	}
 
 	when ODIN_DEBUG {
+		// Dump a string version of the AST, when `dump-ast` flag is given.
 		if opt.dump_ast {
 			str := ast_string(expr)
 			fmt.println(str)
@@ -899,6 +905,7 @@ interpret :: proc(
 		}
 	}
 
+	// Run basic semantic analysis on the AST.
 	sm_ok := semcheck(expr)
 	if !sm_ok {
 		return .INTERPRET_COMPILE_ERROR
@@ -912,6 +919,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
+	// Create a topologically sorted module graph of all the imports of the AST.
 	graph, mod_ok := create_module_graph(zen_get_path(), source, tokens, expr)
 	if !mod_ok {
 		return .INTERPRET_COMPILE_ERROR
@@ -925,6 +933,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
+	// Resolve all names in the module graph.
 	reso, rs_ok := resolve(graph)
 	if !rs_ok {
 		return .INTERPRET_COMPILE_ERROR
