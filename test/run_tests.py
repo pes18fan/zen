@@ -19,19 +19,19 @@ STRICT = False
 
 class OS:
     @staticmethod
-    def is_windows():
+    def is_windows() -> bool:
         return platform.system().lower() == "windows"
 
     @staticmethod
-    def is_mac():
+    def is_mac() -> bool:
         return platform.system().lower() == "darwin"
 
     @staticmethod
-    def is_unix():
+    def is_unix() -> bool:
         return not OS.is_windows()
 
     @staticmethod
-    def is_linux():
+    def is_linux() -> bool:
         return OS.is_unix() and not OS.is_mac()
 
 
@@ -47,11 +47,11 @@ if not os.path.exists(interpreter):
     exit(1)
 
 
-def print_header():
+def print_header() -> None:
     print(f"{COL_RED}ZEN{RESET} {COL_GREEN}TESTER{RESET}\n")
 
 
-def test(folder):
+def test(folder: str) -> None:
     global tests, passed
     print(f"Now testing in directory {TEXT_BOLD}{folder}{RESET}...\n")
 
@@ -127,7 +127,7 @@ def test(folder):
             tests += 1
 
 
-def read_expected_output(path):
+def read_expected_output(path: str) -> tuple[str, str, bool, bool]:
     expected_output = []
     expected_error = []
     wants_error = False
@@ -154,7 +154,7 @@ def read_expected_output(path):
     )
 
 
-def multiline_output_match(actual_output, expected_output):
+def multiline_output_match(actual_output: str, expected_output: str) -> bool:
     actual_lines = actual_output.strip().splitlines()
     expected_lines = expected_output.strip().splitlines()
 
@@ -166,7 +166,7 @@ def multiline_output_match(actual_output, expected_output):
     )
 
 
-def check_for_leaks(stderr: str):
+def check_for_leaks(stderr: str) -> tuple[bool, str]:
     for marker in LEAK_MARKERS:
         if marker in stderr:
             return True, stderr
