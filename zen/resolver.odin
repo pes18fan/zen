@@ -61,42 +61,58 @@ ResolvingNode :: union #no_nil {
 
 ResolutionMap :: map[ResolvingNode]^Symbol
 
+// Resolve a variable in the entire scope chain. Mark it captured if the variable
+// is found outside of the current function scope.
 @(require_results)
-resolve_local :: proc(fs: ^Scope, name: string) -> (^Symbol, bool) {
-	var, ok := fs.variables[name]
-	if !ok {
-		return nil, false
+resolve_local :: proc(fs: ^Scope, name: string, is_upvalue: bool = false) -> (^Symbol, bool) {
+	prune :: #force_inline proc(var: ^Symbol) -> ^Symbol {
+		var := var
+		for var.shadower != nil {
+			var = var.shadower
+		}
+		return var
 	}
 
-	actual := var
-	for actual.shadower != nil {
-		actual = actual.shadower
+	assert(fs != nil)
+	if var, ok := fs.variables[name]; ok {
+		return prune(var), true
 	}
 
-	return var, true
-}
-
-@(require_results)
-resolve_upvalue :: proc(fs: ^Scope, name: string) -> (v: ^Symbol, ok: bool) {
-	// nothing found in function scopes, the thing is probably a global variable
+	// reached the end of scope chain
 	if fs.enclosing == nil {
 		return nil, false
 	}
 
-	// look for a local in the enclosing one, capture if its there
-	if local, local_ok := resolve_local(fs.enclosing, name); local_ok {
-		local.is_captured = true
-		return local, true
+	is_upvalue := is_upvalue
+	if fs.kind == .FUNCTION {
+		// we are past the lowest function scope
+		is_upvalue = true
 	}
 
-	// recursively look for the value in the enclosing fn
-	if up, up_ok := resolve_upvalue(fs.enclosing, name); up_ok {
-		return up, true
-	}
-
-	// nothing found at all
-	return nil, false
+	return resolve_local(fs.enclosing, name, is_upvalue)
 }
+
+// @(require_results)
+// resolve_upvalue :: proc(fs: ^Scope, name: string) -> (v: ^Symbol, ok: bool) {
+// 	// nothing found in function scopes, the thing is probably a global variable
+// 	if fs.enclosing == nil {
+// 		return nil, false
+// 	}
+//
+// 	// look for a local in the enclosing one, capture if its there
+// 	if local, local_ok := resolve_local(fs.enclosing, name); local_ok {
+// 		local.is_captured = true
+// 		return local, true
+// 	}
+//
+// 	// recursively look for the value in the enclosing fn
+// 	if up, up_ok := resolve_upvalue(fs.enclosing, name); up_ok {
+// 		return up, true
+// 	}
+//
+// 	// nothing found at all
+// 	return nil, false
+// }
 
 // Looks up a variable through all the scopes one-by-one: local scope, enclosing
 // function scopes, current file's global scope, and finally the builtin value
@@ -118,8 +134,6 @@ resolve_variable :: proc(
 
 	if local, local_ok := resolve_local(rs.resolutions.current_local_scope, name); local_ok {
 		var = local
-	} else if up, up_ok := resolve_upvalue(rs.resolutions.current_local_scope, name); up_ok {
-		var = up
 	} else if global, global_ok := current_file_scope(rs)[name]; global_ok {
 		var = global
 	} else if builtin, builtin_ok := rs.resolutions.builtin_scope[name]; builtin_ok {

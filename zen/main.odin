@@ -104,40 +104,28 @@ run_with_opts :: proc(opt: ^Options) -> int {
 
 	init_natives(&gc)
 
+	// There are four ways to execute code via the zen binary, prioritized in
+	// the following order:
+	// - Via the `--exec` command line flag, where you can give a string of zen
+	//      code which is directly sent to the interpreter.
+	// - By providing a path to a file on disk, which is read and interpreted
+	//      as zen code.
+	// - By piping a string into the binary; the string is also directly sent
+	//      to the interpreter as zen code.
+	// - Via the REPL; it is opened by simply invoking the zen binary with no
+	//      arguments.
+
+	// First check if an `--exec` string was provided, if so directly interpret
 	if opt.exec != "" {
 		zen_update_path("Command-line input")
 		vm.name = "Command-line input"
 		vm.path = "Command-line input"
 		res := interpret(&vm, vm.gc, opt.exec)
 		return interpret_result_exit_code(res)
-	} else if opt.script == "" {
-		info, stat_err := os.fstat(os.stdin, context.allocator)
-		if stat_err != nil {
-			fmt.eprintfln("Failed to check stdin status: %s", os.error_string(stat_err))
-		}
-		defer delete(info.fullpath)
+	}
 
-		if info.type == .Named_Pipe {
-			buf: [1024]byte
-			n, err := os.read(os.stdin, buf[:])
-			if err != nil {
-				if err == .EOF {
-					return 0
-				}
-				fmt.eprintfln("Failed to read from stdin: %s", os.error_string(err))
-			}
-
-			zen_update_path("Piped input")
-			vm.name = "Piped input"
-			vm.path = "Piped input"
-			res := interpret(&vm, vm.gc, string(buf[:n]))
-			return interpret_result_exit_code(res)
-		} else {
-			// TODO: repl currently has no persistence, figure out a way to make
-			// that possible
-			return repl(&vm)
-		}
-	} else {
+	// Check if a filepath was provided; if so start the work on running it
+	if opt.script != "" {
 		current_dir, wkdir_err := os.get_working_directory(context.temp_allocator)
 		if wkdir_err != nil {
 			fmt.eprintfln("Failed to get working directory: %s", os.error_string(wkdir_err))
@@ -156,6 +144,34 @@ run_with_opts :: proc(opt: ^Options) -> int {
 		result := run_file(&vm, opt.script)
 		return interpret_result_exit_code(result)
 	}
+
+	// Now check stdin and see if something was piped in; if so directly interpret
+	info, stat_err := os.fstat(os.stdin, context.allocator)
+	if stat_err != nil {
+		fmt.eprintfln("Failed to check stdin status: %s", os.error_string(stat_err))
+	}
+	defer delete(info.fullpath)
+
+	if info.type == .Named_Pipe {
+		buf: [1024]byte
+		n, err := os.read(os.stdin, buf[:])
+		if err != nil {
+			if err == .EOF {
+				return 0
+			}
+			fmt.eprintfln("Failed to read from stdin: %s", os.error_string(err))
+		}
+
+		zen_update_path("Piped input")
+		vm.name = "Piped input"
+		vm.path = "Piped input"
+		res := interpret(&vm, vm.gc, string(buf[:n]))
+		return interpret_result_exit_code(res)
+	}
+
+	// None of the above cases were true: no `--exec`, no script arg, and no
+	// piped input; so run the REPL
+	return repl(&vm)
 }
 
 interpret_result_exit_code :: proc(result: InterpretResult) -> int {
@@ -200,21 +216,21 @@ opt: Options
 Options :: struct {
 	script:      string `args:"pos=0" usage:"Input script, omit to use REPL instead."`,
 	exec:        string `usage:"A string of zen code to directly execute."`,
-	compile:     bool `usage:"Compile only, useful with -dump"`,
-	dump:        bool `usage:"Dump disasembled bytecode"`,
-	dump_tokens: bool `usage:"Dump tokens from lexer and exit"`,
-	dump_ast:    bool `usage:"Dump the abstract syntax tree from the parser and exit"`,
-	trace:       bool `usage:"Trace script execution"`,
-	stress_gc:   bool `usage:"Run the garbage collector on every allocation"`,
-	log_gc:      bool `usage:"Log garbage collection"`,
-	log_checker: bool `usage:"Log the type checker"`,
-	time:        bool `usage:"Record time taken to run various stages of the compiler"`,
+	compile:     bool `usage:"Compile only, useful with -dump."`,
+	dump:        bool `usage:"Dump disasembled bytecode."`,
+	dump_tokens: bool `usage:"Dump tokens from lexer and exit."`,
+	dump_ast:    bool `usage:"Dump the abstract syntax tree from the parser and exit."`,
+	trace:       bool `usage:"Trace script execution."`,
+	stress_gc:   bool `usage:"Run the garbage collector on every allocation."`,
+	log_gc:      bool `usage:"Log garbage collection."`,
+	log_checker: bool `usage:"Log the type checker."`,
+	time:        bool `usage:"Record time taken to run various stages of the compiler."`,
 	version:     bool `usage:"Print version information and exit."`,
-	overflow:    [dynamic]string `usage:"Arguments to the program"`,
+	overflow:    [dynamic]string `usage:"Arguments to the program."`,
 }
 
 in_repl :: proc() -> bool {
-	return opt.script == "" && opt.exec != ""
+	return opt.script == "" && opt.exec == ""
 }
 
 main :: proc() {

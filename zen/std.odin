@@ -338,7 +338,7 @@ get_global_builtin_function_signature :: proc(
 
 
 init_natives :: proc(gc: ^GC) {
-	for fn in GLOBAL_BUILTIN_FUNCTIONS {
+	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
 		define_native(gc, fn.name, fn.function, fn.arity)
 	}
 }
