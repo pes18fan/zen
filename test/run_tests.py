@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import subprocess
 import platform
@@ -6,6 +7,7 @@ import argparse
 COL_RED = "\033[31m"
 COL_GREEN = "\033[32m"
 COL_YELLOW = "\033[33m"
+COL_BLUE = "\033[34m"
 RESET = "\033[0m"
 TEXT_BOLD = "\033[1m"
 
@@ -48,7 +50,7 @@ if not os.path.exists(interpreter):
 
 
 def print_header() -> None:
-    print(f"{COL_RED}ZEN{RESET} {COL_GREEN}TESTER{RESET}\n")
+    print(f"{COL_BLUE}ZEN{RESET} {COL_GREEN}TESTER{RESET}\n")
 
 
 def test(folder: str) -> None:
