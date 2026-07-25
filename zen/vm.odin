@@ -109,7 +109,7 @@ vm_panic :: proc(vm: ^VM, format: string, args: ..any) {
 	}
 
 	fmt.eprint(color_yellow("  (at"))
-	if vm.path == "REPL" {
+	if in_repl() {
 		fmt.eprint(color_yellow(" REPL)\n"))
 	} else {
 		fmt.eprint(color_yellow(fmt.tprintf(" file %s)\n", vm.path)))
@@ -745,8 +745,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 					return result /* Return the errored program back out */
 				}
 
-				pop(&vm.gc.import_stack) /* Remove the path from the import stack. */
-
 				vm_push(vm, obj_val(module))
 			}
 		case .OP_MODULE_USER_LONG:
@@ -776,8 +774,6 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				if result != .INTERPRET_OK {
 					return result /* Return the errored program back out */
 				}
-
-				pop(&vm.gc.import_stack) /* Remove the path from the import stack. */
 
 				vm_push(vm, obj_val(module))
 			}
@@ -835,17 +831,6 @@ interpret :: proc(
 	source: string,
 	importer: Maybe(ImportingModule) = nil,
 ) -> InterpretResult {
-	/* If the name of the VM and the importing module are both the same (if the
-     * importing module is not nil), then we have a cyclic import, which causes
-     * all sorts of problems. So we have to disallow that. */
-	_, importer_exists := importer.?
-	if importer_exists && slice.contains(vm.gc.import_stack[:], vm.path) {
-		vm_panic(vm, "Cannot perform a cyclic import.")
-		return .INTERPRET_RUNTIME_ERROR
-	}
-
-	append(&vm.gc.import_stack, vm.path)
-
 	/* Start the stopwatch. */
 	sw: time.Stopwatch
 	if opt.time {

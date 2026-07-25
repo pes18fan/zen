@@ -27,12 +27,6 @@ GC :: struct {
 
 	/* All the strings that have been allocated. */
 	strings:         Table,
-
-	/* The stack of modules that have been imported so far in the program,
-     * represented by their paths. For instance, if you run "a.zn" which imports
-     * "b.zn" which then imports "c.zn", the import stack would be something like
-     * ["a.zn", "b.zn", "c.zn"] */
-	import_stack:    [dynamic]string,
 }
 
 /* Source for the roots for the root marking step in the GC. */
@@ -73,7 +67,6 @@ init_gc :: proc() -> GC {
 		gray_count = 0,
 		mark_roots_arg = nil,
 		strings = init_table(),
-		import_stack = make([dynamic]string),
 		globals = init_table(),
 	}
 }
@@ -83,7 +76,6 @@ free_gc :: proc(gc: ^GC) {
 	free_table(&gc.strings)
 	free_table(&gc.globals)
 	free_objects(gc)
-	delete(gc.import_stack)
 	delete(gc.gray_stack)
 }
 
