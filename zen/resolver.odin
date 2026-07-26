@@ -10,7 +10,6 @@ Resolver :: struct #all_or_none {
 	resolution_map:      ResolutionMap,
 	current_module:      ^Module,
 	current_token:       Token,
-	typevar_count:       int,
 }
 
 // Return the global scope of the file that the resolver is currently resolving.
@@ -748,7 +747,6 @@ resolve :: proc(graph: []^Module) -> (resolutions: ResolutionMap, success: bool)
 		builtin_scope       = make(map[string]^Symbol),
 		current_module      = nil,
 		current_token       = {},
-		typevar_count       = 0,
 	}
 	inject_builtin_functions(&rs.builtin_scope)
 
