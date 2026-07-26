@@ -175,7 +175,7 @@ mark_compiler_roots :: proc(gc: ^GC, compiler: ^Compiler) {
  * open upvalues. */
 mark_vm_roots :: proc(gc: ^GC, vm: ^VM) {
 	/* Mark the VM's stack. */
-	for i := 0; i <= vm.stack_top; i += 1 {
+	for i := 0; i <= vm.sp; i += 1 {
 		value := vm.stack[i]
 		mark_value(gc, value)
 	}

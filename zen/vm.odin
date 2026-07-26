@@ -54,7 +54,7 @@ VM :: struct #all_or_none {
 
 	/* The stack of values. */
 	stack:            [STACK_MAX]Value,
-	stack_top:        int,
+	sp:               int,
 
 	/* Call frames present in the chunk. */
 	frames:           [FRAMES_MAX]CallFrame,
@@ -160,7 +160,7 @@ define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 
 /* Resets the stack. */
 reset_stack :: proc(vm: ^VM) {
-	vm.stack_top = -1
+	vm.sp = -1
 	vm.frame_count = 0
 	vm.open_upvalues = nil
 }
@@ -173,7 +173,7 @@ init_VM :: proc() -> VM {
 		chunk            = nil,
 		open_upvalues    = nil,
 		compiler_globals = init_table(),
-		stack_top        = -1,
+		sp               = -1,
 		frame_count      = 0,
 		args             = nil,
 		it               = nil_val(),
@@ -291,7 +291,7 @@ numeric_binary_op :: #force_inline proc(
 @(private = "file")
 print_stack :: proc(vm: ^VM) {
 	fmt.printf("          ")
-	for i := 0; i <= vm.stack_top; i += 1 {
+	for i := 0; i <= vm.sp; i += 1 {
 		value := vm.stack[i]
 		fmt.eprintf("[ ")
 		print_value(os.stderr, value)
@@ -668,7 +668,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				}
 			}
 		case .OP_CLOSE_UPVALUE:
-			close_upvalues(vm, &vm.stack[vm.stack_top])
+			close_upvalues(vm, &vm.stack[vm.sp])
 			vm_pop(vm)
 		case .OP_CLOSE_LOOP_VAR:
 			slot := read_byte(frame)
@@ -687,14 +687,14 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 
 			/* Pop off all of the local variables and arguments of the
 			   function. */
-			for i := vm.stack_top; i >= 0; i -= 1 {
+			for i := vm.sp; i >= 0; i -= 1 {
 				value := vm.stack[i]
 				if values_equal(value, frame.slots^) {
 					break
 				}
 				vm_pop(vm)
 			}
-			assert(vm.stack_top >= 0, "stack must not become empty before program end") // There should be at least the function left here
+			assert(vm.sp >= 0, "stack must not become empty before program end") // There should be at least the function left here
 			vm_pop(vm) // Pop the function itself.
 
 			vm_push(vm, result) // Push the return value back to the stack.
@@ -1023,20 +1023,20 @@ interpret :: proc(
 
 /* Push a value onto the stack. */
 vm_push :: #force_inline proc(vm: ^VM, value: Value) #no_bounds_check {
-	vm.stack_top += 1
-	vm.stack[vm.stack_top] = value
+	vm.sp += 1
+	vm.stack[vm.sp] = value
 }
 
 /* Pop a value out of the stack. */
 vm_pop :: #force_inline proc(vm: ^VM) -> Value #no_bounds_check {
-	assert(vm.stack_top >= 0, "vm stack must not be empty\n")
-	defer vm.stack_top -= 1
-	return vm.stack[vm.stack_top]
+	assert(vm.sp >= 0, "vm stack must not be empty\n")
+	defer vm.sp -= 1
+	return vm.stack[vm.sp]
 }
 
 /* Peek at a certain distance from the top of the stack. */
 vm_peek :: #force_inline proc(vm: ^VM, distance: int) -> Value #no_bounds_check {
-	return vm.stack[vm.stack_top - distance]
+	return vm.stack[vm.sp - distance]
 }
 
 /* Returns true if provided value is falsey. */
@@ -1067,7 +1067,7 @@ call :: proc(vm: ^VM, closure: ^ObjClosure, arg_count: int) -> bool {
 
 	// Subtract the stack top index by the number of args to get the beginning
 	// of the frame.
-	frame.slots = &vm.stack[vm.stack_top - arg_count]
+	frame.slots = &vm.stack[vm.sp - arg_count]
 	return true
 }
 
@@ -1093,7 +1093,7 @@ call_value :: proc(vm: ^VM, callee: Value, arg_count: int) -> (success: bool) {
 			native := as_native(callee)
 
 			// Add a 1 to the stack indexing to exclude the native function itself
-			result, ok := native(vm, arg_count, vm.stack[vm.stack_top - arg_count + 1:])
+			result, ok := native(vm, arg_count, vm.stack[vm.sp - arg_count + 1:])
 			if !ok {
 				return false
 			}
