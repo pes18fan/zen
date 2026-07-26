@@ -64,7 +64,7 @@ Substitution :: map[TypeVariable]Type
 resolve_type_of_variable :: proc(
 	tc: ^TypeChecker,
 	name: string,
-	node: ResolvingNode,
+	node: ResolvingExpr,
 ) -> (
 	scheme: TypeScheme,
 	err: ErrorMessage,
@@ -77,7 +77,7 @@ resolve_type_of_variable :: proc(
 }
 
 @(require_results)
-resolve_type :: proc(tc: ^TypeChecker, name: string, node: ResolvingNode) -> TypeScheme {
+resolve_type :: proc(tc: ^TypeChecker, name: string, node: ResolvingExpr) -> TypeScheme {
 	t, _ := resolve_type_with_module_info(tc, name, node)
 	return t
 }
@@ -86,7 +86,7 @@ resolve_type :: proc(tc: ^TypeChecker, name: string, node: ResolvingNode) -> Typ
 resolve_type_with_module_info :: proc(
 	tc: ^TypeChecker,
 	name: string,
-	node: ResolvingNode,
+	node: ResolvingExpr,
 ) -> (
 	scheme: TypeScheme,
 	is_module: bool,
@@ -1698,7 +1698,7 @@ typecheck_inner :: proc(tc: ^TypeChecker, expr: Expr) -> (type: Type, success: b
 }
 
 @(require_results)
-typecheck :: proc(expr: Expr, resolutions: Resolutions) -> (typemap: TypeMap, success: bool) {
+typecheck :: proc(expr: Expr, resolutions: ResolutionMap) -> (typemap: TypeMap, success: bool) {
 	when ODIN_DEBUG {
 		if opt.log_checker {
 			fmt.eprintln("-- typechecker begin")
@@ -1711,7 +1711,7 @@ typecheck :: proc(expr: Expr, resolutions: Resolutions) -> (typemap: TypeMap, su
 	tc := new(TypeChecker)
 	tc^ = TypeChecker {
 		ctx           = nil,
-		resolutions   = resolutions.resolution_map,
+		resolutions   = resolutions,
 		typemap       = make(TypeMap),
 		typevar_count = 0,
 		current_token = {},
