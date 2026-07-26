@@ -2,25 +2,23 @@ package zen
 
 import "core:fmt"
 
+// The state of the resolver.
 Resolver :: struct #all_or_none {
-	resolutions:    Resolutions,
-	current_module: ^Module,
-	current_token:  Token,
-	typevar_count:  int,
-}
-
-Resolutions :: struct #all_or_none {
 	file_scopes:         map[string]map[string]^Symbol, // global scopes for each file
 	current_local_scope: ^Scope, // chain of local scopes of a file
 	builtin_scope:       map[string]^Symbol, // topmost scope; common to all files
 	resolution_map:      ResolutionMap,
+	current_module:      ^Module,
+	current_token:       Token,
+	typevar_count:       int,
 }
 
+// Return the global scope of the file that the resolver is currently resolving.
 current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^Symbol {
-	return &rs.resolutions.file_scopes[rs.current_module.name]
+	return &rs.file_scopes[rs.current_module.name]
 }
 
-// A local scope of bindings; can be a function scope or a block scope.
+// A local scope of bindings
 Scope :: struct #all_or_none {
 	enclosing:          ^Scope,
 	kind:               ScopeKind,
@@ -29,6 +27,8 @@ Scope :: struct #all_or_none {
 	scope_depth:        int,
 }
 
+// Kind of a scope; can be a function scope or local scope. This affects the
+// setting of the `is_captured` flag on `Symbol`s.
 ScopeKind :: enum {
 	FUNCTION,
 	BLOCK,
@@ -79,23 +79,26 @@ symb :: #force_inline proc(
 		is_native_value  = is_native_value,
 		is_public        = is_public,
 		initialized      = true if (is_native_value || is_module) else false,
-		scope_depth      = 0 if in_file_scope(rs) else rs.resolutions.current_local_scope.scope_depth,
-		local_index      = 0 if in_file_scope(rs) else rs.resolutions.current_local_scope.current_local_slot,
+		scope_depth      = 0 if in_file_scope(rs) else rs.current_local_scope.scope_depth,
+		local_index      = 0 if in_file_scope(rs) else rs.current_local_scope.current_local_slot,
 	}
 	return s
 }
 
-ResolvingNode :: union #no_nil {
+// Expressions that can refer to a name.
+ResolvingExpr :: union #no_nil {
 	^AssignExpr,
 	^VariableExpr,
 	^ModuleAccessExpr,
 }
 
-ResolutionMap :: map[ResolvingNode]^Symbol
+// A map mapping `ResolvingExpr`s to the `Symbol`s they resolve to. It is the
+// output of the resolver.
+ResolutionMap :: map[ResolvingExpr]^Symbol
 
 // Enter a scope of the given `kind`.
 enter_scope :: proc(rs: ^Resolver, kind: ScopeKind) {
-	enclosing := rs.resolutions.current_local_scope
+	enclosing := rs.current_local_scope
 	starting_local_slot: int
 	switch kind {
 	case .FUNCTION:
@@ -117,19 +120,19 @@ enter_scope :: proc(rs: ^Resolver, kind: ScopeKind) {
 		kind               = kind,
 	}
 
-	rs.resolutions.current_local_scope = fs
+	rs.current_local_scope = fs
 }
 
 // Exit the current local scope.
 exit_scope :: proc(rs: ^Resolver) {
-	assert(rs.resolutions.current_local_scope != nil)
-	rs.resolutions.current_local_scope = rs.resolutions.current_local_scope.enclosing
+	assert(rs.current_local_scope != nil)
+	rs.current_local_scope = rs.current_local_scope.enclosing
 }
 
 // Are we in the global scope within a module?
 @(require_results)
 in_file_scope :: proc(rs: ^Resolver) -> bool {
-	return rs.resolutions.current_local_scope.enclosing == nil
+	return rs.current_local_scope.enclosing == nil
 }
 
 // Resolve a variable in the entire scope chain. Mark it captured if the variable
@@ -177,11 +180,11 @@ resolve_variable :: proc(
 ) {
 	var: ^Symbol
 
-	if local, local_ok := resolve_local(rs.resolutions.current_local_scope, name); local_ok {
+	if local, local_ok := resolve_local(rs.current_local_scope, name); local_ok {
 		var = local
 	} else if global, global_ok := current_file_scope(rs)[name]; global_ok {
 		var = global
-	} else if builtin, builtin_ok := rs.resolutions.builtin_scope[name]; builtin_ok {
+	} else if builtin, builtin_ok := rs.builtin_scope[name]; builtin_ok {
 		var = builtin
 	} else {
 		return nil, nil
@@ -194,6 +197,8 @@ resolve_variable :: proc(
 	return var, nil
 }
 
+// Resolve a variable in a module, erroring out if it is uninitialized (unless
+// `allow_uninitialized` is set).
 @(require_results)
 resolve_variable_in_module :: proc(
 	rs: ^Resolver,
@@ -204,7 +209,7 @@ resolve_variable_in_module :: proc(
 	^Symbol,
 	ErrorMessage,
 ) {
-	file_scope := rs.resolutions.file_scopes[module_name]
+	file_scope := rs.file_scopes[module_name]
 
 	// look in the file scope
 	global, global_ok := file_scope[variable_name]
@@ -219,8 +224,10 @@ resolve_variable_in_module :: proc(
 	return global, nil
 }
 
+// Attempt to resolve a variable accessed via module access, erroring out if
+// it doesn't exist or some other error occured.
 @(require_results)
-assert_module_variable_exists_and_resolve_it :: proc(
+try_resolve_module_variable :: proc(
 	rs: ^Resolver,
 	module_name: string,
 	variable_name: string,
@@ -246,8 +253,10 @@ assert_module_variable_exists_and_resolve_it :: proc(
 	return var, nil
 }
 
+// Attempt to resolve a variable, erroring out if it doesn't exist or some
+// other error occured.
 @(require_results)
-assert_variable_exists_and_resolve_it :: proc(
+try_resolve_variable :: proc(
 	rs: ^Resolver,
 	name: string,
 	allow_uninitialized: bool = false,
@@ -263,6 +272,7 @@ assert_variable_exists_and_resolve_it :: proc(
 	return var, nil
 }
 
+// Declare and define a module in the current scope.
 @(require_results)
 declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType) -> ErrorMessage {
 	if in_file_scope(rs) {
@@ -282,8 +292,8 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		return nil
 	}
 
-	var, exists := rs.resolutions.current_local_scope.variables[name]
-	if exists && var.scope_depth == rs.resolutions.current_local_scope.scope_depth {
+	var, exists := rs.current_local_scope.variables[name]
+	if exists && var.scope_depth == rs.current_local_scope.scope_depth {
 		return "A variable with this name in this scope already exists."
 	}
 
@@ -295,14 +305,15 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		is_module = true,
 		is_native_value = true if type == .BUILTIN else false,
 	)
-	rs.resolutions.current_local_scope.current_local_slot += 1
+	rs.current_local_scope.current_local_slot += 1
 
 	// put it in the scope
-	rs.resolutions.current_local_scope.variables[name] = new_var
+	rs.current_local_scope.variables[name] = new_var
 
 	return nil
 }
 
+// Declare the existence of a variable in the current scope.
 @(require_results)
 declare_variable :: proc(
 	rs: ^Resolver,
@@ -332,20 +343,21 @@ declare_variable :: proc(
 		return nil
 	}
 
-	var, exists := rs.resolutions.current_local_scope.variables[name]
-	if exists && var.scope_depth == rs.resolutions.current_local_scope.scope_depth {
+	var, exists := rs.current_local_scope.variables[name]
+	if exists && var.scope_depth == rs.current_local_scope.scope_depth {
 		return "A variable with this name in this scope already exists."
 	}
 
 	new_var := symb(rs, name, is_final, is_public, is_loop_variable)
-	rs.resolutions.current_local_scope.current_local_slot += 1
+	rs.current_local_scope.current_local_slot += 1
 
 	// put it in the scope
-	rs.resolutions.current_local_scope.variables[name] = new_var
+	rs.current_local_scope.variables[name] = new_var
 
 	return nil
 }
 
+// Mark a variable as defined.
 define_variable :: proc(rs: ^Resolver, name: string) {
 	if in_file_scope(rs) {
 		var, ok := current_file_scope(rs)[name]
@@ -356,19 +368,17 @@ define_variable :: proc(rs: ^Resolver, name: string) {
 		return
 	}
 
-	var, ok := rs.resolutions.current_local_scope.variables[name]
+	var, ok := rs.current_local_scope.variables[name]
 	if !ok {
 		fmt.panicf("no variable with name %v exists in the function scope", name)
 	}
 	var.initialized = true
 }
 
+// Resolve the module import and accessed value in a `ModuleAccessExpr`.
 resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool {
 	if var_e, ok := e.receiver.(^VariableExpr); ok {
-		receiver_var := try2(
-			rs,
-			assert_variable_exists_and_resolve_it(rs, var_e.token.lexeme),
-		) or_return
+		receiver_var := try2(rs, try_resolve_variable(rs, var_e.token.lexeme)) or_return
 		if !receiver_var.is_module {
 			resolver_error(
 				rs,
@@ -411,11 +421,7 @@ resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool 
 		} else {
 			var := try2(
 				rs,
-				assert_module_variable_exists_and_resolve_it(
-					rs,
-					var_e.token.lexeme,
-					e.property.lexeme,
-				),
+				try_resolve_module_variable(rs, var_e.token.lexeme, e.property.lexeme),
 			) or_return
 
 			if !var.is_public {
@@ -434,7 +440,7 @@ resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool 
 			resolved = var
 		}
 
-		rs.resolutions.resolution_map[e] = resolved
+		rs.resolution_map[e] = resolved
 		return true
 	} else {
 		resolver_error(
@@ -445,6 +451,7 @@ resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool 
 	}
 }
 
+// Resolve the names within an arbitrary `Expr`.
 @(require_results)
 resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	if expr == nil {return true}
@@ -455,7 +462,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.value) or_return
 		var := try2(
 			rs,
-			assert_variable_exists_and_resolve_it(rs, e.name.lexeme, allow_uninitialized = true),
+			try_resolve_variable(rs, e.name.lexeme, allow_uninitialized = true),
 		) or_return
 
 		if var.is_module {
@@ -474,7 +481,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 
 		var.initialized = true
 
-		rs.resolutions.resolution_map[e] = var
+		rs.resolution_map[e] = var
 	case ^BinaryExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.left) or_return
@@ -576,10 +583,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		rs.current_token = e.token
 
 		if varexpr, ok := e.receiver.(^VariableExpr); ok {
-			var := try2(
-				rs,
-				assert_variable_exists_and_resolve_it(rs, varexpr.name.lexeme),
-			) or_return
+			var := try2(rs, try_resolve_variable(rs, varexpr.name.lexeme)) or_return
 
 			if var.is_module {
 				resolver_error(rs, fmt.tprintf("Cannot reassign module '%v'.", var.name))
@@ -621,13 +625,13 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		try(rs, declare_and_define_module(rs, name, type)) or_return
 	case ^VariableExpr:
 		rs.current_token = e.token
-		var := try2(rs, assert_variable_exists_and_resolve_it(rs, e.name.lexeme)) or_return
+		var := try2(rs, try_resolve_variable(rs, e.name.lexeme)) or_return
 		if var.is_module {
 			resolver_error(rs, "Cannot use a module as a value.")
 			return false
 		}
 
-		rs.resolutions.resolution_map[e] = var
+		rs.resolution_map[e] = var
 	case ^VarDeclExpr:
 		rs.current_token = e.token
 		is_final := e.is_final
@@ -675,7 +679,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	return true
 }
 
-add_native_fns :: #force_inline proc(m: ^map[string]^Symbol) {
+// Inject the native function symbols into a provided map of symbols.
+inject_builtin_functions :: #force_inline proc(m: ^map[string]^Symbol) {
 	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
 		native_var := new(Symbol)
 		native_var^ = {
@@ -695,6 +700,8 @@ add_native_fns :: #force_inline proc(m: ^map[string]^Symbol) {
 	}
 }
 
+// Small pre-pass before the resolver, used to hoist global function declarations.
+// Useful for allowing freely reorderable code as well as mutual recursion.
 @(require_results)
 collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	if expr == nil {return true}
@@ -733,28 +740,26 @@ resolver_error :: proc(rs: ^Resolver, message: string, details: string = "") {
 // Also returns whether the operation succeeded, while printing out the error
 // messages as 'resolution errors' in the process.
 @(require_results)
-resolve :: proc(graph: []^Module) -> (resolutions: Resolutions, success: bool) {
+resolve :: proc(graph: []^Module) -> (resolutions: ResolutionMap, success: bool) {
 	rs := Resolver {
-		resolutions = Resolutions {
-			resolution_map = make(ResolutionMap),
-			file_scopes = make(map[string]map[string]^Symbol),
-			current_local_scope = nil,
-			builtin_scope = make(map[string]^Symbol),
-		},
-		current_module = nil,
-		current_token = {},
-		typevar_count = 0,
+		resolution_map      = make(ResolutionMap),
+		file_scopes         = make(map[string]map[string]^Symbol),
+		current_local_scope = nil,
+		builtin_scope       = make(map[string]^Symbol),
+		current_module      = nil,
+		current_token       = {},
+		typevar_count       = 0,
 	}
-	add_native_fns(&rs.resolutions.builtin_scope)
+	inject_builtin_functions(&rs.builtin_scope)
 
 	for module in graph {
-		if _, exists := rs.resolutions.file_scopes[module.name]; exists {
+		if _, exists := rs.file_scopes[module.name]; exists {
 			resolver_error(&rs, fmt.tprintf("Module '%v' is already defined.", module.name))
 			return {}, false
 		}
 
 		globals := make(map[string]^Symbol)
-		rs.resolutions.file_scopes[module.name] = globals
+		rs.file_scopes[module.name] = globals
 
 		rs.current_module = module
 		enter_scope(&rs, .FUNCTION)
@@ -764,5 +769,5 @@ resolve :: proc(graph: []^Module) -> (resolutions: Resolutions, success: bool) {
 		resolve_with_resolver(&rs, module.ast) or_return
 	}
 
-	return rs.resolutions, true
+	return rs.resolution_map, true
 }
