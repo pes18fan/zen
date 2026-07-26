@@ -20,6 +20,7 @@ current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^Symbol {
 	return &rs.resolutions.file_scopes[rs.current_module.name]
 }
 
+// A local scope of bindings; can be a function scope or a block scope.
 Scope :: struct #all_or_none {
 	enclosing:          ^Scope,
 	kind:               ScopeKind,
@@ -33,8 +34,8 @@ ScopeKind :: enum {
 	BLOCK,
 }
 
+// Representation of a variable.
 Symbol :: struct #all_or_none {
-	shadower:         ^Symbol,
 	name:             string,
 	kind:             SymbolKind,
 	is_final:         bool,
@@ -48,6 +49,7 @@ Symbol :: struct #all_or_none {
 	local_index:      int,
 }
 
+// Kind of a variable (local or global).
 SymbolKind :: enum {
 	LOCAL,
 	GLOBAL,
@@ -68,7 +70,6 @@ symb :: #force_inline proc(
 ) -> ^Symbol {
 	s := new(Symbol)
 	s^ = Symbol {
-		shadower         = nil,
 		name             = name,
 		kind             = .GLOBAL if in_file_scope(rs) else .LOCAL,
 		is_final         = is_final,
@@ -92,12 +93,43 @@ ResolvingNode :: union #no_nil {
 
 ResolutionMap :: map[ResolvingNode]^Symbol
 
-prune :: #force_inline proc(var: ^Symbol) -> ^Symbol {
-	var := var
-	for var.shadower != nil {
-		var = var.shadower
+// Enter a scope of the given `kind`.
+enter_scope :: proc(rs: ^Resolver, kind: ScopeKind) {
+	enclosing := rs.resolutions.current_local_scope
+	starting_local_slot: int
+	switch kind {
+	case .FUNCTION:
+		// for functions, start at 1 as each function starts a new callframe
+		// its 1 cuz the first slot `0` is the function itself
+		starting_local_slot = 1
+	case .BLOCK:
+		starting_local_slot = 1 if enclosing == nil else enclosing.current_local_slot + 1
+	case:
+		fmt.panicf("invalid ScopeKind %v", kind)
 	}
-	return var
+
+	fs := new(Scope)
+	fs^ = {
+		enclosing          = enclosing,
+		current_local_slot = starting_local_slot,
+		variables          = make(map[string]^Symbol),
+		scope_depth        = 0 if enclosing == nil else enclosing.scope_depth + 1,
+		kind               = kind,
+	}
+
+	rs.resolutions.current_local_scope = fs
+}
+
+// Exit the current local scope.
+exit_scope :: proc(rs: ^Resolver) {
+	assert(rs.resolutions.current_local_scope != nil)
+	rs.resolutions.current_local_scope = rs.resolutions.current_local_scope.enclosing
+}
+
+// Are we in the global scope within a module?
+@(require_results)
+in_file_scope :: proc(rs: ^Resolver) -> bool {
+	return rs.resolutions.current_local_scope.enclosing == nil
 }
 
 // Resolve a variable in the entire scope chain. Mark it captured if the variable
@@ -106,12 +138,11 @@ prune :: #force_inline proc(var: ^Symbol) -> ^Symbol {
 resolve_local :: proc(fs: ^Scope, name: string, is_upvalue: bool = false) -> (^Symbol, bool) {
 	assert(fs != nil)
 	if var, ok := fs.variables[name]; ok {
-		v := prune(var)
 		if is_upvalue {
-			v.is_captured = true
+			var.is_captured = true
 		}
 
-		return v, true
+		return var, true
 	}
 
 	// reached the end of scope chain
@@ -232,10 +263,6 @@ assert_variable_exists_and_resolve_it :: proc(
 	return var, nil
 }
 
-in_file_scope :: proc(rs: ^Resolver) -> bool {
-	return rs.resolutions.current_local_scope.enclosing == nil
-}
-
 @(require_results)
 declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType) -> ErrorMessage {
 	if in_file_scope(rs) {
@@ -270,12 +297,8 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 	)
 	rs.resolutions.current_local_scope.current_local_slot += 1
 
-	// if the variable exists in a different scope we just shadow the thing
-	if exists {
-		var.shadower = new_var
-	} else {
-		rs.resolutions.current_local_scope.variables[name] = new_var
-	}
+	// put it in the scope
+	rs.resolutions.current_local_scope.variables[name] = new_var
 
 	return nil
 }
@@ -317,12 +340,8 @@ declare_variable :: proc(
 	new_var := symb(rs, name, is_final, is_public, is_loop_variable)
 	rs.resolutions.current_local_scope.current_local_slot += 1
 
-	// if the variable exists in a different scope we just shadow the thing
-	if exists {
-		var.shadower = new_var
-	} else {
-		rs.resolutions.current_local_scope.variables[name] = new_var
-	}
+	// put it in the scope
+	rs.resolutions.current_local_scope.variables[name] = new_var
 
 	return nil
 }
@@ -337,16 +356,11 @@ define_variable :: proc(rs: ^Resolver, name: string) {
 		return
 	}
 
-	v, ok := rs.resolutions.current_local_scope.variables[name]
+	var, ok := rs.resolutions.current_local_scope.variables[name]
 	if !ok {
 		fmt.panicf("no variable with name %v exists in the function scope", name)
 	}
-	prune(v).initialized = true
-}
-
-resolver_error :: proc(rs: ^Resolver, message: string, details: string = "") {
-	token := rs.current_token
-	print_error(token, message, file = rs.current_module.fullpath, details = details)
+	var.initialized = true
 }
 
 resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool {
@@ -467,8 +481,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.right) or_return
 	case ^BlockExpr:
 		rs.current_token = e.token
-		push_block_scope_untyped(rs)
-		defer pop_block_scope_untyped(rs)
+		enter_scope(rs, .BLOCK)
+		defer exit_scope(rs)
 		resolve_with_resolver(rs, e.expression) or_return
 	case ^BreakExpr:
 		rs.current_token = e.token
@@ -491,8 +505,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.expression) or_return
 	case ^FunctionExpr:
 		rs.current_token = e.token
-		push_current_function_scope_untyped(rs)
-		defer pop_current_function_scope_untyped(rs)
+		enter_scope(rs, .FUNCTION)
+		defer exit_scope(rs)
 		for param in e.params {
 			try(
 				rs,
@@ -503,16 +517,16 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		resolve_with_resolver(rs, e.body) or_return
 	case ^ForExpr:
 		rs.current_token = e.token
-		push_block_scope_untyped(rs)
-		defer pop_block_scope_untyped(rs)
+		enter_scope(rs, .BLOCK)
+		defer exit_scope(rs)
 		resolve_with_resolver(rs, e.initializer) or_return
 		resolve_with_resolver(rs, e.condition) or_return
 		resolve_with_resolver(rs, e.increment) or_return
 		resolve_with_resolver(rs, e.body) or_return
 	case ^ForInExpr:
 		rs.current_token = e.token
-		push_block_scope_untyped(rs)
-		defer pop_block_scope_untyped(rs)
+		enter_scope(rs, .BLOCK)
+		defer exit_scope(rs)
 		try(
 			rs,
 			declare_variable(
@@ -652,8 +666,8 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 		}
 	case ^WhileExpr:
 		rs.current_token = e.token
-		push_block_scope_untyped(rs)
-		defer pop_block_scope_untyped(rs)
+		enter_scope(rs, .BLOCK)
+		defer exit_scope(rs)
 		resolve_with_resolver(rs, e.condition) or_return
 		resolve_with_resolver(rs, e.body) or_return
 	}
@@ -661,49 +675,10 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	return true
 }
 
-push_current_function_scope_untyped :: proc(rs: ^Resolver) {
-	enclosing := rs.resolutions.current_local_scope
-	fs := new(Scope)
-	fs^ = {
-		enclosing          = enclosing,
-		current_local_slot = 1, // starts at 1 cuz the first local is the function itself
-		variables          = make(map[string]^Symbol),
-		scope_depth        = 0 if enclosing == nil else enclosing.scope_depth + 1,
-		kind               = .FUNCTION,
-	}
-
-	rs.resolutions.current_local_scope = fs
-}
-
-pop_current_function_scope_untyped :: proc(rs: ^Resolver) {
-	assert(rs.resolutions.current_local_scope != nil)
-	rs.resolutions.current_local_scope = rs.resolutions.current_local_scope.enclosing
-}
-
-push_block_scope_untyped :: proc(rs: ^Resolver) {
-	enclosing := rs.resolutions.current_local_scope
-	fs := new(Scope)
-	fs^ = {
-		enclosing          = enclosing,
-		current_local_slot = 1 if enclosing == nil else enclosing.scope_depth + 1,
-		variables          = make(map[string]^Symbol),
-		scope_depth        = 0 if enclosing == nil else enclosing.scope_depth + 1,
-		kind               = .BLOCK,
-	}
-
-	rs.resolutions.current_local_scope = fs
-}
-
-pop_block_scope_untyped :: proc(rs: ^Resolver) {
-	assert(rs.resolutions.current_local_scope != nil)
-	rs.resolutions.current_local_scope = rs.resolutions.current_local_scope.enclosing
-}
-
 add_native_fns :: #force_inline proc(m: ^map[string]^Symbol) {
 	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
 		native_var := new(Symbol)
 		native_var^ = {
-			shadower         = nil,
 			name             = fn.name,
 			kind             = .GLOBAL,
 			is_final         = true,
@@ -749,6 +724,11 @@ collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	return true
 }
 
+resolver_error :: proc(rs: ^Resolver, message: string, details: string = "") {
+	token := rs.current_token
+	print_error(token, message, file = rs.current_module.fullpath, details = details)
+}
+
 // Takes in the module graph, resolves all variables.
 // Also returns whether the operation succeeded, while printing out the error
 // messages as 'resolution errors' in the process.
@@ -777,8 +757,8 @@ resolve :: proc(graph: []^Module) -> (resolutions: Resolutions, success: bool) {
 		rs.resolutions.file_scopes[module.name] = globals
 
 		rs.current_module = module
-		push_current_function_scope_untyped(&rs)
-		defer pop_current_function_scope_untyped(&rs)
+		enter_scope(&rs, .FUNCTION)
+		defer exit_scope(&rs)
 
 		collect_forward_references(&rs, module.ast) or_return
 		resolve_with_resolver(&rs, module.ast) or_return
