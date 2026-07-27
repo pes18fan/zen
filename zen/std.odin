@@ -66,7 +66,7 @@ STD_MODULE_FUNCTIONS: [BuiltinModule][]BuiltinFunction = {
 		{"reverse", reverse_native, 1},
 		{"asciichar", asciichar_native, 1},
 		{"asciinum", asciinum_native, 1},
-		{"byte_count", byte_count_native, 1},
+		{"byte_size", byte_size_native, 1},
 	},
 	.LIST   = {
 		{"push", push_native, 2},
@@ -242,7 +242,7 @@ get_module_function_signature :: proc(
 			return tapp(.FUNCTION, {number_t, string_t}), nil
 		case "asciinum":
 			return tapp(.FUNCTION, {string_t, number_t}), nil
-		case "byte_count":
+		case "byte_size":
 			return tapp(.FUNCTION, {string_t, number_t}), nil
 		}
 	case .RESULT:
@@ -952,7 +952,7 @@ asciinum_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool)
 }
 
 /* Get the number of bytes in a string. */
-byte_count_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
+byte_size_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 	if !is_string(args[0]) {
 		vm_panic(vm, "Cannot get the byte count of a '%v'.", type_of_value(args[0]))
 		return nil_val(), false
