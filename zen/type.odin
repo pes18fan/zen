@@ -113,12 +113,7 @@ type_constructor_string :: proc(c: TypeConstructor) -> string {
 }
 
 // Create a fresh type variable.
-fresh :: proc {
-	fresh_typechecker,
-	fresh_resolver,
-}
-
-fresh_typechecker :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
+fresh :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	idx := tc.typevar_count
 	var := TypeVariable{idx}
 	when ODIN_DEBUG {
@@ -128,19 +123,6 @@ fresh_typechecker :: #force_inline proc(tc: ^TypeChecker) -> TypeVariable {
 	}
 
 	tc.typevar_count += 1
-	return var
-}
-
-fresh_resolver :: #force_inline proc(rs: ^Resolver) -> TypeVariable {
-	idx := rs.typevar_count
-	var := TypeVariable{idx}
-	when ODIN_DEBUG {
-		if opt.log_checker {
-			fmt.eprintfln("-- create fresh type variable %v", type_string(var, true))
-		}
-	}
-
-	rs.typevar_count += 1
 	return var
 }
 

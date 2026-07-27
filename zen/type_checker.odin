@@ -506,6 +506,7 @@ generalize :: proc(tc: ^TypeChecker, ty: Type) -> TypeScheme {
 }
 
 UnificationError :: enum {
+	NONE = 0,
 	INFINITE_TYPE,
 	MISMATCH,
 }
@@ -545,6 +546,8 @@ try_unify :: proc(
 	subst, err := unify(expected, checking)
 	if err != nil {
 		switch err {
+		case .NONE:
+			unreachable()
 		case .INFINITE_TYPE:
 			return nil, fmt.tprintf(
 				"Infinite type: type %v contains %v.",
@@ -611,6 +614,8 @@ join :: proc(
 	s, uni_err := unify(a, b)
 	if uni_err != nil {
 		switch uni_err {
+		case .NONE:
+			unreachable()
 		case .INFINITE_TYPE:
 			return nil, {}, fmt.tprintf("Cannot unify type %v with %v as that would require an infinite type.", type_string(a, false), type_string(b, false))
 		case .MISMATCH:
@@ -622,7 +627,7 @@ join :: proc(
 
 // allocates a map
 @(require_results)
-unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: Maybe(UnificationError)) {
+unify :: proc(a: Type, b: Type) -> (subst: Substitution, err: UnificationError) {
 	if is_type_any(a) {
 		// The only thing Any cannot unify with is Never.
 		if is_type_never(b) {
