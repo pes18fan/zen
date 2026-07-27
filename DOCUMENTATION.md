@@ -822,7 +822,7 @@ for you to use.
 - `reverse(s)`: Reverse a string `s`.
 - `asciichar(x)`: Convert a number `x` to its corresponding ASCII character.
 - `asciinum(s)`: Convert an ASCII character `s` to its corresponding number.
-- `byte_count(s)`: Get the number of bytes in the string `s`.
+- `byte_size(s)`: Get the number of bytes in the string `s`.
 
 ### module `list`
 
