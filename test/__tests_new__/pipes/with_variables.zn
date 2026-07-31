@@ -2,6 +2,6 @@ use "string";
 
 var s = "hello world";
 var result = s 
-    |> string\upcase() 
-    |> string\replace("WORLD", "THERE");
+    |> string.upcase() 
+    |> string.replace("WORLD", "THERE");
 puts(result) // expect: HELLO THERE

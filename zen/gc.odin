@@ -268,13 +268,13 @@ blacken_object :: proc(gc: ^GC, object: ^Obj) {
 			list := (^ObjList)(object)
 			mark_array(gc, &list.items)
 		}
-	/* A module contains a reference to an ObjString with its name and
+	/* A record contains a reference to an ObjString with its name and
      * a table with its values. */
-	case .MODULE:
+	case .RECORD:
 		{
-			module := (^ObjModule)(object)
-			mark_object(gc, (^Obj)(module.name))
-			mark_table(gc, &module.values)
+			record := (^ObjRecord)(object)
+			mark_object(gc, (^Obj)(record.name))
+			mark_table(gc, &record.values)
 		}
 	/* A result contains the value in it. */
 	case .RESULT:

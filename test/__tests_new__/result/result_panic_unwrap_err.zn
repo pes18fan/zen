@@ -2,4 +2,4 @@
 use "result";
 
 val e = err("some error");
-result\unwrap(e) // ERR: Unwrapped an err variant
+result.unwrap(e) // ERR: Unwrapped an err variant

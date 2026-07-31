@@ -1,1 +1,1 @@
-123\foo // ERR: Cannot use module access operator on a non-module.
+123.foo // ERR: Cannot access property of a non-record.

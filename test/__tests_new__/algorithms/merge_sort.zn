@@ -8,19 +8,19 @@ func merge(a, b, less) {
     var j = 0;
     while i < len(a) and j < len(b) {
         if less(a[i], b[j]) {
-            result = result |> list\push(a[i]);
+            result = result |> list.push(a[i]);
             i = i + 1
         } else {
-            result = result |> list\push(b[j]);
+            result = result |> list.push(b[j]);
             j = j + 1
         }
     };
     while i < len(a) {
-        result = result |> list\push(a[i]);
+        result = result |> list.push(a[i]);
         i = i + 1
     };
     while j < len(b) {
-        result = result |> list\push(b[j]);
+        result = result |> list.push(b[j]);
         j = j + 1
     };
     result
@@ -30,14 +30,14 @@ func merge_sort(l, less) {
     if len(l) <= 1 {
         l
     } else {
-        var mid = math\floor(len(l) / 2);
+        var mid = math.floor(len(l) / 2);
         var left = [];
         var right = [];
         for var i = 0; i < len(l); i = i + 1 {
             if i < mid {
-                left = left |> list\push(l[i])
+                left = left |> list.push(l[i])
             } else {
-                right = right |> list\push(l[i])
+                right = right |> list.push(l[i])
             }
         };
         merge(merge_sort(left, less), merge_sort(right, less), less)

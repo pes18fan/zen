@@ -1,4 +1,4 @@
 use "result";
 
 val x = 123;
-result\ok?(x) // ERR: 'ok?' only works on results, not number.
+result.ok?(x) // ERR: 'ok?' only works on results, not number.

@@ -1,6 +1,6 @@
 use "result";
 
-puts(result\ok?(ok(1))); // expect: true
-puts(result\ok?(err("no"))); // expect: false
-puts(result\err?(ok(1))); // expect: false
-puts(result\err?(err("no"))); // expect: true
+puts(result.ok?(ok(1))); // expect: true
+puts(result.ok?(err("no"))); // expect: false
+puts(result.err?(ok(1))); // expect: false
+puts(result.err?(err("no"))); // expect: true
