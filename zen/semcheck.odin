@@ -335,20 +335,3 @@ semcheck :: proc(expr: Expr) -> (success: bool) {
 	}
 	return true
 }
-
-
-@(require_results)
-has_user_modules :: proc(expr: Expr) -> bool {
-	if expr == nil {return false}
-
-	#partial switch e in expr {
-	// only need to check this case as modules are forced by the semantic
-	// analyzer to be at global scope
-	case ^SequenceExpr:
-		return has_user_modules(e.left) || has_user_modules(e.right)
-	case ^UseExpr:
-		if e.type == .USER {return true}
-	}
-
-	return false
-}

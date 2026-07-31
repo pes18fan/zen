@@ -127,16 +127,14 @@ UseExpr :: struct {
 
 FunctionParam :: struct {
 	name: Token,
-	type: Maybe(Type),
 }
 
 FunctionExpr :: struct {
-	token:       Token,
-	params:      []FunctionParam,
-	body:        Expr,
-	bound_to:    Maybe(Token),
-	return_type: Maybe(Type),
-	public:      bool,
+	token:    Token,
+	params:   []FunctionParam,
+	body:     Expr,
+	bound_to: Maybe(Token),
+	public:   bool,
 }
 
 ListExpr :: struct {
@@ -224,7 +222,6 @@ UnaryExpr :: struct {
 VarBinding :: struct {
 	name:        Token,
 	initializer: Maybe(Expr),
-	type:        Maybe(Type),
 }
 
 VarDeclExpr :: struct {
@@ -552,79 +549,6 @@ parse_pub :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	}
 }
 
-parse_type_annotation :: proc(p: ^Parser, type_variable_map: map[string]int = nil) -> Type {
-	if parser_check(p, .IDENT) {
-		type: Type
-
-		constructor := parser_advance(p)
-
-		if idx, ok := type_variable_map[constructor.lexeme]; ok {
-			return TypeVariable{idx = idx}
-		}
-
-		switch constructor.lexeme {
-		case "Never":
-			type = type_never
-		case "Nil":
-			type = tapp(.NIL)
-		case "Bool":
-			type = tapp(.BOOL)
-		case "Number":
-			type = tapp(.NUMBER)
-		case "String":
-			type = tapp(.STRING)
-		case "List":
-			parser_consume(p, .LSQUARE, "Expect '[' after 'List'.")
-			inner_type := parse_type_annotation(p, type_variable_map)
-			parser_consume(p, .RSQUARE, "Expect ']' after list type argument.")
-			type = tapp(.LIST, {inner_type})
-		case "Result":
-			parser_consume(p, .LSQUARE, "Expect '[' after 'Result'.")
-			ok_type := parse_type_annotation(p, type_variable_map)
-			parser_consume(p, .COMMA, "Expect ',' after 'ok' type.")
-			err_type := parse_type_annotation(p, type_variable_map)
-			parser_consume(p, .RSQUARE, "Expect ']' after result variants.")
-			type = tapp(.RESULT, {ok_type, err_type})
-		case "Any":
-			type = type_any
-		case:
-			parser_error(p, parser_previous(p), "Invalid type annotation.")
-			return {}
-		}
-
-		return type
-	} else if parser_check(p, .LPAREN) {
-		parser_advance(p) // consume the paren
-
-		// we have a function type here, parse the args recursively
-		// TODO: Technically record types also begin with a ( but that's for later
-		arg_types := make([dynamic]Type, 0)
-		defer delete(arg_types)
-		if !parser_check(p, .RPAREN) {
-			for {
-				append(&arg_types, parse_type_annotation(p, type_variable_map))
-				parser_match(p, .COMMA) or_break
-			}
-		}
-
-		parser_consume(p, .RPAREN, "Expect ')' after function type parameters.")
-		parser_consume(p, .ARROW, "Expect '->' after function type parameter list.")
-
-		return_type := parse_type_annotation(p, type_variable_map)
-
-		all_args := make([]Type, len(arg_types) + 1)
-		defer delete(all_args)
-		if len(arg_types) != 0 {copy(all_args, arg_types[:])}
-		all_args[len(arg_types)] = return_type
-
-		func_type := tapp(.FUNCTION, all_args)
-		return func_type
-	}
-
-	parser_error(p, parser_peek(p), "Expect type annotation.")
-	return {}
-}
-
 parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	expr := new(VarDeclExpr)
 	expr.token = parser_previous(p)
@@ -634,12 +558,6 @@ parse_var_decl_expression :: proc(p: ^Parser, can_assign: bool) -> Expr {
 	for {
 		binding: VarBinding
 		binding.name = parser_consume(p, .IDENT, "Expect variable name.")
-		if parser_match(p, .COLON) {
-			// currently the type is just a single token, will be changed later on
-			binding.type = parse_type_annotation(p)
-		} else {
-			binding.type = nil
-		}
 
 		if parser_match(p, .EQUAL) {
 			binding.initializer = parse_expression(p)
@@ -920,18 +838,12 @@ parse_lambda :: proc(p: ^Parser, can_assign: bool, bound_to: Maybe(Token)) -> Ex
 		for {
 			param: FunctionParam
 			param.name = parser_consume(p, .IDENT, "Expect parameter name.")
-			if parser_match(p, .COLON) {
-				param.type = parse_type_annotation(p, type_params)
-			}
 			append(&params, param)
 			parser_match(p, .COMMA) or_break
 		}
 	}
 	lambda.params = params[:]
 	parser_consume(p, .RPAREN, "Expect ')' after function parameters.")
-	if parser_match(p, .COLON) {
-		lambda.return_type = parse_type_annotation(p, type_params)
-	}
 
 	if parser_match(p, .FAT_ARROW) {
 		// as parse_expression also parses blocks, you can technically have
@@ -1409,9 +1321,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		for param, i in e.params {
 			if i > 0 {strings.write_string(b, " ")}
 			strings.write_string(b, param.name.lexeme)
-			if type, ok := param.type.(Type); ok {
-				fmt.sbprintf(b, ": %v", type_string(type, false))
-			}
 		}
 		strings.write_string(b, ")\n")
 		print_indent(b, indent + 1)
@@ -1534,10 +1443,6 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		for binding, i in e.bindings {
 			if i > 0 {strings.write_string(b, " ")}
 			strings.write_string(b, binding.name.lexeme)
-			if binding.type != nil {
-				type := binding.type.(Type)
-				fmt.sbprintf(b, ": %v", type_string(type, debugging = false))
-			}
 			init := binding.initializer.? or_continue
 			strings.write_string(b, " =\n")
 			print_expr(b, init, indent + 1)
