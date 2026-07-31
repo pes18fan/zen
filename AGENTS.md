@@ -1,13 +1,20 @@
 # AGENTS.md
 
 `zen` is a dynamically-typed scripting language (interpreter + bytecode VM)
-written in Odin. It is **fully dynamic again** as of the last commit on this
-branch — the abandoned Hindley-Milner typechecker work was removed from the
-core pipeline (kept as an uncompiled reference in `zen/typechecker/`).
-Everything in `zen/` is **one flat Odin package** (`package zen`), plus two
-separate packages that are **not part of the build**: the vendored
-`zen/isocline` binding and the reference `zen/typechecker` package. There
-are no other internal module boundaries to respect.
+written in Odin. Everything in `zen/` is **one flat Odin package**
+(`package zen`), plus two packages that are **not part of the build**: the
+vendored `zen/isocline` binding and the reference `zen/typechecker` package
+(uncompiled dead code from the abandoned Hindley-Milner era, kept for later
+revival). There are no other internal module boundaries to respect.
+
+Current language state: fully dynamic again — classes & OOP are removed, and
+modules are first-class values accessed with `.` (`math.ln(2)`,
+`string.upcase("hello")`; the old `\` access is gone). Internals were renamed
+accordingly: `ObjModule` → `ObjRecord`, `ModuleAccessExpr` → `GetExpr`.
+
+The language reference is `DOCUMENTATION.md` at the repo root — read it before
+changing language semantics. `doc/docs.txt` is generated Odin API docs
+(`./x.py doc`), not hand-maintained.
 
 ## Branches
 
@@ -26,31 +33,31 @@ Requires Odin and Python (stdlib only, no pip deps).
 ./x.py rel        # release build -> bin/rel/zen
 ./x.py chaotic    # build with -define:CHAOTIC=true -> bin/chaotic/zen
 ./x.py clean      # rm -rf bin/
-./x.py run        # run debug build (pass --args to add CLI flags)
-./x.py run --args "file.zn"   # example
+./x.py run        # runs bin/dbg/dzen (build with dbg first); --args passes CLI flags
+./x.py run --args "-dump_ast file.zn"   # example
 ```
 
 - First build auto-clones+compiles `isocline` (the REPL line-editing lib)
-  into `./isocline/`; this needs a C compiler and network access to
-  `github.com/daanx/isocline`, and only happens once (cached after).
+  into `./isocline/`; needs a C compiler and network access to
+  `github.com/daanx/isocline`, cached after the first build.
 - `-vet -vet-tabs -strict-style -vet-style -warnings-as-errors -disallow-do`
   is baked into **both** debug and release flags in `x.py` — there is no
   separate lint step. Any code you add must pass strict style, have no
   warnings, and **never use `do`** (`do ...` is disallowed).
-- Release uses `-o:aggressive`; a comment in `x.py` notes to switch to
-  `-o:speed` if that shows weird codegen behavior.
+- Release uses `-o:aggressive -microarch:native`; a comment in `x.py` notes to
+  switch to `-o:speed` if that shows weird codegen behavior.
 - `CHAOTIC=true` unlocks joke features (`ifn't`, `whilen't`) that are
   intentionally untested — don't expect test coverage for them.
-- Debug binary is named `dzen` (not `zen`).
-- The debug binary provides some flags to observe the behavior of the interpreter,
-    like dumping the AST, dumping bytecode, tracing VM execution et cetera.
-    View available flags with `dzen -h`. These flags do not exist in the release
-    build.
+- Debug binary is named `dzen` (not `zen`) and has extra CLI flags defined in
+  the `Options` struct in `zen/main.odin` (no release equivalent): `-dump`
+  (disassemble bytecode), `-dump_ast`, `-dump_tokens`, `-trace` (trace VM
+  execution), `-time` (per-stage timings), `-stress_gc`, `-log_gc`,
+  `-exec "<code>"`. View them with `dzen -h`.
 
 ## Testing
 
 ```bash
-./x.py test                  # unit tests + old e2e suite (test/__tests__)
+./x.py test                  # unit tests + e2e suite (test/__tests__)
 ./x.py test --recompile      # rebuild debug first, copy to bin/test/zen, test
 ./x.py test --unit   -u      # odin unit tests only (@(test) procs)
 ./x.py test --e2e    -e      # e2e .zn script tests only
@@ -63,20 +70,19 @@ Requires Odin and Python (stdlib only, no pip deps).
   `bin/test/zen`). Without it, `run_tests.py` exits with "interpreter not
   found". When in doubt, run `./x.py test --recompile`.
 - **Two e2e suites exist and they are not the same thing:**
-  - `test/__tests__` (default) — legacy suite with OOP tests
-    (class/inheritance/super/this) that are **expected to fail** since
-    classes are fully removed from the language.
-  - `test/__tests_new__` (`--new`) — the active suite for ongoing work; no
-    OOP tests and no typechecking tests. **This is the working suite. Use
-    `--new`.**
-- `test/typechecking/` — orphaned tests from the typechecker era, **not
-  wired into `x.py` or `run_tests.py`**. They use type-annotated syntax
+  - `test/__tests__` (default) — legacy suite whose OOP tests
+    (class/inheritance/super/this) are **expected to fail** since classes are
+    fully removed from the language.
+  - `test/__tests_new__` (`--new`) — the active suite for ongoing work; no OOP
+    or typechecking tests. **This is the working suite. Use `--new`.**
+- `test/typechecking/` — orphaned tests from the typechecker era, **not wired
+  into `x.py` or `run_tests.py`**. They use type-annotated syntax
   (`var x: Number`, `List[Number]`) that no longer parses, so they do not
   pass. Kept alongside `zen/typechecker/` as reference material.
-- No built-in single-file flag in `run_tests.py`, but you can point it at a
-  subfolder via `python test/run_tests.py -d <relpath>` (run from `test/`).
-  To run one file by hand: build, then `bin/test/zen path/to/file.zn` and
-  compare to `// expect:`/`// ERR:` comments yourself.
+- No single-file runner flag; point `run_tests.py` at a subfolder with
+  `python test/run_tests.py -d <relpath>` (run from `test/`). To run one file
+  by hand: build, then `bin/test/zen path/to/file.zn` and compare to the
+  `// expect:`/`// ERR:` comments yourself.
 - Test file format: `// expect: <line>` = expected stdout (line-for-line
   match); `// ERR: <text>` = exit must be non-zero and **only first stderr
   line** is checked (substring). `// DRAFT` anywhere in the file skips it.
@@ -104,11 +110,10 @@ Man page: `pandoc -s -t man ./etc/zen.1.md -o zen.1`
 
 ## Current limitations (typechecker branch)
 
-- Typechecking is **not part of the pipeline anymore** — the last commit
-  removed it from core zen (parse → semcheck → module graph → resolve →
-  codegen → VM). The HM typechecker lives on in `zen/typechecker/` as
-  uncompiled reference code to be revived later; nothing outside that
-  package imports it.
+- Typechecking is **not part of the pipeline anymore** (parse → semcheck →
+  module graph → resolve → codegen → VM). The HM typechecker lives on in
+  `zen/typechecker/` as uncompiled reference code to be revived later; nothing
+  outside that package imports it.
 - Resolver output is **only partially consumed by codegen**. Codegen takes
   the `ResolutionMap` and uses it for some variable sets (`emit_variable`),
   but most variable loads/sets still re-resolve clox-style by name

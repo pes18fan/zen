@@ -167,7 +167,7 @@ associated with it is evaluated and returned as the value of the entire expressi
 ```
 use "math";
 
-var a = math\rand() * 10 |> math\floor();
+var a = math.rand() * 10 |> math.floor();
 
 switch a {
     0 => print "zero!",
@@ -223,7 +223,7 @@ You can also iterate over strings by converting them into lists:
 ```
 use "string";
 
-for x in string\chars("hello") {
+for x in string.chars("hello") {
     puts(x)
 }
 ```
@@ -318,75 +318,6 @@ puts(is_even(4)); //=> true
 puts(is_odd(4))  //=> false
 ```
 
-### Generic functions
-
-zen also supports generic functions based on its Hindley-Milner-style type 
-inference.
-
-You can introduce type parameters after the function name:
-
-```zen
-func name[T, U](arg1: T, arg2: U): T {
-    arg1
-}
-```
-
-All type annotations are optional. The type parameters themselves are optional
-too, because zen can often infer them automatically.
-
-```zen
-func id(x) {
-    x
-};
-
-func id[T](x: T): T {
-    x
-}
-```
-
-A generic function can use its type parameters in argument types, return types,
-or both. Type parameters can also be unused if the function does not need them
-directly.
-
-```zen
-func first[A, B](a: A, b: B): A {
-    a
-};
-
-func ignore[T](x: T) {
-    1
-}
-```
-
-Type parameters may be inferred from call sites, so the same function can be used
-at multiple concrete types without needing separate overloads.
-
-```zen
-func wrap(x) {
-    x
-};
-
-puts(wrap(1));      //=> 1
-puts(wrap("hi"));   //=> hi
-puts(wrap(0.25))    //=> 0.250
-```
-
-Generic functions may also be nested, and inner type parameters follow normal
-lexical scoping rules.
-
-```zen
-func outer[T](x: T) {
-    func inner[T](y: T): T {
-        y
-    };
-
-    inner(x)
-};
-```
-
-If a generic constraint cannot be satisfied, the compiler reports a type error
-as usual.
-
 ## Pipelines
 
 zen supports a unique feature inspired by the Elixir programming language called
@@ -418,10 +349,6 @@ pipe produces a compile error.
 ## Lists
 
 A list is a ordered, indexable sequence of values.
-
-Lists have the type `List[a]`, where the `a` represents the type of the
-values in the list. This means that lists in zen are homogenous; only one type
-of value is allowed in a list.
 
 Two lists are equal if they are the same value in memory.
 
@@ -493,12 +420,12 @@ are of two types, builtin and user-defined modules.
 Builtin modules are a set of modules built into the language itself with various
 useful functions. A builtin module can be imported by simply using `use "mod"`
 where `mod` is the name of the module. Any function in the builtin module can be
-accessed and called using the `\` operator.
+accessed and called using dot notation.
 
 ```zen
 use "time";
 
-puts(time\clock())
+puts(time.clock())
 ```
 
 Further information on what builtin modules are present is provided later in
@@ -515,7 +442,7 @@ if the imported file is `foo.zn`.)
 // a.zn
 use "./b.zn";
 
-b\foo()
+b.foo()
 ```
 
 ```zen
@@ -558,25 +485,18 @@ precedence level, the more precedence the operator has.
 |  1  | `|>`  |
 
 
-## Type system
+### Primitive types in zen
 
-zen is statically typed. It uses Hindley-Milner type inference, allowing it
-to automatically infer types of expressions, with no need for annotations. However,
-type annotations may still be provided where desired for readability or to 
-constrain inference.
-
-### Primitive types
-
-#### `Number`
+#### number
 
 A real number represented as a 64-bit floating point. Numbers also support
 exponential notation (e.g `1e2` for `100`).
 
-#### `Bool`
+#### bool
 
 Represents a value that can be either be `true` or `false`.
 
-#### `String`
+#### string
 
 A sequence of text. Strings in zen are assumed to be encoded in UTF-8.
 There are two forms of strings in zen:
@@ -605,71 +525,12 @@ Two strings are equal if they have the same contents.
 
 Strings are immutable in zen.
 
-#### `Nil`
+#### nil
 
 A value that represents the absence of a value. Its only value is the literal
 `nil`.
 
-`nil` is the default value for uninitialized variables, and the implicit return 
-value for functions that do not return anything.
-
-It is important to note that `Nil` is a unit type, that is, it is not compatible
-with any other type. If a value already has some other type, you are not allowed
-to assign `nil` to it; with the exception of the `Any` type.
-
-### Composite types
-
-#### Functions
-
-The type annotation of a function is represented by the format `(T, U, ...) -> R`,
-where `T, U, ...` represent parameter types and `R` represents the return type.
-
-See the function section for more information about functions in the language itself.
-
-#### `List[a]`
-
-The type of a list containing values of some type `a`. See the list section for
-more information.
-
-#### `Result[t, e]`
-
-Represents a value that may be in one of two states; a "good" state of type `t`
-known as the `ok` variant, and a "bad" state of type `e` described as the `err`
-variant.
-
-See the error handling section for more info about results.
-
-### Special types
-
-#### `Never`
-
-Represents the type of some value that can never exist. It can also be described
-as the type of an expression that never finishes evaluating. It is most useful
-to describe functions that never finish executing; for instance, the builtin
-function `panic` has a return type of `Never` as it exits the program before
-it ever returns.
-
-Trying to assign any non-`Never` value in a place where type `Never` is expected
-is a type error. This prevents you from doing something like `var a: Never = 1`.
-
-The opposite however is allowed; doing something like `var a: Number = panic("message")`
-is perfectly valid because the program panics before `a` can ever be assigned.
-The branching expressions `if` and `switch` are even more permissive with 
-`Never`, while normally all branches of such an expression need to be the same
-type, an exception is present for `Never` which allows it to be used in any
-branch no matter what type the other branches have.
-
-#### `Any`
-
-Type inference can be effectively disabled by using the `Any` type for variables.
-`Any` is a special type that accepts all types and can be assigned to all
-types (except `Never`), making it easy to opt into dynamic typing.
-
-However, it is not recommended to use `Any` in combination with static types, as
-its effect of disabling type inference is infectious and can seep into the rest
-of the program by turning all other types into `Any`. To prevent these issues
-from occuring in normal execution, the type system never infers `Any` by itself; 
-an explicit type annotation is necessary to use it.
+`nil` is the implicit return value for functions that do not return anything.
 
 ## Error handling
 
@@ -692,10 +553,10 @@ You can check if a result is an `ok` variant or an `err` variant using the
 ```zen
 use "result";
 
-result\ok?(ok(1));                  //=> true
-result\ok?(err("something bad"));   //=> false
-result\err?(ok("all good"));        //=> false
-result\err?(err(-1))                //=> true
+result.ok?(ok(1));                  //=> true
+result.ok?(err("something bad"));   //=> false
+result.err?(ok("all good"));        //=> false
+result.err?(err(-1))                //=> true
 ```
 
 The `result.unwrap` native function takes in a result and returns the value inside it
@@ -704,8 +565,8 @@ if it is an `Ok` variant. If it is a `Err` variant, the function will panic.
 ```zen
 use "result"
 
-result\unwrap(ok(1));         //=> 1
-result\unwrap(err("uh oh"))   //=> panic: Unwrapped an Err variant.
+result.unwrap(ok(1));         //=> 1
+result.unwrap(err("uh oh"))   //=> panic: Unwrapped an Err variant.
 ```
 
 To avoid panicking, you can use the `unwrap_or` function to provide a fallback.
@@ -713,8 +574,8 @@ To avoid panicking, you can use the `unwrap_or` function to provide a fallback.
 ```zen
 use "result"
 
-result\unwrap_or(ok(1), 2);          //=> 1
-result\unwrap_or(err("uh oh"), -1)   //=> -1
+result.unwrap_or(ok(1), 2);          //=> 1
+result.unwrap_or(err("uh oh"), -1)   //=> -1
 ```
 
 ## Echo
@@ -850,8 +711,8 @@ for you to use.
 ### Classes
 
 zen had a basic OOP system inherited from clox, with classes and inheritance.
-This however was removed as the language after the introduction of the type 
-checker.
+This however was removed as the language, and will in the future be replaced
+with a more lightweight record system.
 
 ## The chaotic stuff
 
