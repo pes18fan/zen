@@ -52,7 +52,7 @@ Run the build script with the `dbg` arg to create a debug build:
 ./x.py dbg
 ```
 
-This will produce a debug build as `./bin/dbg/zen`. To produce a release
+This will produce a debug build as `./bin/dbg/dzen`. To produce a release
 build, run:
 
 ```bash
