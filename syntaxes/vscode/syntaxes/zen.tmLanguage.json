@@ -37,7 +37,11 @@
         "keywords": {
             "patterns": [
                 {
-                    "match": "\\b(if|else|while|for|return|break|continue|switch|exit|in|discard)\\b",
+                    "match": "\\b(if|else|while|for|return|break|continue|switch|exit|in|echo)\\b",
+                    "name": "keyword.control.zen"
+                },
+                {
+                    "match": "\\b(try|catch|orelse|ifn't|whilen't)\\b",
                     "name": "keyword.control.zen"
                 },
                 {
@@ -61,16 +65,8 @@
         "variables": {
             "patterns": [
                 {
-                    "name": "variable.language.this.zen",
-                    "match": "\\b(this)\\b"
-                },
-                {
                     "name": "variable.language.it.zen",
                     "match": "\\b(it)\\b"
-                },
-                {
-                    "name": "variable.language.super.zen",
-                    "match": "\\b(super)\\b"
                 }
             ]
         },
@@ -96,7 +92,7 @@
                             "name": "punctuation.zen"
                         }
                     },
-                    "match": "\\b(puts|gets|len|typeof|str|parse|copy|dirname|filename)\\b\\s*(\\()"
+                    "match": "\\b(puts|print|gets|assert|panic|len|typeof|str|parse|copy|dirname|filename|ok|err)\\b\\s*(\\()"
                 },
                 {
                     "captures": {
@@ -162,6 +158,10 @@
                 {
                     "name": "keyword.operator.arrow.zen",
                     "match": "\\=>"
+                },
+                {
+                    "name": "keyword.operator.access.zen",
+                    "match": "\\\\"
                 }
             ]
         },

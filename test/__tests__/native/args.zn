@@ -1,0 +1,3 @@
+use "os";
+
+puts(os\args()) // expect: []

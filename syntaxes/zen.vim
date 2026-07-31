@@ -8,18 +8,17 @@ if exists("b:current_syntax")
 endif
 
 " Keywords
-syn keyword zenKeyword use var val echo func return pub exit discard in try catch
-syn keyword zenConditional if else switch
-syn keyword zenRepeat while for break continue
-syn keyword zenRepeat for
+syn keyword zenKeyword use var val echo func return pub exit in try catch orelse
+syn keyword zenConditional if else switch ifn't
+syn keyword zenRepeat while for break continue whilen't
 syn keyword zenLogicalOperator and or not
 
 " Built-in Constants and Values
 syn keyword zenBoolean true false
-syn keyword zenConstant it nil this super
+syn keyword zenConstant it nil
 
 " Built-in Functions
-syn keyword zenBuiltin puts gets assert panic len typeof str parse copy dirname filename
+syn keyword zenBuiltin puts print gets assert panic len typeof str parse copy dirname filename ok err
 
 " Strings, both multiline and single-line
 syn region zenString start=/"/ skip=/\\./ end=/"/ contains=zenEscape
