@@ -1,17 +1,20 @@
 # AGENTS.md
 
 `zen` is a dynamically-typed scripting language (interpreter + bytecode VM)
-written in Odin, currently mid-transition to a Hindley-Milner static type
-system. Everything in `zen/` is **one flat Odin package** (`package zen`,
-plus a vendored `zen/isocline` binding) — there are no internal module
-boundaries to respect.
+written in Odin. It is **fully dynamic again** as of the last commit on this
+branch — the abandoned Hindley-Milner typechecker work was removed from the
+core pipeline (kept as an uncompiled reference in `zen/typechecker/`).
+Everything in `zen/` is **one flat Odin package** (`package zen`), plus two
+separate packages that are **not part of the build**: the vendored
+`zen/isocline` binding and the reference `zen/typechecker` package. There
+are no other internal module boundaries to respect.
 
 ## Branches
 
 | Branch | Purpose |
 |---|---|
 | `main` | Stable: no type inference |
-| `typechecker` | Active: HM type inference, classes & OOP fully removed from language |
+| `typechecker` | Active: large-scale refactor and overall language modification PR, originally for development of a now-removed Hindley-Milner typechecker; resolver + module graph + semcheck live here; old typechecker kept as reference in `zen/typechecker/` (dead code, eventually to be revived); classes & OOP fully removed from language |
 
 ## Build
 
@@ -63,9 +66,13 @@ Requires Odin and Python (stdlib only, no pip deps).
   - `test/__tests__` (default) — legacy suite with OOP tests
     (class/inheritance/super/this) that are **expected to fail** since
     classes are fully removed from the language.
-  - `test/__tests_new__` (`--new`) — the active suite for the ongoing
-    typechecker work; has a `typechecking/` subdir and no OOP tests.
-    **This is the working suite. Use `--new`.**
+  - `test/__tests_new__` (`--new`) — the active suite for ongoing work; no
+    OOP tests and no typechecking tests. **This is the working suite. Use
+    `--new`.**
+- `test/typechecking/` — orphaned tests from the typechecker era, **not
+  wired into `x.py` or `run_tests.py`**. They use type-annotated syntax
+  (`var x: Number`, `List[Number]`) that no longer parses, so they do not
+  pass. Kept alongside `zen/typechecker/` as reference material.
 - No built-in single-file flag in `run_tests.py`, but you can point it at a
   subfolder via `python test/run_tests.py -d <relpath>` (run from `test/`).
   To run one file by hand: build, then `bin/test/zen path/to/file.zn` and
@@ -75,8 +82,9 @@ Requires Odin and Python (stdlib only, no pip deps).
   line** is checked (substring). `// DRAFT` anywhere in the file skips it.
 - Each e2e test has a hard 2-second timeout (catches infinite loops).
 - Odin unit tests live beside their subject as `zen/<name>_test.odin`
-  (e.g. `chunk_test.odin`, `lexer_test.odin`, `type_checker_test.odin`),
-  using `@(test)` procs from `core:testing`. No per-test filter wired up.
+  (e.g. `chunk_test.odin`, `lexer_test.odin`), using `@(test)` procs from
+  `core:testing`. No per-test filter wired up. (`type_checker_test.odin`
+  lives in `zen/typechecker/` and is not compiled or run.)
 
 ## Benchmarks / docs
 
@@ -93,19 +101,21 @@ Man page: `pandoc -s -t man ./etc/zen.1.md -o zen.1`
   `zen/error.odin` (overloaded per pass: codegen/semantic/resolver) instead
   of repeating `if err != nil { ... }`. Use these rather than hand-rolling
   error checks in those passes.
-- `parse_type_annotation` in `zen/parser.odin` allocates `Type` type-args on
-  the **general-purpose AST allocator**, not the type checker's arena — any
-  code freeing AST nodes must also free these. This is the one spot where
-  the arena-everywhere assumption for types doesn't hold.
 
 ## Current limitations (typechecker branch)
 
-- Type inference is **skipped for programs that `use` a `.USER` module**:
-  `has_user_modules` at `zen/semcheck.odin:341`, called at `zen/vm.odin:956`;
-  typechecker runs only when `!should_not_typecheck` (`vm.odin:967`). The
-  blocker (per TODO at `vm.odin:958-966`) is that the typechecker cannot
-  cross module boundaries — resolver and checker don't mesh across them yet.
-- Information from the typechecker, resolver, and module resolver is **not
-  consumed by codegen or the VM**. Codegen re-resolves variables clox-style
-  and the VM re-parses module imports at runtime. This is redundant but not
-  incorrect; slated for a future refactor.
+- Typechecking is **not part of the pipeline anymore** — the last commit
+  removed it from core zen (parse → semcheck → module graph → resolve →
+  codegen → VM). The HM typechecker lives on in `zen/typechecker/` as
+  uncompiled reference code to be revived later; nothing outside that
+  package imports it.
+- Resolver output is **only partially consumed by codegen**. Codegen takes
+  the `ResolutionMap` and uses it for some variable sets (`emit_variable`),
+  but most variable loads/sets still re-resolve clox-style by name
+  (`emit_named_variable`/`emit_named_variable_set`). The VM also re-parses
+  module imports at runtime via `module_graph.odin`, even though the
+  resolver already walked the graph. This is redundant but not incorrect;
+  slated for a future refactor.
+- Type annotations are gone from the language and the parser: `var x:
+  Number` and `fn (a: Number): Number` no longer parse, and any code
+  relying on them is broken until typechecking returns.
