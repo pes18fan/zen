@@ -1,4 +1,4 @@
-package zen
+package typechecker
 
 import "core:fmt"
 import "core:slice"

@@ -19,11 +19,12 @@ current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^Symbol {
 
 // A local scope of bindings
 Scope :: struct #all_or_none {
-	enclosing:          ^Scope,
-	kind:               ScopeKind,
-	variables:          map[string]^Symbol,
-	current_local_slot: int,
-	scope_depth:        int,
+	enclosing:            ^Scope,
+	kind:                 ScopeKind,
+	variables:            map[string]^Symbol,
+	current_local_slot:   int,
+	current_upvalue_slot: int,
+	scope_depth:          int,
 }
 
 // Kind of a scope; can be a function scope or local scope. This affects the
@@ -45,6 +46,7 @@ Symbol :: struct #all_or_none {
 	is_public:        bool,
 	initialized:      bool,
 	scope_depth:      int,
+	upvalue_index:    int, // temporary! equals -1 if `is_captured` is false
 	local_index:      int,
 }
 
@@ -80,6 +82,7 @@ symb :: #force_inline proc(
 		initialized      = true if (is_native_value || is_module) else false,
 		scope_depth      = 0 if in_file_scope(rs) else rs.current_local_scope.scope_depth,
 		local_index      = 0 if in_file_scope(rs) else rs.current_local_scope.current_local_slot,
+		upvalue_index    = -1,
 	}
 	return s
 }
@@ -99,24 +102,28 @@ ResolutionMap :: map[ResolvingExpr]^Symbol
 enter_scope :: proc(rs: ^Resolver, kind: ScopeKind) {
 	enclosing := rs.current_local_scope
 	starting_local_slot: int
+	starting_upvalue_slot: int
 	switch kind {
 	case .FUNCTION:
 		// for functions, start at 1 as each function starts a new callframe
 		// its 1 cuz the first slot `0` is the function itself
 		starting_local_slot = 1
+		starting_upvalue_slot = 0
 	case .BLOCK:
 		starting_local_slot = 1 if enclosing == nil else enclosing.current_local_slot + 1
+		starting_upvalue_slot = 0 if enclosing == nil else enclosing.current_upvalue_slot + 1
 	case:
 		fmt.panicf("invalid ScopeKind %v", kind)
 	}
 
 	fs := new(Scope)
 	fs^ = {
-		enclosing          = enclosing,
-		current_local_slot = starting_local_slot,
-		variables          = make(map[string]^Symbol),
-		scope_depth        = 0 if enclosing == nil else enclosing.scope_depth + 1,
-		kind               = kind,
+		enclosing            = enclosing,
+		current_local_slot   = starting_local_slot,
+		current_upvalue_slot = starting_upvalue_slot,
+		variables            = make(map[string]^Symbol),
+		scope_depth          = 0 if enclosing == nil else enclosing.scope_depth + 1,
+		kind                 = kind,
 	}
 
 	rs.current_local_scope = fs
@@ -142,6 +149,8 @@ resolve_local :: proc(fs: ^Scope, name: string, is_upvalue: bool = false) -> (^S
 	if var, ok := fs.variables[name]; ok {
 		if is_upvalue {
 			var.is_captured = true
+			var.upvalue_index = fs.current_upvalue_slot
+			fs.current_upvalue_slot += 1
 		}
 
 		return var, true
@@ -694,6 +703,7 @@ inject_builtin_functions :: #force_inline proc(m: ^map[string]^Symbol) {
 			initialized      = true,
 			scope_depth      = 0,
 			local_index      = 0,
+			upvalue_index    = -1,
 		}
 		m[fn.name] = native_var
 	}
