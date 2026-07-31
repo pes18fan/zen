@@ -178,10 +178,6 @@ A value that represents the absence of a value. Its only value is the literal
 `nil` is the default value for uninitialized variables, and the implicit return 
 value for functions that do not return anything.
 
-It is important to note that `Nil` is a unit type, that is, it is not compatible
-with any other type. If a value already has some other type, you are not allowed
-to assign `nil` to it; with the exception of the `Any` type.
-
 ## Control flow
 
 ### if-else
@@ -722,11 +718,11 @@ expressions, with no need for annotations. However, type annotations may still
 be provided where desired for readability or to constrain inference.
 
 The typechecker currently **does not** support inference for programs that import
-other `.zn` files, which is the reason why the typechecker is considered as
-experimental. Typechecking is entirely skipped for such programs, and
+other `.zn` files, which is why the typechecker is considered experimental.
+Typechecking is entirely skipped for such programs, and
 zen acts like a dynamically typed language in that case. The typechecker can
 also be manually disabled when compiling the interpreter by passing the flag
-`-define:DISABLE_TYPECHECKER=false` to the Odin compiler.
+`-define:DISABLE_TYPECHECKER=true` to the Odin compiler.
 
 #### Primitive types
 
@@ -866,7 +862,7 @@ as usual.
 ### Classes
 
 zen had a basic OOP system inherited from clox, with classes and inheritance.
-This however was removed as the language after the introduction of the type 
+This however was removed from the language after the introduction of the type 
 checker.
 
 ## The chaotic stuff

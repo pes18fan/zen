@@ -212,7 +212,7 @@ internal_compiler_error :: proc(prefix, message: string, loc := #caller_location
 	fmt.eprintfln("    at position %v:%v in file %v", loc.line, loc.column, loc.file_path)
 	fmt.eprintln()
 	fmt.eprintln("Please report this error by opening an issue on https://github.com/pes18fan/zen")
-	os.exit(1)
+	os.exit(70)
 }
 
 opt: Options
@@ -258,26 +258,27 @@ main :: proc() {
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
 		context.allocator = mem.tracking_allocator(&track)
-
-		defer {
-			if len(track.allocation_map) > 0 {
-				fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-				for _, entry in track.allocation_map {
-					fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-				}
-			}
-			if len(track.bad_free_array) > 0 {
-				fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
-				for entry in track.bad_free_array {
-					fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
-				}
-			}
-		}
 	}
 
 	// Free all temp allocator (arena) allocations (like in tprintf)
 	defer free_all(context.temp_allocator)
 
 	status := run_with_opts(&opt)
+
+	when ODIN_DEBUG {
+		if len(track.allocation_map) > 0 {
+			fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+			for _, entry in track.allocation_map {
+				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
+			}
+		}
+		if len(track.bad_free_array) > 0 {
+			fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+			for entry in track.bad_free_array {
+				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
+			}
+		}
+	}
+
 	if status != 0 {os.exit(status)}
 }
