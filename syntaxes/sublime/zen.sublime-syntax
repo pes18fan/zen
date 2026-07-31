@@ -36,7 +36,7 @@ contexts:
       captures:
         1: storage.type.zen
         2: meta.function.zen entity.name.function.zen
-    - match: \b(puts|gets|len|typeof|str|parse|copy|dirname|filename)\b\s*(\()
+    - match: \b(puts|print|gets|assert|panic|len|typeof|str|parse|copy|dirname|filename|ok|err)\b\s*(\()
       captures:
         1: support.function.builtin.zen
         2: punctuation.zen
@@ -56,7 +56,9 @@ contexts:
   keywords:
     - match: \b(use|pub)\b
       scope: keyword.control.zen
-    - match: \b(if|else|while|for|return|break|continue|switch|exit|in|discard)\b
+    - match: \b(if|else|while|for|return|break|continue|switch|exit|in|echo)\b
+      scope: keyword.control.zen
+    - match: \b(try|catch|orelse|ifn't|whilen't)\b
       scope: keyword.control.zen
     - match: \b(var|val)\b
       scope: storage.type.zen
@@ -66,7 +68,7 @@ contexts:
       scope: constant.language.boolean.zen
     - match: \b(nil)\b
       scope: constant.language.null.zen
-    - match: \b(this|super|it)\b
+    - match: \b(it)\b
       scope: variable.language.zen
     - match: \b[0-9]+(?:.[0-9]+)?\b
       scope: constant.numeric.zen
@@ -86,6 +88,8 @@ contexts:
       match: \|>
     - scope: keyword.operator.arrow.zen
       match: \=>
+    - scope: keyword.operator.access.zen
+      match: \\
 
   punctuation:
     - match: \(|\)|\{|\}|;|\[|\]|\.|,

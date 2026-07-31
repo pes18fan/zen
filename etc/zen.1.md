@@ -3,21 +3,23 @@
 NAME
 ====
 
-zen - a dynamically typed programming language
+zen - a statically typed programming language
 
 SYNOPSIS
 ====
 
-`zen [-hvtCDTLS?] [--dump-tokens] [--dump-ast] [FILE] [--] [ARGUMENTS]`
+`zen [script] [--compile] [--dump] [--dump-ast] [--dump-tokens] [--exec CODE] [--log-checker] [--log-gc] [--stress-gc] [--time] [--trace] [--version] [ARGUMENTS]`
 
 DESCRIPTION
 ====
 
-zen is a dynamically typed programming language written in Odin. The zen program
+zen is a statically typed programming language written in Odin, with
+Hindley-Milner style type inference. The zen program
 is a bytecode interpreter for this language.
 
 It aims to have a familiar syntax while being easy to use with various features.
-It supports both object oriented and functional programming paradigms. More
+It supports functional programming paradigms, including first-class functions
+and closures. More
 information about the language can be found in the documentation at 
 `https://github.com/pes18fan/zen/blob/main/DOCUMENTATION.md`.
 
@@ -28,28 +30,31 @@ interpreter.
 OPTIONS
 ====
 
-`-h, -?, --help`
+`-h, --help`
 :   Show the help message and exit
 
-`-v, --version`
+`--version`
 :   Show the current program version and exit
 
-`-t, --time`
+`--time`
 :   Record time taken to compile and run
 
-`-C, --compile`
-:   Compile only, useful with -D
+`--compile`
+:   Compile only, useful with --dump
 
-`-D, --dump`
+`--dump`
 :   Dump disassembled bytecode
 
-`-T, --trace`
+`--trace`
 :   Trace script execution
 
-`-L, --log-gc`
+`--log-checker`
+:   Log the type checker
+
+`--log-gc`
 :   Log garbage collection
 
-`-S, --stress-gc`
+`--stress-gc`
 :   Collect garbage on every allocation
 
 `--dump-tokens`
@@ -58,6 +63,12 @@ OPTIONS
 `--dump-ast`
 : Dump the abstract syntax tree from the parser and exit
 
+`--exec <code>`
+:   Execute a string of zen code directly
+
+`--script <file>`
+:   Input script; omit to use the REPL instead
+
 EXIT STATUS
 ====
 
@@ -65,13 +76,13 @@ EXIT STATUS
 : Success
 
 65
-: Compile error
+: Lex, parse, or compile error
+
+66
+: Error reading file
 
 70
 : Runtime error
-
-74
-: Error reading file
 
 Other exit statuses may be observed as well depending on the executed program,
 as zen's exit expression allows ending the program with a custom exit.

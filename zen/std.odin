@@ -549,7 +549,7 @@ write_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
 
 /* Get the arguments passed to the program. */
 args_native :: proc(vm: ^VM, arg_count: int, args: []Value) -> (Value, bool) {
-	if args == nil {
+	if vm.args == nil {
 		args_list := new_list(vm.gc)
 		for arg in opt.overflow {
 			write_value_array(&args_list.items, obj_val(copy_string(vm.gc, arg)))

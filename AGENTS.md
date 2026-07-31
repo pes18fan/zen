@@ -1,17 +1,9 @@
 # AGENTS.md
 
-`zen` is a dynamically-typed scripting language (interpreter + bytecode VM)
-written in Odin, currently mid-transition to a Hindley-Milner static type
-system. Everything in `zen/` is **one flat Odin package** (`package zen`,
-plus a vendored `zen/isocline` binding) — there are no internal module
-boundaries to respect.
-
-## Branches
-
-| Branch | Purpose |
-|---|---|
-| `main` | Stable: no type inference |
-| `typechecker` | Active: HM type inference, classes & OOP fully removed from language |
+`zen` is a statically-typed scripting language (interpreter + bytecode VM)
+written in Odin, with Hindley-Milner style type inference. Everything in
+`zen/` is **one flat Odin package** (`package zen`, plus a vendored
+`zen/isocline` binding) — there are no internal module boundaries to respect.
 
 ## Build
 
@@ -47,11 +39,10 @@ Requires Odin and Python (stdlib only, no pip deps).
 ## Testing
 
 ```bash
-./x.py test                  # unit tests + old e2e suite (test/__tests__)
+./x.py test                  # unit tests + e2e suite (test/__tests__)
 ./x.py test --recompile      # rebuild debug first, copy to bin/test/zen, test
 ./x.py test --unit   -u      # odin unit tests only (@(test) procs)
 ./x.py test --e2e    -e      # e2e .zn script tests only
-./x.py test --new    -n      # run test/__tests_new__ instead (recommended)
 ./x.py test --strict -s      # fail on memory leaks (debug build only)
 ```
 
@@ -59,13 +50,13 @@ Requires Odin and Python (stdlib only, no pip deps).
   by `test --recompile` (builds debug, copies `bin/dbg/dzen` →
   `bin/test/zen`). Without it, `run_tests.py` exits with "interpreter not
   found". When in doubt, run `./x.py test --recompile`.
-- **Two e2e suites exist and they are not the same thing:**
-  - `test/__tests__` (default) — legacy suite with OOP tests
-    (class/inheritance/super/this) that are **expected to fail** since
-    classes are fully removed from the language.
-  - `test/__tests_new__` (`--new`) — the active suite for the ongoing
-    typechecker work; has a `typechecking/` subdir and no OOP tests.
-    **This is the working suite. Use `--new`.**
+- **There is a single e2e suite at `test/__tests__`.** It covers the whole
+  language, including a `typechecking/` subdir for type-error and inference
+  tests. (The old legacy suite and `test/__tests_new__` were consolidated
+  when classes & OOP were removed from the language.)
+- The typechecker can be compiled out with `-define:DISABLE_TYPECHECKER=true`
+  (default is on; see `zen/vm.odin:13`). The `--log-checker` debug flag logs
+  the typechecker's passes.
 - No built-in single-file flag in `run_tests.py`, but you can point it at a
   subfolder via `python test/run_tests.py -d <relpath>` (run from `test/`).
   To run one file by hand: build, then `bin/test/zen path/to/file.zn` and
@@ -98,7 +89,7 @@ Man page: `pandoc -s -t man ./etc/zen.1.md -o zen.1`
   code freeing AST nodes must also free these. This is the one spot where
   the arena-everywhere assumption for types doesn't hold.
 
-## Current limitations (typechecker branch)
+## Current limitations
 
 - Type inference is **skipped for programs that `use` a `.USER` module**:
   `has_user_modules` at `zen/semcheck.odin:341`, called at `zen/vm.odin:956`;

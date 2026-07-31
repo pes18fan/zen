@@ -142,7 +142,7 @@ def create_chaotic_build():
         exit(1)
 
 
-def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, new: bool = False, strict: bool = False):
+def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, strict: bool = False):
     if recompile:
         create_debug_build()
         os.makedirs("bin/test", exist_ok=True)
@@ -161,7 +161,7 @@ def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, new: 
 
     print("")
 
-    print("Running new e2e test suite:")
+    print("Running e2e test suite:")
     args = [
         "python", "./run_tests.py", "-d", "__tests__/"]
     if strict:
