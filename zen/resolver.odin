@@ -19,12 +19,11 @@ current_file_scope :: #force_inline proc(rs: ^Resolver) -> ^map[string]^Symbol {
 
 // A local scope of bindings
 Scope :: struct #all_or_none {
-	enclosing:            ^Scope,
-	kind:                 ScopeKind,
-	variables:            map[string]^Symbol,
-	current_local_slot:   int,
-	current_upvalue_slot: int,
-	scope_depth:          int,
+	enclosing:          ^Scope,
+	kind:               ScopeKind,
+	variables:          map[string]^Symbol,
+	current_local_slot: int,
+	scope_depth:        int,
 }
 
 // Kind of a scope; can be a function scope or local scope. This affects the
@@ -45,8 +44,7 @@ Symbol :: struct #all_or_none {
 	is_native_value:  bool, // an Odin-implemented native (stdlib) function/value
 	is_public:        bool,
 	initialized:      bool,
-	scope_depth:      int, // always -1 for global variables
-	upvalue_index:    int, // temporary! equals -1 if `is_captured` is false
+	scope_depth:      int,
 	local_index:      int,
 }
 
@@ -81,15 +79,8 @@ symb :: #force_inline proc(
 		is_public        = is_public,
 		initialized      = true if (is_native_value || is_module) else false,
 		scope_depth      = 0 if in_file_scope(rs) else rs.current_local_scope.scope_depth,
-		local_index      = -1 if in_file_scope(rs) else rs.current_local_scope.current_local_slot,
-		upvalue_index    = -1,
+		local_index      = 0 if in_file_scope(rs) else rs.current_local_scope.current_local_slot,
 	}
-
-	if !in_file_scope(rs) {
-		rs.current_local_scope.current_local_slot += 1
-		rs.current_local_scope.current_upvalue_slot += 1
-	}
-
 	return s
 }
 
@@ -97,7 +88,7 @@ symb :: #force_inline proc(
 ResolvingExpr :: union #no_nil {
 	^AssignExpr,
 	^VariableExpr,
-	^GetExpr,
+	^ModuleAccessExpr,
 }
 
 // A map mapping `ResolvingExpr`s to the `Symbol`s they resolve to. It is the
@@ -108,30 +99,24 @@ ResolutionMap :: map[ResolvingExpr]^Symbol
 enter_scope :: proc(rs: ^Resolver, kind: ScopeKind) {
 	enclosing := rs.current_local_scope
 	starting_local_slot: int
-	starting_upvalue_slot: int
 	switch kind {
 	case .FUNCTION:
 		// for functions, start at 1 as each function starts a new callframe
-		// its 1 cuz the first slot `0` is the function itself.
-		// Except at the global scope, cuz the global scope is also a function.
-		starting_local_slot = 0 if enclosing == nil else 1
-		starting_upvalue_slot = -1 if enclosing == nil else 0
+		// its 1 cuz the first slot `0` is the function itself
+		starting_local_slot = 1
 	case .BLOCK:
-		starting_local_slot = 0 if enclosing == nil else enclosing.current_local_slot + 1
-		starting_upvalue_slot =
-			-1 if (enclosing == nil || enclosing.current_upvalue_slot == -1) else enclosing.current_upvalue_slot + 1
+		starting_local_slot = 1 if enclosing == nil else enclosing.current_local_slot + 1
 	case:
 		fmt.panicf("invalid ScopeKind %v", kind)
 	}
 
 	fs := new(Scope)
 	fs^ = {
-		enclosing            = enclosing,
-		current_local_slot   = starting_local_slot,
-		current_upvalue_slot = starting_upvalue_slot,
-		variables            = make(map[string]^Symbol),
-		scope_depth          = 0 if enclosing == nil else enclosing.scope_depth + 1,
-		kind                 = kind,
+		enclosing          = enclosing,
+		current_local_slot = starting_local_slot,
+		variables          = make(map[string]^Symbol),
+		scope_depth        = 0 if enclosing == nil else enclosing.scope_depth + 1,
+		kind               = kind,
 	}
 
 	rs.current_local_scope = fs
@@ -157,8 +142,6 @@ resolve_local :: proc(fs: ^Scope, name: string, is_upvalue: bool = false) -> (^S
 	if var, ok := fs.variables[name]; ok {
 		if is_upvalue {
 			var.is_captured = true
-			var.upvalue_index = fs.current_upvalue_slot
-			fs.current_upvalue_slot += 1
 		}
 
 		return var, true
@@ -308,8 +291,8 @@ declare_and_define_module :: proc(rs: ^Resolver, name: string, type: ModuleType)
 		return nil
 	}
 
-	_, exists := rs.current_local_scope.variables[name]
-	if exists {
+	var, exists := rs.current_local_scope.variables[name]
+	if exists && var.scope_depth == rs.current_local_scope.scope_depth {
 		return "A variable with this name in this scope already exists."
 	}
 
@@ -378,7 +361,7 @@ define_variable :: proc(rs: ^Resolver, name: string) {
 	if in_file_scope(rs) {
 		var, ok := current_file_scope(rs)[name]
 		if !ok {
-			fmt.panicf("no global variable with name %v found to define", name)
+			fmt.panicf("no global variable with name %v exists", name)
 		}
 		var.initialized = true
 		return
@@ -386,19 +369,25 @@ define_variable :: proc(rs: ^Resolver, name: string) {
 
 	var, ok := rs.current_local_scope.variables[name]
 	if !ok {
-		fmt.panicf("no variable with name %v found in the function scope to define", name)
+		fmt.panicf("no variable with name %v exists in the function scope", name)
 	}
 	var.initialized = true
 }
 
-resolve_get_expr :: proc(rs: ^Resolver, e: ^GetExpr) -> bool {
+// Resolve the module import and accessed value in a `ModuleAccessExpr`.
+resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool {
 	if var_e, ok := e.receiver.(^VariableExpr); ok {
 		receiver_var := try2(rs, try_resolve_variable(rs, var_e.token.lexeme)) or_return
 		if !receiver_var.is_module {
-			/* The receiver is something other than a module, check the property
-            access at runtime */
-			rs.resolution_map[e] = receiver_var
-			return true
+			resolver_error(
+				rs,
+				fmt.tprintf(
+					"`%v` operator cannot be used on '%v' as it is not a module.",
+					e.token.lexeme,
+					receiver_var.name,
+				),
+			)
+			return false
 		}
 
 		resolved: ^Symbol
@@ -453,8 +442,11 @@ resolve_get_expr :: proc(rs: ^Resolver, e: ^GetExpr) -> bool {
 		rs.resolution_map[e] = resolved
 		return true
 	} else {
-		resolve_with_resolver(rs, e.receiver) or_return
-		return true
+		resolver_error(
+			rs,
+			fmt.tprintf("`%v` operator can only be used on a module.", e.token.lexeme),
+		)
+		return false
 	}
 }
 
@@ -511,9 +503,9 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^ExitExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.code) or_return
-	case ^GetExpr:
+	case ^ModuleAccessExpr:
 		rs.current_token = e.token
-		resolve_get_expr(rs, e) or_return
+		resolve_module_access_expr(rs, e) or_return
 	case ^GroupingExpr:
 		rs.current_token = e.token
 		resolve_with_resolver(rs, e.expression) or_return
@@ -633,7 +625,10 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^VariableExpr:
 		rs.current_token = e.token
 		var := try2(rs, try_resolve_variable(rs, e.name.lexeme)) or_return
-		rs.resolution_map[e] = var
+		if var.is_module {
+			resolver_error(rs, "Cannot use a module as a value.")
+			return false
+		}
 
 		rs.resolution_map[e] = var
 	case ^VarDeclExpr:
@@ -698,8 +693,7 @@ inject_builtin_functions :: #force_inline proc(m: ^map[string]^Symbol) {
 			is_public        = true,
 			initialized      = true,
 			scope_depth      = 0,
-			local_index      = -1,
-			upvalue_index    = -1,
+			local_index      = 0,
 		}
 		m[fn.name] = native_var
 	}
@@ -722,6 +716,7 @@ collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			init := binding.initializer.? or_continue
 			_ = init.(^FunctionExpr) or_continue
 
+			// ONLY declare the variable; it is defined in the main resolver pass
 			try(rs, declare_variable(rs, binding.name.lexeme, is_final, is_public)) or_return
 			define_variable(rs, binding.name.lexeme)
 		}

@@ -5,7 +5,7 @@ use "list";
 func sieve(limit) {
     var flags = [];
     for var i = 0; i <= limit; i = i + 1 {
-        flags = flags |> list.push(true)
+        flags = flags |> list\push(true)
     };
 
     flags[0] = false;
@@ -24,7 +24,7 @@ func sieve(limit) {
     var primes = [];
     for var i = 0; i <= limit; i = i + 1 {
         if flags[i] {
-            primes = primes |> list.push(i)
+            primes = primes |> list\push(i)
         }
     };
 

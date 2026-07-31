@@ -1,0 +1,3 @@
+use "math";
+
+val m = math    // ERR: Cannot use a module as a value.

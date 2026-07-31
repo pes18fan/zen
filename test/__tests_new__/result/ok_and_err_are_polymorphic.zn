@@ -1,0 +1,12 @@
+use "result";
+
+func make_ok(x) {
+    ok(x)
+};
+
+func make_err(x) {
+    err(x)
+};
+
+puts(result\unwrap(make_ok(7))); // expect: 7
+puts(result\unwrap_or(make_err("boom"), "fallback")); // expect: fallback

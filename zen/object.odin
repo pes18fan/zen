@@ -9,7 +9,7 @@ ObjType :: enum {
 	CLOSURE,
 	FUNCTION,
 	LIST,
-	RECORD,
+	MODULE,
 	NATIVE,
 	RESULT,
 	STRING,
@@ -92,11 +92,10 @@ ObjList :: struct {
 }
 
 /* 
-A record is not much more than a hash table containing some values.
-A specialization of records in zen is the module: modules are simply a record
-storing public variables in their global scope.
+A module is not much more than a hash table containing the variables in the
+global scope of an imported module.
 */
-ObjRecord :: struct {
+ObjModule :: struct {
 	using obj: Obj,
 	name:      ^ObjString,
 	values:    Table,
@@ -135,8 +134,8 @@ is_string :: #force_inline proc(value: Value) -> bool {
 	return is_obj_type(value, .STRING)
 }
 
-is_record :: #force_inline proc(value: Value) -> bool {
-	return is_obj_type(value, .RECORD)
+is_module :: #force_inline proc(value: Value) -> bool {
+	return is_obj_type(value, .MODULE)
 }
 
 is_result :: #force_inline proc(value: Value) -> bool {
@@ -171,8 +170,8 @@ as_ostring :: #force_inline proc(value: Value) -> string {
 	return (^ObjString)(as_string(value)).chars
 }
 
-as_record :: #force_inline proc(value: Value) -> ^ObjRecord {
-	return (^ObjRecord)(as_obj(value))
+as_module :: #force_inline proc(value: Value) -> ^ObjModule {
+	return (^ObjModule)(as_obj(value))
 }
 
 as_result :: #force_inline proc(value: Value) -> ^ObjResult {
@@ -189,8 +188,8 @@ type_of_obj :: proc(obj: ^Obj) -> string {
 		return "function"
 	case .LIST:
 		return "list"
-	case .RECORD:
-		return "record"
+	case .MODULE:
+		return "module"
 	case .RESULT:
 		return "result"
 	case .STRING:
@@ -262,11 +261,11 @@ new_list :: proc(gc: ^GC) -> ^ObjList {
 	return list
 }
 
-new_record :: proc(gc: ^GC, name: ^ObjString) -> ^ObjRecord {
-	record := cast(^ObjRecord)(allocate_obj(gc, ObjRecord, .RECORD))
-	record.name = name
-	record.values = init_table()
-	return record
+new_module :: proc(gc: ^GC, name: ^ObjString) -> ^ObjModule {
+	module := cast(^ObjModule)(allocate_obj(gc, ObjModule, .MODULE))
+	module.name = name
+	module.values = init_table()
+	return module
 }
 
 new_result :: proc(gc: ^GC, is_ok: bool, value: Value) -> ^ObjResult {
@@ -384,8 +383,8 @@ stringify_object :: proc(obj: ^Obj, quote_strings: bool = false) -> string {
 			str := strings.to_string(sb)
 			return fmt.tprint(str)
 		}
-	case .RECORD:
-		return fmt.tprintf("<record %s>", as_record(obj_val(obj)).name.chars)
+	case .MODULE:
+		return fmt.tprintf("<module %s>", as_module(obj_val(obj)).name.chars)
 	case .RESULT:
 		result := as_result(obj_val(obj))
 		within := stringify_value(result.value, quote_strings = true)
@@ -433,10 +432,10 @@ free_object :: proc(gc: ^GC, obj: ^Obj) {
 		list := (^ObjList)(obj)
 		free_value_array(list.items)
 		free(list)
-	case .RECORD:
-		record := (^ObjRecord)(obj)
-		free_table(&record.values)
-		free(record)
+	case .MODULE:
+		module := (^ObjModule)(obj)
+		free_table(&module.values)
+		free(module)
 	case .RESULT:
 		result := (^ObjResult)(obj)
 		free(result)

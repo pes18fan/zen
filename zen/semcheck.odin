@@ -182,7 +182,7 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			sm.current_compiler.loop_depth -= 1
 		}
 		end_semantic_scope(sm)
-	case ^GetExpr:
+	case ^ModuleAccessExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.receiver) or_return
 	case ^GroupingExpr:
@@ -334,4 +334,21 @@ semcheck :: proc(expr: Expr) -> (success: bool) {
 		return false
 	}
 	return true
+}
+
+
+@(require_results)
+has_user_modules :: proc(expr: Expr) -> bool {
+	if expr == nil {return false}
+
+	#partial switch e in expr {
+	// only need to check this case as modules are forced by the semantic
+	// analyzer to be at global scope
+	case ^SequenceExpr:
+		return has_user_modules(e.left) || has_user_modules(e.right)
+	case ^UseExpr:
+		if e.type == .USER {return true}
+	}
+
+	return false
 }

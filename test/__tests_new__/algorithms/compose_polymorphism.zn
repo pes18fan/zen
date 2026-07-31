@@ -1,5 +1,5 @@
-// Function composition and identity closures, used at various value types.
-func compose(f, g) {
+// Generic composition and identity for testing let-polymorphism.
+func compose[A, B, C](f, g) {
     func(x) => f(g(x))
 };
 
@@ -13,9 +13,9 @@ puts(add1_then_double(5));   // expect: 12
 var double_then_str = compose(to_str, double);
 puts(double_then_str(5));    // expect: 10
 
-func identity(x) => x;
+func identity[T](x: T): T => x;
 
-// Same `identity`, used at three unrelated types back to back.
+// Same `identity`, used at three unrelated concrete types back to back.
 puts(identity(42));         // expect: 42
 puts(identity("hello"));    // expect: hello
 puts(identity(true))        // expect: true

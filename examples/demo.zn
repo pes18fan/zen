@@ -24,8 +24,8 @@ val
     is_nice = true,
     is_not_nice = false;
 
-puts(string.upcase("hello")); //=> "HELLO"
-puts(math.ln(2)); //=> 0.693
+puts(string\upcase("hello")); //=> "HELLO"
+puts(math\ln(2)); //=> 0.693
 
 // Conditionals!
 // Note that there are no else-if expressions. Use a switch expression instead.
@@ -35,7 +35,7 @@ if false {
     puts "This is supposed to happen"
 };
 
-val a = math.rand() * 10 |> math.floor();
+val a = math\rand() * 10 |> math\floor();
 
 switch a {
     0 => puts "a is 0",
@@ -51,7 +51,7 @@ switch a {
 // in zen!
 
 // An if expression evaluates to whatever branch matches. Bare ifs always evaluate to nil.
-val random = if math.rand() > 0.5 {
+val random = if math\rand() > 0.5 {
     "over half"
 } else {
     "less than half"
@@ -75,7 +75,7 @@ for x in [1, 2, 3] {
     puts(x)
 }; //=> 1 2 3
 
-for c in string.chars("hello") {
+for c in string\chars("hello") {
     puts(c)
 }; //=> h e l l o
 
@@ -84,8 +84,8 @@ var l = [97, 69, 420];
 puts(l[0]);  //=> 97
 l[1] = 71;   //=> 71
 
-list.push(l, 27);
-puts(list.pop(l)); //=> 27
+list\push(l, 27);
+puts(list\pop(l)); //=> 27
 
 for var i = 0; i < len(l); i = i + 1 {
     puts(i)
@@ -130,8 +130,8 @@ val anon = func() {
 // Pipes!
 // Pipes are used to pass expressions to other expressions.
 // For example, the following two lines are equivalent:
-puts(string.upcase("hello"));
-puts("hello" |> string.upcase());
+puts(string\upcase("hello"));
+puts("hello" |> string\upcase());
 
 // In a pipeline, any function call implicitly takes the last expression as its
 // first argument.
@@ -143,24 +143,24 @@ puts("69"
 // Lists work nicely with pipelines.
 // If you're sending a list variable to the pipeline, copy it to avoid mutating it.
 val n = copy(l)
-    |> list.remove_last()
-    |> list.push(27)
-    |> list.sort()
+    |> list\remove_last()
+    |> list\push(27)
+    |> list\sort()
     |> puts();   //=> [27, 69, 97]
 
 // Modules!
 // You can use one of the builtin modules:
 use "time";
 
-time.clock(); // Current time in UNIX ms
+time\clock(); // Current time in UNIX ms
 
 // You can also import your own files.
-use "./helper.zn";
+// use "./helper.zn"
 
-helper.woo(); //=> from a module!
+// helper\woo() //=> from a module!
 
 // Note that if you import your own files, to use functions in them they must
 // be explicitly set as public using the `pub` keyword.
-pub func foo() {
-    puts "You can use this from any file!"
-}
+// pub func foo() {
+//     puts "You can use this from any file!"
+// }

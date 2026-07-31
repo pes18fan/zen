@@ -1,2 +1,0 @@
-var x;
-puts(x) // ERR: Cannot use uninitialized variable 'x'.

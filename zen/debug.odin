@@ -120,10 +120,10 @@ disassemble_instruction :: proc(c: ^Chunk, offset: int) -> int {
 		return byte_instruction("OP_GET_UPVALUE", c, offset)
 	case .OP_SET_UPVALUE:
 		return byte_instruction("OP_SET_UPVALUE", c, offset)
-	case .OP_GET_PROPERTY:
-		return constant_instruction("OP_GET_PROPERTY", c, offset)
-	case .OP_GET_PROPERTY_LONG:
-		return long_constant_instruction("OP_GET_PROPERTY_LONG", c, offset)
+	case .OP_MODULE_ACCESS:
+		return constant_instruction("OP_MODULE_ACCESS", c, offset)
+	case .OP_MODULE_ACCESS_LONG:
+		return long_constant_instruction("OP_MODULE_ACCESS_LONG", c, offset)
 	case .OP_GET_IT:
 		return simple_instruction("OP_GET_IT", offset)
 	case .OP_SET_IT:

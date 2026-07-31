@@ -1,6 +1,14 @@
 // The Y combinator. It is a combinator (function whose output depends only
 // on its arguments) that is best known for being a solution to the problem of
 // recursively calling an anonymous function.
+//
+// The self-application `x(x)` inside `g` requires x to have a type
+// equal to "a function taking itself", i.e. an infinite/recursive
+// type. Plain Hindley-Milner cannot express that, so a correct occurs check 
+// should reject this program.
+//
+// NOTE: Perhaps, in the future, it could be a good idea to support recursive
+// types so that the Y combinator can successfully typecheck.
 
 func y(f) {
     func g(x) {
@@ -14,11 +22,4 @@ func fact_gen(self) {
 };
 
 var fact = y(fact_gen);
-puts(fact(5));  // expect: 120
-
-func fib_gen(self) {
-    func(n) => if n < 2 { n } else { self(n - 1) + self(n - 2) }
-};
-
-var fib = y(fib_gen);
-puts(fib(10))   // expect: 55
+puts(fact(5))  // ERR: Infinite type: type (a) -> b contains a.

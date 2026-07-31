@@ -2,7 +2,7 @@
 use "list";
 
 func add_item(lst, item) {
-    list.push(lst, item)
+    list\push(lst, item)
 };
 
 var l = [1, 2];

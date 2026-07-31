@@ -3,7 +3,7 @@ use "result";
 val nested_ok = ok(ok(3));
 val nested_err = ok(err("inner"));
 
-puts(result.ok?(nested_ok)); // expect: true
-puts(result.ok?(nested_err)); // expect: true
-puts(result.err?(result.unwrap(nested_err))); // expect: true
-puts(result.unwrap(result.unwrap(nested_ok))); // expect: 3
+puts(result\ok?(nested_ok)); // expect: true
+puts(result\ok?(nested_err)); // expect: true
+puts(result\err?(result\unwrap(nested_err))); // expect: true
+puts(result\unwrap(result\unwrap(nested_ok))); // expect: 3
