@@ -10,9 +10,12 @@ import "core:slice"
 import "core:strings"
 import "core:time"
 
+DISABLE_TYPECHECKER :: #config(DISABLE_TYPECHECKER, false)
+
+// Maximum number of callframes.
 FRAMES_MAX :: 96
 
-/* The maximum size for the stack. Going past this causes a stack overflow. */
+// The maximum size for the stack. Going past this causes a stack overflow.
 STACK_MAX :: FRAMES_MAX * U8_COUNT
 
 /*
@@ -947,29 +950,31 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	should_not_typecheck := has_user_modules(expr)
+	when DISABLE_TYPECHECKER {
+		should_not_typecheck := has_user_modules(expr)
 
-	// TODO: type checker pass, in progress
-	// Some problems being faced now that the checker is almost done. At the point
-	// of writing this (July 21, 2026), module graph resolution is complete and
-	// the name resolver also works across the module graph; the only blocker
-	// for the checker being fully complete is it not being able to typecheck
-	// across module boundaries. However, my choice of implementation method
-	// early on in the checker PR is now backfiring as the resolver and checker
-	// don't mesh well together. Thinking of integrating the typechecker pass
-	// with the resolver. Might need a large refactor.
-	if !should_not_typecheck {
-		_, tc_ok := typecheck(expr, reso)
-		if !tc_ok {
-			return .INTERPRET_COMPILE_ERROR
-		}
+		// TODO: type checker pass, in progress
+		// Some problems being faced now that the checker is almost done. At the point
+		// of writing this (July 21, 2026), module graph resolution is complete and
+		// the name resolver also works across the module graph; the only blocker
+		// for the checker being fully complete is it not being able to typecheck
+		// across module boundaries. However, my choice of implementation method
+		// early on in the checker PR is now backfiring as the resolver and checker
+		// don't mesh well together. Thinking of integrating the typechecker pass
+		// with the resolver. Might need a large refactor.
+		if !should_not_typecheck {
+			_, tc_ok := typecheck(expr, reso)
+			if !tc_ok {
+				return .INTERPRET_COMPILE_ERROR
+			}
 
-		/* Time the typechecker. */
-		if opt.time {
-			time.stopwatch_stop(&sw)
-			fmt.eprintf("Typechecker: %v\n", time.stopwatch_duration(sw))
-			time.stopwatch_reset(&sw)
-			time.stopwatch_start(&sw)
+			/* Time the typechecker. */
+			if opt.time {
+				time.stopwatch_stop(&sw)
+				fmt.eprintf("Typechecker: %v\n", time.stopwatch_duration(sw))
+				time.stopwatch_reset(&sw)
+				time.stopwatch_start(&sw)
+			}
 		}
 	}
 
@@ -981,6 +986,9 @@ interpret :: proc(
 	// use the default heap allocator for codegen and the VM
 	context.allocator = prev_alloc
 	collect_globals(&vm.compiler_globals, gc, expr)
+
+	// TODO: codegen re-resolves all variables again even though the resolver
+	// did that task, fix it
 	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR
