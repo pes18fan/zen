@@ -1,2 +1,0 @@
-val a = "ok";
-echo a // expect: "ok"

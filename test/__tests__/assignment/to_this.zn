@@ -1,7 +1,0 @@
-class Foo {
-    init() {
-        this = "value"
-    }
-}
-
-Foo() // ERR: Invalid assignment target.

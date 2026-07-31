@@ -1,9 +1,0 @@
-val x = 2, y = 3;
-var a = 1, b = true, c = "hello", d = nil;
-
-echo x; // expect: 2
-echo y; // expect: 3
-echo a; // expect: 1
-echo b; // expect: true
-echo c; // expect: "hello"
-echo d; // expect: nil

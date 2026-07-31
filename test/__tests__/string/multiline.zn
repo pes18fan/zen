@@ -1,7 +1,9 @@
-var a = "1
-2
-3"
-print a
-// expect: 1
-// expect: 2
-// expect: 3
+var a = 
+    \\Your two great eyes will slay me suddenly;
+    \\Their beauty shakes me who was once serene;
+    \\Straight through my heart the wound is quick and keen. 
+;
+puts(a)
+// expect: Your two great eyes will slay me suddenly;
+// expect: Their beauty shakes me who was once serene;
+// expect: Straight through my heart the wound is quick and keen. 

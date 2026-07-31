@@ -941,6 +941,7 @@ interpret :: proc(
 	if !rs_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
+	_ = reso
 
 	/* Time the resolver. */
 	if opt.time {
@@ -950,7 +951,7 @@ interpret :: proc(
 		time.stopwatch_start(&sw)
 	}
 
-	when DISABLE_TYPECHECKER {
+	when !DISABLE_TYPECHECKER {
 		should_not_typecheck := has_user_modules(expr)
 
 		// TODO: type checker pass, in progress

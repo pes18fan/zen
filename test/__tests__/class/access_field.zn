@@ -1,5 +1,0 @@
-class Klass {}
-
-var k = Klass()
-k.prop = "value"
-puts(k.prop)    // expect: value

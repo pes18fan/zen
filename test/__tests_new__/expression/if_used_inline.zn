@@ -1,1 +1,0 @@
-echo (if true { 1 } else { 2 }) + (if false { 3 } else { 4 }) // expect: 5

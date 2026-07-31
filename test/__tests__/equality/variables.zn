@@ -1,5 +1,3 @@
-var i = 0
-
-print i == 2 // expect: false
-print "\n"
-print i == 0 // expect: true
+var i = 0;
+echo i == 2; // expect: false
+echo i == 0 // expect: true

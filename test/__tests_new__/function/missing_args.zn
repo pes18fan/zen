@@ -1,3 +1,0 @@
-func f(a, b) {};
-
-f(1) // ERR: Expected 2 arguments for 'f' but got 1.

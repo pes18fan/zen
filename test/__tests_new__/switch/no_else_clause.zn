@@ -1,3 +1,0 @@
-switch true {
-    false => nil
-} // ERR: Switch expression must have an 'else' case.

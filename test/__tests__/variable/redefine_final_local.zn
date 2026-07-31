@@ -1,4 +1,4 @@
 {
-    val a = "some"
+    val a = "some";
     a = "other" // ERR: Can only set a final variable once.
 }

@@ -1,2 +1,2 @@
-var a = 'hello'
-puts(a) // expect: hello
+var a = 'hello';
+puts(a); // expect: hello

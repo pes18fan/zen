@@ -1,21 +1,20 @@
-use "time"
+use "time";
 
 func make_counter() {
-    var n = 0
-    return func() {
-        n = n + 1
-        return n
+    var n = 0;
+    func() {
+        n + 1
     }
-}
+};
 
-var start = time.clock_ms()
-var counter = make_counter()
-var i = 0
+var start = time\clock_ms();
+var counter = make_counter();
+var i = 0;
 while i < 10000000 {
-    counter()
+    counter();
     i = i + 1
-}
-puts("count:")
-puts(counter())
-puts("elapsed:")
-puts(time.clock_ms() - start)
+};
+puts("count:");
+puts(counter());
+puts("elapsed:");
+puts(time\clock_ms() - start)

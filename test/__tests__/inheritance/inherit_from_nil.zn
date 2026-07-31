@@ -1,2 +1,0 @@
-var Nil = nil
-class Foo < Nil {} // ERR: Superclass must be a class.

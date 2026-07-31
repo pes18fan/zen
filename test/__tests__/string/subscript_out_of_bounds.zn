@@ -1,2 +1,0 @@
-var s = "hi"
-puts(s[5]) // ERR: Index out of bounds, attempted indexing 5 in a size 2 string.

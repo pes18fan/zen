@@ -1,3 +1,0 @@
-func private() {
-    puts("top secret shhh")
-}

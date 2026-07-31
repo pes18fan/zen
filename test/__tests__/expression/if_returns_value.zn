@@ -1,6 +1,5 @@
-var result = if true { "yes" } else { "no" }
-print result // expect: yes
-print "\n"
+var result = if true { "yes" } else { "no" };
+echo result; // expect: "yes"
 
-var result2 = if false { "yes" } else { "no" }
-print result2 // expect: no
+var result2 = if false { "yes" } else { "no" };
+echo result2 // expect: "no"

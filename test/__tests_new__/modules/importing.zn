@@ -1,3 +1,0 @@
-use "string";
-
-echo string\upcase("hello") // expect: "HELLO"

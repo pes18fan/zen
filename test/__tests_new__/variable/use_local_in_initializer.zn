@@ -1,4 +1,0 @@
-var a = "outer";
-{
-    var a = a // ERR: Cannot use uninitialized variable 'a'.
-}

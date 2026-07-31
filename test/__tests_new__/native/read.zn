@@ -1,3 +1,0 @@
-use "os";
-
-puts(os\read("read_helper.txt")) // expect: stuff

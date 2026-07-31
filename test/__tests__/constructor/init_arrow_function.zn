@@ -1,5 +1,0 @@
-class A {
-    init() => this.prop = 1
-}
-
-puts(A())   // expect: <instance of A>

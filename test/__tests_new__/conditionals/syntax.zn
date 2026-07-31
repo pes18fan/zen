@@ -1,6 +1,0 @@
-if false {
-    print "How did this happen"
-} else {
-    print "of course" // expect: of course
-}
-

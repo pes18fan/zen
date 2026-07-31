@@ -1,10 +1,10 @@
 // Function mutates the passed list (reference semantics)
-use "list"
+use "list";
 
 func add_item(lst, item) {
-    list.push(lst, item)
-}
+    list\push(lst, item)
+};
 
-var l = [1, 2]
-add_item(l, 3)
-puts(l) // expect: [1, 2, 3]
+var l = [1, 2];
+add_item(l, 3);
+puts(l); // expect: [1, 2, 3]

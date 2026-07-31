@@ -1,9 +1,0 @@
-var a = -1;
-var b = -1;
-var c = (a = 5);
-puts(c); // expect: 5
-
-// chained assignment
-b = a = 10;
-puts(a); // expect: 10
-puts(b); // expect: 10

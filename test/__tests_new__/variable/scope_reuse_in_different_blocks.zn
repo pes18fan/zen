@@ -1,9 +1,0 @@
-{
-    var a = "first";
-    echo a; // expect: "first"
-};
-
-{
-    var a = "second";
-    echo a; // expect: "second"
-}

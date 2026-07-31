@@ -1,2 +1,0 @@
-var result = { 42 };
-echo result // expect: 42

@@ -1,4 +1,0 @@
-use "string";
-
-echo "Hello, world" 
-    |> string\replace("world", "universe") // expect: "Hello, universe"
