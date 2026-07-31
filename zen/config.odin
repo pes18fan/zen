@@ -16,9 +16,8 @@ Global :: struct {
 	/* Is the REPL being run? */
 	repl:         bool,
 
-	// zen is not multithreaded (as of 25 July, 2026), so why the hell do I have
-	// a mutex here? Well, its for the future, just in case it DOES become
-	// multithreaded
+	// zen is not multithreaded, so why the hell do I have a mutex here? Well,
+	// its for the future, just in case it DOES become multithreaded
 	mutex:        sync.Mutex,
 }
 
