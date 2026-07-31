@@ -140,7 +140,7 @@ the module and adding them to the module Obj.
 define_builtin_module :: proc(gc: ^GC, name: string, module: BuiltinModule) {
 	vm := as_vm(gc.mark_roots_arg)
 
-	obj_module := new_module(gc, copy_string(gc, name))
+	obj_module := new_record(gc, copy_string(gc, name))
 	vm_push(vm, obj_val(obj_module)) // keep it on the stack so that gc doesn't collect
 
 	module_functions := get_builtin_module(gc, module)
@@ -386,57 +386,56 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				// Take the value on top of the stack and store it into the slot.
 				frame.closure.upvalues[slot].location^ = vm_peek(vm, 0)
 			}
-		// This opcode is used to get values in a module.
-		case .OP_MODULE_ACCESS:
+		case .OP_GET_PROPERTY:
 			{
-				if is_module(vm_peek(vm, 0)) {
-					module := as_module(vm_peek(vm, 0))
+				if is_record(vm_peek(vm, 0)) {
+					record := as_record(vm_peek(vm, 0))
 					name := read_string(frame)
 
-					/* Look for the value in the module. */
+					/* Look for the value in the record. */
 					value: Value; ok: bool
-					if value, ok = table_get(&module.values, name); ok {
-						vm_pop(vm) /* Module. */
+					if value, ok = table_get(&record.values, name); ok {
+						vm_pop(vm) /* Record. */
 						vm_push(vm, value)
 						break /* Step out of the switch statement. */
 					} else {
 						panic_str := fmt.tprintf(
-							`Value '%s' does not exist on module '%s'.
-       If this module is a file, you may have forgotten the pub keyword.`,
+							`Property '%s' does not exist on record '%s'.
+       If this record is a module, you may have forgotten the pub keyword.`,
 							name.chars,
-							module.name.chars,
+							record.name.chars,
 						)
 						vm_panic(vm, panic_str)
 						return .INTERPRET_RUNTIME_ERROR
 					}
 				} else {
-					vm_panic(vm, "Cannot use module access operator on a non-module.")
+					vm_panic(vm, "Cannot access property of a non-record.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
-		case .OP_MODULE_ACCESS_LONG:
+		case .OP_GET_PROPERTY_LONG:
 			{
-				if is_module(vm_peek(vm, 0)) {
-					module := as_module(vm_peek(vm, 0))
+				if is_record(vm_peek(vm, 0)) {
+					record := as_record(vm_peek(vm, 0))
 					name := read_string_long(frame)
 
 					value: Value; ok: bool
-					if value, ok = table_get(&module.values, name); ok {
+					if value, ok = table_get(&record.values, name); ok {
 						vm_pop(vm)
 						vm_push(vm, value)
 						break
 					} else {
 						panic_str := fmt.tprintf(
-							`Value '%s' does not exist on module '%s'.
-       If this module is a file, you may have forgotten the pub keyword.`,
+							`Property '%s' does not exist on record '%s'.
+       If this record is a module, you may have forgotten the pub keyword.`,
 							name.chars,
-							module.name.chars,
+							record.name.chars,
 						)
 						vm_panic(vm, panic_str)
 						return .INTERPRET_RUNTIME_ERROR
 					}
 				} else {
-					vm_panic(vm, "Cannot use module access operator on a non-module.")
+					vm_panic(vm, "Cannot access property of a non-record.")
 					return .INTERPRET_RUNTIME_ERROR
 				}
 			}
@@ -723,7 +722,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				module_path := read_string(frame)
 
 				/* Add a new module onto the stack. */
-				module := new_module(vm.gc, module_name)
+				module := new_record(vm.gc, module_name)
 
 				/* Create a new VM for the imported module. */
 				mod_vm := init_VM()
@@ -753,7 +752,7 @@ run :: proc(vm: ^VM, importer: Maybe(ImportingModule) = nil) -> InterpretResult 
 				module_path := read_string_long(frame)
 
 				/* Add a new module onto the stack. */
-				module := new_module(vm.gc, module_name)
+				module := new_record(vm.gc, module_name)
 
 				/* Create a new VM for the imported module. */
 				mod_vm := init_VM()

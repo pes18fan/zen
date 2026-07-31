@@ -69,7 +69,7 @@ so ImportingModule is generally passed around as a Maybe type. */
 ImportingModule :: struct {
 	path:   string,
 	name:   string,
-	module: ^ObjModule,
+	module: ^ObjRecord,
 }
 
 /* 

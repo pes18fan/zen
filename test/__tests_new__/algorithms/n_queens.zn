@@ -11,7 +11,7 @@ func safe(queens, row, col) {
         if c == col {
             is_safe = false
         };
-        if math\abs(r - row) == math\abs(c - col) {
+        if math.abs(r - row) == math.abs(c - col) {
             is_safe = false
         }
     };
@@ -20,14 +20,14 @@ func safe(queens, row, col) {
 
 func solve(n, row, queens, solutions) {
     if row == n {
-        solutions = solutions |> list\push(copy(queens));
+        solutions = solutions |> list.push(copy(queens));
         solutions
     } else {
         for var col = 0; col < n; col = col + 1 {
             if safe(queens, row, col) {
-                queens = queens |> list\push([row, col]);
+                queens = queens |> list.push([row, col]);
                 solutions = solve(n, row + 1, queens, solutions);
-                queens = queens |> list\remove_last()
+                queens = queens |> list.remove_last()
             }
         };
         solutions

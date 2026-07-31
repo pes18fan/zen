@@ -1,7 +1,7 @@
 use "result";
 
 func f(x) {
-    result\unwrap_or(ok(x), x)
+    result.unwrap_or(ok(x), x)
 };
 
 puts(f(10)); // expect: 10

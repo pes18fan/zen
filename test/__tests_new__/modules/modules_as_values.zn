@@ -1,11 +1,13 @@
 use "math";
 
 val m = math;
-puts(m\floor(3.7)); // expect: 3
-puts(typeof(math)); // expect: module
+puts(m.floor(3.7)); // expect: 3
+
+// note: Modules are just records in zen
+puts(typeof(math)); // expect: record
 
 func get_mod() => math;
-puts(get_mod()\sqrt(16)); // expect: 4
+puts(get_mod().sqrt(16)); // expect: 4
 
 val n = m;
-puts(n\ceil(2.1)); // expect: 3
+puts(n.ceil(2.1)); // expect: 3

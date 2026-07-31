@@ -1,8 +1,8 @@
 // Basic Result construction and unwrap on Ok variants
 use "result";
 
-puts(result\unwrap(ok(1))); // expect: 1
-puts(result\unwrap(ok("hello"))); // expect: hello
+puts(result.unwrap(ok(1))); // expect: 1
+puts(result.unwrap(ok("hello"))); // expect: hello
 
 func safe_div(a, b) {
     if b == 0 {
@@ -12,5 +12,5 @@ func safe_div(a, b) {
     }
 };
 
-puts(result\unwrap(safe_div(1, 4))); // expect: 0.250
-puts(result\unwrap(safe_div(1, 2))); // expect: 0.500
+puts(result.unwrap(safe_div(1, 4))); // expect: 0.250
+puts(result.unwrap(safe_div(1, 2))); // expect: 0.500

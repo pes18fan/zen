@@ -7,6 +7,6 @@ use "list";
 var results = [];
 for var i = 0; i < 3; i = i + 1 {
     val x = i * 2;
-    list\push(results, x)
+    list.push(results, x)
 };
 puts(results); // expect: [0, 2, 4]

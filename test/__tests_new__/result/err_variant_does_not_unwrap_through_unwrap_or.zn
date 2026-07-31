@@ -1,7 +1,7 @@
 use "result";
 
 func only_value(x) {
-    result\unwrap_or(err("missing"), x)
+    result.unwrap_or(err("missing"), x)
 };
 
 puts(only_value(42)); // expect: 42

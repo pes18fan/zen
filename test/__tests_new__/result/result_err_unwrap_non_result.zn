@@ -2,4 +2,4 @@
 use "result";
 
 val x = 5;
-result\unwrap(x) // ERR: Can only unwrap a Result, not a number.
+result.unwrap(x) // ERR: Can only unwrap a Result, not a number.

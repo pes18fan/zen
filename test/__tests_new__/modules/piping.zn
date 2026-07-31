@@ -1,5 +1,5 @@
 use "string";
 
 echo "abcd"
-    |> string\upcase()
-    |> string\replace("BCD", "efg") // expect: "Aefg"
+    |> string.upcase()
+    |> string.replace("BCD", "efg") // expect: "Aefg"

@@ -19,7 +19,7 @@ Expr :: union #shared_nil {
 	^ExitExpr,
 	^ForExpr,
 	^ForInExpr,
-	^ModuleAccessExpr,
+	^GetExpr,
 	^GroupingExpr,
 	^IfExpr,
 	^ItExpr,
@@ -95,7 +95,7 @@ ForInExpr :: struct {
 	body:     ^BlockExpr,
 }
 
-ModuleAccessExpr :: struct {
+GetExpr :: struct {
 	token:    Token,
 	receiver: Expr,
 	property: Token,
@@ -976,14 +976,14 @@ parse_call :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
 	return call
 }
 
-parse_backslash :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
-	backslash := parser_previous(p)
-	property := parser_consume(p, .IDENT, "Expect identifier after '\\'.")
-	module_access := new(ModuleAccessExpr)
-	module_access.token = backslash
-	module_access.receiver = left
-	module_access.property = property
-	return module_access
+parse_dot :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
+	dot := parser_previous(p)
+	property := parser_consume(p, .IDENT, "Expect property name after '.'.")
+	get_expr := new(GetExpr)
+	get_expr.token = dot
+	get_expr.receiver = left
+	get_expr.property = property
+	return get_expr
 }
 
 parse_subscript :: proc(p: ^Parser, left: Expr, can_assign: bool) -> Expr {
@@ -1017,10 +1017,9 @@ rules: [TokenType]ParseRule = {
 	.RSQUIRLY              = {nil, nil, .NONE},
 	.LSQUARE               = {parse_list, parse_subscript, .CALL},
 	.RSQUARE               = {nil, nil, .NONE},
-	.BACKSLASH             = {nil, parse_backslash, .CALL},
 	.COMMA                 = {nil, nil, .NONE},
 	.COLON                 = {nil, nil, .NONE},
-	.DOT                   = {nil, nil, .NONE},
+	.DOT                   = {nil, parse_dot, .CALL},
 	.DOT_DOT               = {nil, parse_binary, .CONCATENATION},
 	.MINUS                 = {parse_unary, parse_binary, .TERM},
 	.PLUS                  = {nil, parse_binary, .TERM},
@@ -1286,9 +1285,9 @@ print_expr :: proc(b: ^strings.Builder, expr: Expr, indent: int) {
 		print_expr(b, e.body, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")
-	case ^ModuleAccessExpr:
+	case ^GetExpr:
 		print_indent(b, indent)
-		fmt.sbprintf(b, "(module-access %s\n", e.property.lexeme)
+		fmt.sbprintf(b, "(get %s\n", e.property.lexeme)
 		print_expr(b, e.receiver, indent + 1)
 		print_indent(b, indent)
 		strings.write_string(b, ")\n")

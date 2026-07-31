@@ -1,6 +1,6 @@
 use "result";
 
-puts(result\unwrap_or(ok(5), 9)); // expect: 5
-puts(result\unwrap_or(err("bad"), 9)); // expect: 9
-puts(result\unwrap_or(ok("hi"), "fallback")); // expect: hi
-puts(result\unwrap_or(err("bad"), "fallback")); // expect: fallback
+puts(result.unwrap_or(ok(5), 9)); // expect: 5
+puts(result.unwrap_or(err("bad"), 9)); // expect: 9
+puts(result.unwrap_or(ok("hi"), "fallback")); // expect: hi
+puts(result.unwrap_or(err("bad"), "fallback")); // expect: fallback

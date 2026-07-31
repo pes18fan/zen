@@ -1,1 +1,1 @@
-"str"\foo // ERR: Cannot use module access operator on a non-module.
+"str".foo // ERR: Cannot access property of a non-record.

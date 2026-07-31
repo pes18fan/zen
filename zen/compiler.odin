@@ -1339,7 +1339,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ForInExpr:
 		cg.current_token = e.token
 		compile_for_in_expression(cg, e) or_return
-	case ^ModuleAccessExpr:
+	case ^GetExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
 		property := e.property
@@ -1347,7 +1347,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_expression(cg, receiver) or_return
 
 		property_name := try2(cg, identifier_constant(cg, property)) or_return
-		emit_op_with_constant(cg, .OP_MODULE_ACCESS, .OP_MODULE_ACCESS_LONG, property_name)
+		emit_op_with_constant(cg, .OP_GET_PROPERTY, .OP_GET_PROPERTY_LONG, property_name)
 	case ^GroupingExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expression) or_return

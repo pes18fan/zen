@@ -182,7 +182,7 @@ semcheck_expr :: proc(sm: ^Semantic, expr: Expr) -> bool {
 			sm.current_compiler.loop_depth -= 1
 		}
 		end_semantic_scope(sm)
-	case ^ModuleAccessExpr:
+	case ^GetExpr:
 		sm.current_token = e.token
 		semcheck_expr(sm, e.receiver) or_return
 	case ^GroupingExpr:

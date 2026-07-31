@@ -28,11 +28,11 @@ func rpn_eval(tokens) {
                     failed = true;
                     error = "not enough operands";
                 } else {
-                    var b = stack |> list\pop();
-                    var a = stack |> list\pop();
+                    var b = stack |> list.pop();
+                    var a = stack |> list.pop();
                     var res = apply_op(t, a, b);
-                    if result\ok?(res) {
-                        stack = stack |> list\push(result\unwrap(res));
+                    if result.ok?(res) {
+                        stack = stack |> list.push(result.unwrap(res));
                     } else {
                         failed = true;
                         error = "eval error";
@@ -40,7 +40,7 @@ func rpn_eval(tokens) {
                 }
             },
             else => {
-                stack = stack |> list\push(parse(t));
+                stack = stack |> list.push(parse(t));
             }
         }
     };
@@ -60,8 +60,8 @@ func rpn_eval(tokens) {
 var expr = ["3", "4", "+", "2", "*", "7", "-"];
 var res = rpn_eval(expr);
 
-if result\ok?(res) {
-    puts(result\unwrap(res)) // expect: 7
+if result.ok?(res) {
+    puts(result.unwrap(res)) // expect: 7
 } else {
     puts("Error occurred")
 };
@@ -70,4 +70,4 @@ var bad_expr = ["3", "0", "/"];
 var bad_res = rpn_eval(bad_expr);
 
 // Div by zero handled as error?
-puts(result\err?(bad_res))  // expect: true
+puts(result.err?(bad_res))  // expect: true
