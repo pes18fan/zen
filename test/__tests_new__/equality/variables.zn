@@ -1,3 +1,0 @@
-var i = 0;
-echo i == 2; // expect: false
-echo i == 0 // expect: true

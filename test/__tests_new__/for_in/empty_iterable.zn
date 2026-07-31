@@ -1,7 +1,0 @@
-// Empty list should not execute body at all
-var ran = false;
-for x in [] {
-    ran = true
-};
-puts(ran)
-// expect: false

@@ -1,2 +1,0 @@
-func square(x) { x * x };
-echo square(2) // expect: 4

@@ -161,27 +161,16 @@ def test(recompile: bool, unit_only: bool = False, e2e_only: bool = False, new: 
 
     print("")
 
-    if new:
-        print("Running new e2e test suite:")
-        new_suite_args = [
-            "python", "./run_tests.py", "-d", "__tests_new__/"]
-        if strict:
-            new_suite_args.append("--strict")
-        try:
-            subprocess.run(new_suite_args, cwd="test/", check=True)
-        except ProcError as e:
-            print(f"Error during e2e tests: {e}", file=sys.stderr)
-            exit(1)
-    else:
-        print("Running end-to-end tests:")
-        e2e_args = ["python", "./run_tests.py"]
-        if strict:
-            e2e_args.append("--strict")
-        try:
-            subprocess.run(e2e_args, cwd="test/", check=True)
-        except ProcError as e:
-            print(f"Error during e2e tests: {e}", file=sys.stderr)
-            exit(1)
+    print("Running new e2e test suite:")
+    args = [
+        "python", "./run_tests.py", "-d", "__tests__/"]
+    if strict:
+        args.append("--strict")
+    try:
+        subprocess.run(args, cwd="test/", check=True)
+    except ProcError as e:
+        print(f"Error during e2e tests: {e}", file=sys.stderr)
+        exit(1)
 
 
 def benchmark(recompile: bool):
@@ -279,12 +268,8 @@ def main():
         "--e2e", "-e", action="store_true",
         help="only run end-to-end tests"
     )
-    test_parser.add_argument(
-        "--new", "-n", action="store_true",
-        help="only run new test suite used for typechecker + OOP removal PR (limited time option)"
-    )
     test_parser.set_defaults(
-        func=lambda args: test(args.recompile, args.unit, args.e2e, args.new, args.strict))
+        func=lambda args: test(args.recompile, args.unit, args.e2e, args.strict))
 
     # benchmark
     bench_parser = subparsers.add_parser("bench", help="run benchmarks")

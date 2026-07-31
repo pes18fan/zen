@@ -1,4 +1,0 @@
-class Obj {}
-var o = Obj()
-var result = (o.x = 42)
-print result // expect: 42

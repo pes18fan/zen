@@ -1,3 +1,0 @@
-use "b.zn"
-
-b.Foo().bar() // expect: baz

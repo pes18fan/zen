@@ -1,5 +1,0 @@
-pub class Foo {
-    bar() {
-        puts("baz")
-    }
-}

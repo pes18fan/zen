@@ -1,3 +1,0 @@
-use "b.zn";
-
-b\private() // ERR: Cannot use private variable 'private' of module 'b' outside it.

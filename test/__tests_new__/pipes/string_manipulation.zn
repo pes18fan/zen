@@ -1,6 +1,0 @@
-use "string";
-
-echo " hello, world "
-    |> string\chomp()
-    |> string\replace("world", "universe")
-    |> string\upcase() // expect: "HELLO, UNIVERSE"

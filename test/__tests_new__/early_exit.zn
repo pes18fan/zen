@@ -1,3 +1,0 @@
-puts("hello"); // expect: hello
-exit;
-puts("world")

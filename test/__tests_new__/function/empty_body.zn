@@ -1,2 +1,0 @@
-func f() {};
-echo f() // expect: nil

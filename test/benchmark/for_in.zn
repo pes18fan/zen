@@ -1,17 +1,17 @@
-use "time"
-use "list"
+use "time";
+use "list";
 
-var data = []
+var data = [];
 for var i = 0; i < 1000000; i = i + 1 {
-    list.push(data, i)
-}
+    list\push(data, i)
+};
 
-var start = time.clock_ms()
-var sum = 0
+var start = time\clock_ms();
+var sum = 0;
 for x in data {
     sum = sum + x
-}
-var for_in_time = time.clock_ms() - start
+};
+var for_in_time = time\clock_ms() - start;
 
-puts("for_in:")
+puts("for_in:");
 puts(for_in_time)

@@ -1,9 +1,0 @@
-puts(true and true)  ; // expect: true
-puts(true and false) ; // expect: false
-puts(false and true) ; // expect: false
-puts(false and false); // expect: false
-
-puts(true or true)  ; // expect: true
-puts(true or false) ; // expect: true
-puts(false or true) ; // expect: true
-puts(false or false); // expect: false

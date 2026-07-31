@@ -1,37 +1,36 @@
-use "time"
-use "list"
+use "time";
+use "list";
 
-val start = time.clock_ms()
+val start = time\clock_ms();
 
-var l = []
+var l = [];
 
 for var i = 0; i < 1000000; i = i + 1 {
-    list.push(l, i)
-}
-val elapsed_push = time.clock_ms() - start
-puts("push:")
-puts(elapsed_push)
+    list\push(l, i)
+};
+val elapsed_push = time\clock_ms() - start;
+puts("push:");
+puts(elapsed_push);
 
-val sum_start = time.clock_ms()
-var sum = 0
+val sum_start = time\clock_ms();
+var sum = 0;
 for var i = 0; i < 1000000; i = i + 1 {
     sum = sum + l[i]
-}
-val elapsed_sum = time.clock_ms() - sum_start
-puts("sum:")
-puts(elapsed_sum)
+};
+val elapsed_sum = time\clock_ms() - sum_start;
+puts("sum:");
+puts(elapsed_sum);
 
-val sum_native_start = time.clock_ms()
-val sum_native = list.sum(l)
-val elapsed_sum_native = time.clock_ms() - sum_native_start
-puts("sum native:")
-puts(elapsed_sum_native)
+val sum_native_start = time\clock_ms();
+val sum_native = list\sum(l);
+val elapsed_sum_native = time\clock_ms() - sum_native_start;
+puts("sum native:");
+puts(elapsed_sum_native);
 
-
-val pop_start = time.clock_ms()
+val pop_start = time\clock_ms();
 for var i = 0; i < 1000000; i = i + 1 {
-    list.pop(l)
-}
-val elapsed_pop = time.clock_ms() - pop_start
-puts("pop:")
+    list\pop(l)
+};
+val elapsed_pop = time\clock_ms() - pop_start;
+puts("pop:");
 puts(elapsed_pop)

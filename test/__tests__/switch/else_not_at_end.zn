@@ -1,5 +1,6 @@
-var x = 0
+var x = 0;
 switch x {
-    else => nil // ERR: 'else' must be the last case
+    else => nil,
     0 => 1
 }
+// ERR: 'else' must be the last case.

@@ -1,2 +1,0 @@
-var result = { { { "deep" } } };
-echo result // expect: "deep"

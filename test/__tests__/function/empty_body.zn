@@ -1,2 +1,2 @@
-func f() {}
-print f() // expect: nil
+func f() {};
+echo f() // expect: nil

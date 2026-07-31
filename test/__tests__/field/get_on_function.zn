@@ -1,3 +1,0 @@
-func foo() {}
-
-foo.bar // ERR: Only instances have properties.

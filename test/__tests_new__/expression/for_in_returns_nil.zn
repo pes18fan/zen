@@ -1,2 +1,0 @@
-var result = for x in [1, 2, 3] { x };
-echo result // expect: nil

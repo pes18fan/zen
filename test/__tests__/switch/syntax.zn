@@ -1,31 +1,31 @@
-var z = 1
+var z = 1;
 switch z {
-    0 => puts "zero!"
-    1 => puts "one!"
-    1 => puts "dupe one!"
+    0 => puts "zero!",
+    1 => puts "one!",
+    1 => puts "dupe one!",
     else => puts "neither!"
-}
+};
 // expect: one!
 
-var b = "apple"
+var b = "apple";
 switch b {
-    "banana" => puts "fruit: banana"
-    "apple" => puts "fruit: apple"
-    "orange" => puts "fruit: orange"
+    "banana" => puts "fruit: banana",
+    "apple" => puts "fruit: apple",
+    "orange" => puts "fruit: orange",
     else => puts "unknown fruit"
-}
+};
 // expect: fruit: apple
 
 // block statements
-var c = 0
+var c = 0;
 switch c {
     0 => {
-        var zero = "zero!"
-        print zero .. "\n" // expect: zero!
-    }
+        var zero = "zero!";
+        puts(zero); // expect: zero!
+    },
     1 => {
         puts "one!"
-    }
+    },
     else => {
         puts "neither!"
     }

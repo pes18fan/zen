@@ -1,1 +1,0 @@
-puts(10 |> it * 2 |> it + 5); // expect: 25

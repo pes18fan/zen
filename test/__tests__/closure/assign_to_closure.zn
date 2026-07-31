@@ -1,27 +1,27 @@
-var f
-var g
+var f;
+var g;
 
 {
-    var local = "local"
+    var local = "local";
     func f_() {
-        print local .. "\n"
-        local = "after f"
-        print local .. "\n"
-    }
-    f = f_
+        echo local;
+        local = "after f";
+        echo local
+    };
+    f = f_;
 
     func g_() {
-        print local .. "\n"
-        local = "after g"
-        print local .. "\n"
-    }
+        echo local;
+        local = "after g";
+        echo local
+    };
     g = g_
-}
+};
 
-f()
-// expect: local
-// expect: after f
+f();
+// expect: "local"
+// expect: "after f"
 
 g()
-// expect: after f
-// expect: after g
+// expect: "after f"
+// expect: "after g"

@@ -1,9 +1,0 @@
-var a = "a";
-var b = "b";
-var c = "c";
-
-// assignment is right-associative.
-a = b = c;
-echo a; // expect: "c"
-echo b; // expect: "c"
-echo c; // expect: "c"

@@ -1,7 +1,7 @@
-var x = 2
+var x = 2;
 var result = switch x {
-    1 => "one"
-    2 => "two"
+    1 => "one",
+    2 => "two",
     else => "other"
-}
-print result // expect: two
+};
+echo result // expect: "two"

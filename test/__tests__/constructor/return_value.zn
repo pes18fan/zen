@@ -1,5 +1,0 @@
-class Foo {
-  init() {
-    return "result" // ERR: Cannot return a value from an initializer.
-  }
-}

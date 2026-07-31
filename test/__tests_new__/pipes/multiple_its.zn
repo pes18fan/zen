@@ -1,6 +1,0 @@
-use "string";
-
-echo "hello"
-    |> string\upcase()
-    |> it .. ", " .. it .. "!"
-    |> it .. "!!" // expect: "HELLO, HELLO!!!"

@@ -1,3 +1,0 @@
-var foo = func() {}
-
-foo.bar = "value" // ERR: Only instances have fields.

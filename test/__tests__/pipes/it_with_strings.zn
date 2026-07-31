@@ -1,5 +1,5 @@
-use "string"
+use "string";
 
-print "hello"
-    |> string.upcase()
-    |> it .. ", world" // expect: HELLO, world
+echo "hello"
+    |> string\upcase()
+    |> it .. ", world" // expect: "HELLO, world"

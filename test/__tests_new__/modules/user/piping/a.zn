@@ -1,5 +1,0 @@
-use "b.zn";
-
-echo b\a()
-    |> b\b()
-    |> b\c() // expect: "abc"

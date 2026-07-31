@@ -1,16 +1,16 @@
-use "time"
-use "string"
+use "time";
+use "string";
 
-var start = time.clock_ms()
+var start = time\clock_ms();
 
-var res = ""
-var s = "hello world"
+var res = "";
+var s = "hello world";
 
 for var i = 0; i < 100000; i = i + 1 {
-    res = string.replace(s, "world", "universe")
-    res = string.upcase(res)
-    res = string.downcase(res)
-    res = string.reverse(res)
-}
+    res = string\replace(s, "world", "universe")
+        |> string\upcase()
+        |> string\downcase()
+        |> string\reverse()
+};
 
-puts(time.clock_ms() - start)
+puts(time\clock_ms() - start)

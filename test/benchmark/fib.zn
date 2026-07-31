@@ -1,9 +1,9 @@
-use "time"
+use "time";
 
-func fib(n) => if (n < 2) { n } else { fib(n - 2) + fib(n - 1) }
+func fib(n) => if (n < 2) { n } else { fib(n - 2) + fib(n - 1) };
 
-var start = time.clock_ms()
-puts("fib(35) == 9227465 is:")
-puts(fib(35) == 9227465)
-puts("elapsed:")
-puts(time.clock_ms() - start)
+var start = time\clock_ms();
+puts("fib(35) == 9227465 is:");
+puts(fib(35) == 9227465);
+puts("elapsed:");
+puts(time\clock_ms() - start)

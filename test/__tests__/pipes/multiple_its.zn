@@ -1,6 +1,6 @@
-use "string"
+use "string";
 
-print "hello"
-    |> string.upcase()
+echo "hello"
+    |> string\upcase()
     |> it .. ", " .. it .. "!"
-    |> it .. "!!" // expect: HELLO, HELLO!!!
+    |> it .. "!!" // expect: "HELLO, HELLO!!!"

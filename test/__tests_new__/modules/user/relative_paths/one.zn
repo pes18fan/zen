@@ -1,3 +1,0 @@
-use "./foo/bar/two.zn";
-
-two\foo() // expect: bar

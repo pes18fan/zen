@@ -1,6 +1,0 @@
-use "string";
-
-var x = ""
-    |> string\chomp()
-    |> string\replace("hello", "hi");
-echo x // expect: ""

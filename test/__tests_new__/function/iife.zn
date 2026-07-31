@@ -1,5 +1,0 @@
-// IIFE = Immediately Invoked Function Expression
-var x = (func() {
-    return 69
-})();
-echo x // expect: 69

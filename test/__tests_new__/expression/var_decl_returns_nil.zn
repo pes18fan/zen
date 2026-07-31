@@ -1,2 +1,0 @@
-var result = var x = 42;
-echo result // expect: nil

@@ -1,2 +1,0 @@
-var result = if true { "yes" };
-puts(result); // expect: nil

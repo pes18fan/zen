@@ -1,8 +1,8 @@
-use "list"
+use "list";
 
-var l = [1, 2]
-var i = list.pop(l)
+var l = [1, 2];
+var i = list\pop(l);
 
-puts(i) // expect: 2
-puts(len(l)) // expect: 1
-puts(l) // expect: [1]
+puts(i); // expect: 2
+puts(len(l)); // expect: 1
+puts(l); // expect: [1]

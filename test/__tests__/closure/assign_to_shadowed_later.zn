@@ -1,13 +1,13 @@
-var a = "global"
+var a = "global";
 
 {
     func assign() {
         a = "assigned"
-    }
+    };
 
-    var a = "inner"
-    assign()
-    print a .. "\n" // expect: inner
-}
+    var a = "inner";
+    assign();
+    echo a // expect: "inner"
+};
 
-print a .. "\n" // expect: assigned
+echo a // expect: "assigned"

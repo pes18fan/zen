@@ -1,2 +1,2 @@
-var result = { { { "deep" } } }
-print result // expect: deep
+var result = { { { "deep" } } };
+echo result // expect: "deep"

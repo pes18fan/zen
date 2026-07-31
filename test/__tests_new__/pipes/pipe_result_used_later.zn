@@ -1,5 +1,0 @@
-use "string";
-
-val x = "hello" |> string\upcase();
-val y = x .. " WORLD";
-puts(y) // expect: HELLO WORLD

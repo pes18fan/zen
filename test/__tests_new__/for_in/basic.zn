@@ -1,7 +1,0 @@
-// Basic iteration over a list
-for x in ["hello", "there", "friend!"] {
-    puts(x)
-}
-// expect: hello
-// expect: there
-// expect: friend!
