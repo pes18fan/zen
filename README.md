@@ -10,10 +10,10 @@ Check out more code in `/examples`!
 
 # features
 
-- static typing with Hindley-Milner type inference
 - first-class functions and closures
 - file-based module system for code organization
-- minimal standard library
+- static typing with Hindley-Milner type inference (experimental)
+- simple standard library
 
 # documentation
 

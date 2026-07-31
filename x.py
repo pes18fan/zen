@@ -11,7 +11,7 @@ ProcError = subprocess.CalledProcessError
 DEBUG_FLAGS = "-vet -vet-tabs -strict-style -vet-style -warnings-as-errors -disallow-do -debug"
 
 # NOTE: If -o:aggressive shows weird behavior switch to -o:speed
-RELEASE_FLAGS = "-vet -vet-tabs -strict-style -vet-style -warnings-as-errors -disallow-do -o:aggressive -microarch:native"
+RELEASE_FLAGS = "-vet -vet-tabs -strict-style -vet-style -warnings-as-errors -disallow-do -o:aggressive"
 CHAOTIC_FLAGS = f"{RELEASE_FLAGS} -define:CHAOTIC=true"
 TARGET = "zen"
 
