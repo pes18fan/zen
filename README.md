@@ -11,6 +11,7 @@ Check out more code in `/examples`!
 # features
 
 - first-class functions and closures
+- garbage collection
 - file-based module system for code organization
 - static typing with Hindley-Milner type inference (experimental)
 - simple standard library
