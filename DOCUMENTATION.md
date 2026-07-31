@@ -128,6 +128,60 @@ is at its end, or to `nil` if it ends with a semicolon.
 Sequences can only exist at the top level of the file or at the top level of
 a block.
 
+## Primitive types
+
+zen has four primitive types described as follows:
+
+### `Number`
+
+A real number represented as a 64-bit floating point. Numbers also support
+exponential notation (e.g `1e2` for `100`).
+
+### `Bool`
+
+Represents a value that can be either be `true` or `false`.
+
+### `String`
+
+A sequence of text. Strings in zen are assumed to be encoded in UTF-8.
+There are two forms of strings in zen:
+
+- Single-line strings, enclosed by single or double quotes. They support escape
+    sequences like `\n` and `\t`.
+    
+    ```zen
+    var str = "double quotes!";
+    var single = 'in single quotes too!'
+    ```
+
+- Multiline strings, with each line starting with a `\\`. Everything after the
+    `\\` is interpreted as a string, similar to a comment. They do not support
+    escape sequences.
+
+    ```zen
+    var poem =
+        \\ Your two great eyes will slay me suddenly;
+        \\ Their beauty shakes me who was once serene;
+        \\ Straight through my heart the wound is quick and keen. 
+    ;
+    ```
+
+Two strings are equal if they have the same contents.
+
+Strings are immutable in zen.
+
+### `Nil`
+
+A value that represents the absence of a value. Its only value is the literal
+`nil`.
+
+`nil` is the default value for uninitialized variables, and the implicit return 
+value for functions that do not return anything.
+
+It is important to note that `Nil` is a unit type, that is, it is not compatible
+with any other type. If a value already has some other type, you are not allowed
+to assign `nil` to it; with the exception of the `Any` type.
+
 ## Control flow
 
 ### if-else
@@ -318,75 +372,6 @@ puts(is_even(4)); //=> true
 puts(is_odd(4))  //=> false
 ```
 
-### Generic functions
-
-zen also supports generic functions based on its Hindley-Milner-style type 
-inference.
-
-You can introduce type parameters after the function name:
-
-```zen
-func name[T, U](arg1: T, arg2: U): T {
-    arg1
-}
-```
-
-All type annotations are optional. The type parameters themselves are optional
-too, because zen can often infer them automatically.
-
-```zen
-func id(x) {
-    x
-};
-
-func id[T](x: T): T {
-    x
-}
-```
-
-A generic function can use its type parameters in argument types, return types,
-or both. Type parameters can also be unused if the function does not need them
-directly.
-
-```zen
-func first[A, B](a: A, b: B): A {
-    a
-};
-
-func ignore[T](x: T) {
-    1
-}
-```
-
-Type parameters may be inferred from call sites, so the same function can be used
-at multiple concrete types without needing separate overloads.
-
-```zen
-func wrap(x) {
-    x
-};
-
-puts(wrap(1));      //=> 1
-puts(wrap("hi"));   //=> hi
-puts(wrap(0.25))    //=> 0.250
-```
-
-Generic functions may also be nested, and inner type parameters follow normal
-lexical scoping rules.
-
-```zen
-func outer[T](x: T) {
-    func inner[T](y: T): T {
-        y
-    };
-
-    inner(x)
-};
-```
-
-If a generic constraint cannot be satisfied, the compiler reports a type error
-as usual.
-
 ## Pipelines
 
 zen supports a unique feature inspired by the Elixir programming language called
@@ -418,10 +403,6 @@ pipe produces a compile error.
 ## Lists
 
 A list is a ordered, indexable sequence of values.
-
-Lists have the type `List[a]`, where the `a` represents the type of the
-values in the list. This means that lists in zen are homogenous; only one type
-of value is allowed in a list.
 
 Two lists are equal if they are the same value in memory.
 
@@ -556,120 +537,6 @@ precedence level, the more precedence the operator has.
 |  3  | `or`  |
 |  2  | `if`, `switch`  |
 |  1  | `|>`  |
-
-
-## Type system
-
-zen is statically typed. It uses Hindley-Milner type inference, allowing it
-to automatically infer types of expressions, with no need for annotations. However,
-type annotations may still be provided where desired for readability or to 
-constrain inference.
-
-### Primitive types
-
-#### `Number`
-
-A real number represented as a 64-bit floating point. Numbers also support
-exponential notation (e.g `1e2` for `100`).
-
-#### `Bool`
-
-Represents a value that can be either be `true` or `false`.
-
-#### `String`
-
-A sequence of text. Strings in zen are assumed to be encoded in UTF-8.
-There are two forms of strings in zen:
-
-- Single-line strings, enclosed by single or double quotes. They support escape
-    sequences like `\n` and `\t`.
-    
-    ```zen
-    var str = "double quotes!";
-    var single = 'in single quotes too!'
-    ```
-
-- Multiline strings, with each line starting with a `\\`. Everything after the
-    `\\` is interpreted as a string, similar to a comment. They do not support
-    escape sequences.
-
-    ```zen
-    var poem =
-        \\ Your two great eyes will slay me suddenly;
-        \\ Their beauty shakes me who was once serene;
-        \\ Straight through my heart the wound is quick and keen. 
-    ;
-    ```
-
-Two strings are equal if they have the same contents.
-
-Strings are immutable in zen.
-
-#### `Nil`
-
-A value that represents the absence of a value. Its only value is the literal
-`nil`.
-
-`nil` is the default value for uninitialized variables, and the implicit return 
-value for functions that do not return anything.
-
-It is important to note that `Nil` is a unit type, that is, it is not compatible
-with any other type. If a value already has some other type, you are not allowed
-to assign `nil` to it; with the exception of the `Any` type.
-
-### Composite types
-
-#### Functions
-
-The type annotation of a function is represented by the format `(T, U, ...) -> R`,
-where `T, U, ...` represent parameter types and `R` represents the return type.
-
-See the function section for more information about functions in the language itself.
-
-#### `List[a]`
-
-The type of a list containing values of some type `a`. See the list section for
-more information.
-
-#### `Result[t, e]`
-
-Represents a value that may be in one of two states; a "good" state of type `t`
-known as the `ok` variant, and a "bad" state of type `e` described as the `err`
-variant.
-
-See the error handling section for more info about results.
-
-### Special types
-
-#### `Never`
-
-Represents the type of some value that can never exist. It can also be described
-as the type of an expression that never finishes evaluating. It is most useful
-to describe functions that never finish executing; for instance, the builtin
-function `panic` has a return type of `Never` as it exits the program before
-it ever returns.
-
-Trying to assign any non-`Never` value in a place where type `Never` is expected
-is a type error. This prevents you from doing something like `var a: Never = 1`.
-
-The opposite however is allowed; doing something like `var a: Number = panic("message")`
-is perfectly valid because the program panics before `a` can ever be assigned.
-The branching expressions `if` and `switch` are even more permissive with 
-`Never`, while normally all branches of such an expression need to be the same
-type, an exception is present for `Never` which allows it to be used in any
-branch no matter what type the other branches have.
-
-#### `Any`
-
-Type inference can be effectively disabled by using the `Any` type for variables.
-`Any` is a special type that accepts all types and can be assigned to all
-types (except `Never`), making it easy to opt into dynamic typing.
-
-However, it is not recommended to use `Any` in combination with static types, as
-its effect of disabling type inference is infectious and can seep into the rest
-of the program by turning all other types into `Any`. To prevent these issues
-from occuring in normal execution, the type system never infers `Any` by itself; 
-an explicit type annotation is necessary to use it.
 
 ## Error handling
 
@@ -844,6 +711,155 @@ for you to use.
     and panic if it is the `err` variant.
 - `unwrap_or(r, x)`: Get the wrapped value of the result `r` if it is the `ok` variant,
     or the fallback value `x` if it is the `err` variant.
+
+## Experimental features
+
+### Type system
+
+zen has a static typechecker that is on by default for all builds. It uses 
+Hindley-Milner type inference, allowing it to automatically infer types of 
+expressions, with no need for annotations. However, type annotations may still
+be provided where desired for readability or to constrain inference.
+
+The typechecker currently **does not** support inference for programs that import
+other `.zn` files, which is the reason why the typechecker is considered as
+experimental. Typechecking is entirely skipped for such programs, and
+zen acts like a dynamically typed language in that case. The typechecker can
+also be manually disabled when compiling the interpreter by passing the flag
+`-define:DISABLE_TYPECHECKER=false` to the Odin compiler.
+
+#### Primitive types
+
+The type system represents primitive types as expected:
+
+- `Number` for numbers
+- `Bool` for booleans
+- `String` for strings (both single-line and multiline)
+- `Nil` for `nil`. It is important to note that `Nil` is a unit type, that is,
+    it is not compatible with any other type. If a value already has some other 
+    type, you are not allowed to assign `nil` to it; with the exception of the 
+    `Any` type. More on `Any` later.
+
+### Composite types
+
+#### Functions
+
+The type annotation of a function is represented by the format `(T, U, ...) -> R`,
+where `T, U, ...` represent parameter types and `R` represents the return type.
+
+See the function section for more information about functions in the language itself.
+
+#### `List[a]`
+
+The type of a list containing values of some type `a`. With the typechecker on,
+lists are homogenous, i.e. they can only have values of type `a`. See the list
+section for more information on lists in general.
+
+#### `Result[t, e]`
+
+Represents a value that may be in one of two states; a "good" state of type `t`
+known as the `ok` variant, and a "bad" state of type `e` described as the `err`
+variant.
+
+See the error handling section for more info about results.
+
+### Special types
+
+#### `Never`
+
+Represents the type of some value that can never exist. It can also be described
+as the type of an expression that never finishes evaluating. It is most useful
+to describe functions that never finish executing; for instance, the builtin
+function `panic` has a return type of `Never` as it exits the program before
+it ever returns.
+
+Trying to assign any non-`Never` value in a place where type `Never` is expected
+is a type error. This prevents you from doing something like `var a: Never = 1`.
+
+The opposite however is allowed; doing something like `var a: Number = panic("message")`
+is perfectly valid because the program panics before `a` can ever be assigned.
+The branching expressions `if` and `switch` are even more permissive with 
+`Never`, while normally all branches of such an expression need to be the same
+type, an exception is present for `Never` which allows it to be used in any
+branch no matter what type the other branches have.
+
+#### `Any`
+
+Type inference can be effectively disabled by using the `Any` type for variables.
+`Any` is a special type that accepts all types and can be assigned to all
+types (except `Never`), making it easy to opt into dynamic typing.
+
+However, it is not recommended to use `Any` in combination with static types, as
+its effect of disabling type inference is infectious and can seep into the rest
+of the program by turning all other types into `Any`. To prevent these issues
+from occuring in normal execution, the type system never infers `Any` by itself; 
+an explicit type annotation is necessary to use it.
+
+### Generic functions
+
+You can introduce type parameters after a function name:
+
+```zen
+func name[T, U](arg1: T, arg2: U): T {
+    arg1
+}
+```
+
+All type annotations are optional. The type parameters themselves are optional
+too, because zen can often infer them automatically.
+
+```zen
+func id(x) {
+    x
+};
+
+func id[T](x: T): T {
+    x
+}
+```
+
+A generic function can use its type parameters in argument types, return types,
+or both. Type parameters can also be unused if the function does not need them
+directly.
+
+```zen
+func first[A, B](a: A, b: B): A {
+    a
+};
+
+func ignore[T](x: T) {
+    1
+}
+```
+
+Type parameters may be inferred from call sites, so the same function can be used
+at multiple concrete types without needing separate overloads.
+
+```zen
+func wrap(x) {
+    x
+};
+
+puts(wrap(1));      //=> 1
+puts(wrap("hi"));   //=> hi
+puts(wrap(0.25))    //=> 0.250
+```
+
+Generic functions may also be nested, and inner type parameters follow normal
+lexical scoping rules.
+
+```zen
+func outer[T](x: T) {
+    func inner[T](y: T): T {
+        y
+    };
+
+    inner(x)
+};
+```
+
+If a generic constraint cannot be satisfied, the compiler reports a type error
+as usual.
 
 ## Features that used to exist
 
