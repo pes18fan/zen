@@ -155,12 +155,12 @@ use "time";
 time\clock(); // Current time in UNIX ms
 
 // You can also import your own files.
-// use "./helper.zn"
+use "./helper.zn";
 
-// helper\woo() //=> from a module!
+helper\woo(); //=> from a module!
 
 // Note that if you import your own files, to use functions in them they must
 // be explicitly set as public using the `pub` keyword.
-// pub func foo() {
-//     puts "You can use this from any file!"
-// }
+pub func foo() {
+    puts "You can use this from any file!"
+}
