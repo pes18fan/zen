@@ -1,4 +1,4 @@
-// Merge sort, testing let-polymorphism as well
+// Merge sort
 use "list";
 use "math";
 

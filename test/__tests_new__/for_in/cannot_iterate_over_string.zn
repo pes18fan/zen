@@ -3,4 +3,4 @@
 for c in "hello" {
     puts(c)
 }
-// ERR: Expected iterable to be of type List[a], got String.
+// ERR: Can only iterate over lists, not string.

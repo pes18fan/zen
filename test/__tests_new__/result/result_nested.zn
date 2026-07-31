@@ -1,6 +1,5 @@
 // Nested Results should unwrap cleanly through multiple layers,
-// exercising generic instantiation of Result[a, b] where a itself
-// is another Result.
+// with results wrapping other results.
 use "result";
 
 val unwrap = result\unwrap;

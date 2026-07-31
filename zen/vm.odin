@@ -954,6 +954,7 @@ interpret :: proc(
 
 	// use the default heap allocator for codegen and the VM
 	context.allocator = prev_alloc
+	collect_globals(&vm.compiler_globals, gc, expr)
 	fn, cg_ok := codegen(gc, expr, &vm.compiler_globals, reso)
 	if !cg_ok {
 		return .INTERPRET_COMPILE_ERROR

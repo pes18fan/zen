@@ -1262,8 +1262,8 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^AssignExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.value) or_return
-		// try(cg, emit_named_variable_set(cg, e.name)) or_return
-		try(cg, emit_variable(cg, e, .SET)) or_return
+		try(cg, emit_named_variable_set(cg, e.name)) or_return
+	// try(cg, emit_variable(cg, e, .SET)) or_return
 	case ^BinaryExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
@@ -1601,4 +1601,45 @@ codegen :: proc(
 	res_fn := end_compiler(&cg)
 	gc.mark_roots_arg = cg.prev_mark_roots
 	return res_fn, !cg.had_error
+}
+
+/* Collect all global function declarations in the file and put them into the
+`globals` table, so forward references to them compile correctly. */
+@(private = "file")
+collect_expr_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
+	if expr == nil {return}
+
+	#partial switch e in expr {
+	case ^VarDeclExpr:
+		for binding in e.bindings {
+			if _, ok := binding.initializer.?; !ok {continue}
+			init := binding.initializer.?
+
+			// just hoist function declarations and bound lambdas
+			if _, ok := init.(^FunctionExpr); !ok {
+				continue
+			}
+
+			name := copy_string(gc, binding.name.lexeme)
+			if _, ok := table_get(globals, name); ok {
+				return
+			}
+			table_set(globals, name, nil_val())
+		}
+	case ^SequenceExpr:
+		collect_expr_globals(globals, gc, e.left)
+		collect_expr_globals(globals, gc, e.right)
+	case:
+	// other cases don't matter
+	}
+}
+
+/* Collect all global functions declared in the file and put them into the
+`globals` table. */
+collect_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
+	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
+		table_set(globals, copy_string(gc, fn.name), bool_val(true))
+	}
+
+	collect_expr_globals(globals, gc, expr)
 }
