@@ -1,6 +1,5 @@
-// ok/err must stay let-polymorphic: a single wrapping function should
-// work across multiple call-site instantiations without the checker
-// unifying them into one concrete type.
+// A single wrapping function should work with values of any type,
+// without being restricted to a single concrete type.
 use "result";
 
 func wrap(x) {

@@ -1,1 +1,1 @@
-true\foo // ERR: `\` operator can only be used on a module.
+true\foo // ERR: Cannot use module access operator on a non-module.

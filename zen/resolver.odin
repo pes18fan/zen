@@ -388,15 +388,10 @@ resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool 
 	if var_e, ok := e.receiver.(^VariableExpr); ok {
 		receiver_var := try2(rs, try_resolve_variable(rs, var_e.token.lexeme)) or_return
 		if !receiver_var.is_module {
-			resolver_error(
-				rs,
-				fmt.tprintf(
-					"`%v` operator cannot be used on '%v' as it is not a module.",
-					e.token.lexeme,
-					receiver_var.name,
-				),
-			)
-			return false
+			/* The receiver is a variable holding a module value; the module
+			access is checked at runtime instead. */
+			rs.resolution_map[e] = receiver_var
+			return true
 		}
 
 		resolved: ^Symbol
@@ -451,11 +446,10 @@ resolve_module_access_expr :: proc(rs: ^Resolver, e: ^ModuleAccessExpr) -> bool 
 		rs.resolution_map[e] = resolved
 		return true
 	} else {
-		resolver_error(
-			rs,
-			fmt.tprintf("`%v` operator can only be used on a module.", e.token.lexeme),
-		)
-		return false
+		/* Any expression can evaluate to a module value; the module access is
+		checked at runtime instead. */
+		resolve_with_resolver(rs, e.receiver) or_return
+		return true
 	}
 }
 
@@ -634,10 +628,7 @@ resolve_with_resolver :: proc(rs: ^Resolver, expr: Expr) -> bool {
 	case ^VariableExpr:
 		rs.current_token = e.token
 		var := try2(rs, try_resolve_variable(rs, e.name.lexeme)) or_return
-		if var.is_module {
-			resolver_error(rs, "Cannot use a module as a value.")
-			return false
-		}
+		rs.resolution_map[e] = var
 
 		rs.resolution_map[e] = var
 	case ^VarDeclExpr:
@@ -726,7 +717,6 @@ collect_forward_references :: proc(rs: ^Resolver, expr: Expr) -> bool {
 			init := binding.initializer.? or_continue
 			_ = init.(^FunctionExpr) or_continue
 
-			// ONLY declare the variable; it is defined in the main resolver pass
 			try(rs, declare_variable(rs, binding.name.lexeme, is_final, is_public)) or_return
 			define_variable(rs, binding.name.lexeme)
 		}
