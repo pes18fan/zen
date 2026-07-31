@@ -14,6 +14,7 @@ TokenType :: enum {
 	RSQUIRLY,
 	LSQUARE,
 	RSQUARE,
+	BACKSLASH,
 	COMMA,
 	COLON,
 	DOT,
@@ -537,6 +538,8 @@ lex_token :: proc(l: ^Lexer) -> Maybe(Token) {
 	case '\\':
 		if lexer_match(l, '\\') {
 			return lexer_lex_multiline_string_line(l)
+		} else {
+			return make_token(l, .BACKSLASH)
 		}
 	}
 

@@ -19,7 +19,6 @@ Codegen :: struct #all_or_none {
 	current_compiler: ^Compiler,
 	current_token:    Token,
 	globals:          ^Table, // Hash table storing global variables.
-	resolutions:      ResolutionMap,
 	gc:               ^GC,
 	prev_mark_roots:  RootSource,
 	had_error:        bool,
@@ -132,11 +131,9 @@ identifier_constant :: proc(cg: ^Codegen, name: Token) -> (int, ErrorMessage) {
 	return make_constant(cg, obj_val(copy_string(cg.gc, name.lexeme)))
 }
 
-/* 
-Similar to identifier_constant, but you can pass in just a string.
-Used to implement the modules, as module names are STRING tokens rather than
-IDENT tokens. 
-*/
+/* Similar to identifier_constant, but you can pass in just a string.
+ * Used to implement the modules, as module names are STRING tokens rather than
+ * IDENT tokens. */
 @(private = "file")
 @(require_results)
 string_constant :: proc(cg: ^Codegen, text: string) -> (int, ErrorMessage) {
@@ -635,56 +632,6 @@ emit_named_variable :: proc(cg: ^Codegen, name: Token) -> ErrorMessage {
 		emit_op_with_constant(cg, .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG, arg)
 	}
 
-	return nil
-}
-
-VariableEmitAction :: enum {
-	SET,
-	GET,
-}
-
-@(private = "file")
-@(require_results)
-emit_variable :: proc(
-	cg: ^Codegen,
-	node: ResolvingExpr,
-	action: VariableEmitAction,
-) -> ErrorMessage {
-	var, ok := cg.resolutions[node]
-	if !ok {
-		fmt.panicf("undefined variable in codegen for expr %v", node)
-	}
-
-	// Upvalue
-	if var.is_captured {
-		switch action {
-		case .GET:
-			emit_instruction(cg, .OP_GET_UPVALUE, byte(var.upvalue_index))
-		case .SET:
-			emit_instruction(cg, .OP_SET_UPVALUE, byte(var.upvalue_index))
-		}
-		return nil
-	}
-
-	// Local
-	if var.kind == .LOCAL {
-		switch action {
-		case .GET:
-			emit_instruction(cg, .OP_GET_LOCAL, byte(var.local_index))
-		case .SET:
-			emit_instruction(cg, .OP_SET_LOCAL, byte(var.local_index))
-		}
-		return nil
-	}
-
-	// Global
-	arg := string_constant(cg, var.name) or_return
-	switch action {
-	case .GET:
-		emit_op_with_constant(cg, .OP_GET_GLOBAL, .OP_GET_GLOBAL_LONG, arg)
-	case .SET:
-		emit_op_with_constant(cg, .OP_SET_GLOBAL, .OP_SET_GLOBAL_LONG, arg)
-	}
 	return nil
 }
 
@@ -1263,7 +1210,6 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		cg.current_token = e.token
 		compile_expression(cg, e.value) or_return
 		try(cg, emit_named_variable_set(cg, e.name)) or_return
-	// try(cg, emit_variable(cg, e, .SET)) or_return
 	case ^BinaryExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.left) or_return
@@ -1339,7 +1285,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 	case ^ForInExpr:
 		cg.current_token = e.token
 		compile_for_in_expression(cg, e) or_return
-	case ^GetExpr:
+	case ^ModuleAccessExpr:
 		cg.current_token = e.token
 		receiver := e.receiver
 		property := e.property
@@ -1347,7 +1293,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_expression(cg, receiver) or_return
 
 		property_name := try2(cg, identifier_constant(cg, property)) or_return
-		emit_op_with_constant(cg, .OP_GET_PROPERTY, .OP_GET_PROPERTY_LONG, property_name)
+		emit_op_with_constant(cg, .OP_MODULE_ACCESS, .OP_MODULE_ACCESS_LONG, property_name)
 	case ^GroupingExpr:
 		cg.current_token = e.token
 		compile_expression(cg, e.expression) or_return
@@ -1488,8 +1434,7 @@ compile_expression :: proc(cg: ^Codegen, expr: Expr) -> bool {
 		compile_module_declaration(cg, e) or_return
 	case ^VariableExpr:
 		cg.current_token = e.token
-		// try(cg, emit_variable(cg, e, .GET)) or_return
-		try(cg, emit_named_variable(cg, e.name)) or_return
+		try(cg, emit_named_variable(cg, e.token)) or_return
 	case ^VarDeclExpr:
 		cg.current_token = e.token
 		compile_var_declaration(cg, e) or_return
@@ -1563,15 +1508,7 @@ init_compiler :: proc(c: ^Compiler, cg: ^Codegen, name: Token, type: FunctionTyp
 }
 
 /* Compile the provided abstract syntax tree (expression) into a bytecode chunk. */
-codegen :: proc(
-	gc: ^GC,
-	expr: Expr,
-	globals: ^Table,
-	resolutions: ResolutionMap,
-) -> (
-	fn: ^ObjFunction,
-	success: bool,
-) {
+codegen :: proc(gc: ^GC, expr: Expr, globals: ^Table) -> (fn: ^ObjFunction, success: bool) {
 	// empty program
 	if expr == nil {
 		return nil, true
@@ -1587,7 +1524,6 @@ codegen :: proc(
 		current_compiler = nil,
 		current_token    = {},
 		globals          = globals,
-		resolutions      = resolutions,
 		gc               = gc,
 		prev_mark_roots  = gc.mark_roots_arg,
 		had_error        = false,
@@ -1603,9 +1539,6 @@ codegen :: proc(
 	return res_fn, !cg.had_error
 }
 
-/* Collect all global function declarations in the file and put them into the
-`globals` table, so forward references to them compile correctly. */
-@(private = "file")
 collect_expr_globals :: proc(globals: ^Table, gc: ^GC, expr: Expr) {
 	if expr == nil {return}
 

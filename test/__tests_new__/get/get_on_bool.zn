@@ -1,1 +1,1 @@
-true.foo // ERR: Cannot access property of a non-record.
+true\foo // ERR: `\` operator can only be used on a module.

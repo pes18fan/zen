@@ -1,4 +1,4 @@
-package typechecker
+package zen
 import tt "core:testing"
 
 // does the `tapp` shorthand actually produce valid types?

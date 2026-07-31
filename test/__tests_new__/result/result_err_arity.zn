@@ -1,1 +1,1 @@
-err(1, 2) // ERR: Expected 1 arguments but got 2.
+err(1, 2) // ERR: Expected 1 argument for 'err' but got 2.

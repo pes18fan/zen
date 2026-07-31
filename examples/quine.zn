@@ -1,14 +1,14 @@
 // This program prints itself as its output.
 use 'string';
-val b = string.asciichar(92);
+val b = string\asciichar(92);
 val s =
     \\// This program prints itself as its output.
     \\use 'string';
-    \\val b = string.asciichar(92);
+    \\val b = string\asciichar(92);
     \\val s =
     \\
     \\;
-    \\val l = string.split_lines(s);
+    \\val l = string\split_lines(s);
     \\for var i = 0; i < 4; i = i + 1 {
     \\    puts(l[i])
     \\};
@@ -19,7 +19,7 @@ val s =
     \\    puts(l[i])
     \\}
 ;
-val l = string.split_lines(s);
+val l = string\split_lines(s);
 for var i = 0; i < 4; i = i + 1 {
     puts(l[i])
 };

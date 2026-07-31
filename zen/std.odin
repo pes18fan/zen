@@ -147,6 +147,196 @@ GLOBAL_BUILTIN_FUNCTIONS: [GlobalBuiltinFunction]BuiltinFunction = {
 	.ERR      = {"err", err_native, 1},
 }
 
+get_module_function_signature :: proc(
+	tc: ^TypeChecker,
+	module: BuiltinModule,
+	fn_name: string,
+) -> (
+	scheme: TypeScheme,
+	err: ErrorMessage,
+) {
+	string_t := tapp(.STRING)
+	number_t := tapp(.NUMBER)
+	bool_t := tapp(.BOOL)
+
+	switch module {
+	case .TIME:
+		switch fn_name {
+		case "clock":
+			return tapp(.FUNCTION, {number_t}), nil
+		case "clock_ms":
+			return tapp(.FUNCTION, {number_t}), nil
+		}
+	case .MATH:
+		switch fn_name {
+		case "sin":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "cos":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "tan":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "sqrt":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "ln":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "pow":
+			return tapp(.FUNCTION, {number_t, number_t, number_t}), nil
+		case "floor":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "ceil":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "round":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "abs":
+			return tapp(.FUNCTION, {number_t, number_t}), nil
+		case "rand":
+			return tapp(.FUNCTION, {number_t}), nil
+		}
+	case .OS:
+		switch fn_name {
+		case "read":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "write":
+			return tapp(.FUNCTION, {string_t, string_t, string_t, string_t}), nil
+		case "args":
+			return tapp(.FUNCTION, {tapp(.LIST, {string_t})}), nil
+		}
+	case .LIST:
+		switch fn_name {
+		case "push":
+			a := fresh(tc)
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), a, tapp(.LIST, {a})})), nil
+		case "pop":
+			a := fresh(tc)
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), a})), nil
+		case "remove_last":
+			a := fresh(tc)
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), tapp(.LIST, {a})})), nil
+		case "sort":
+			a := fresh(tc)
+			return tquant({a}, tapp(.FUNCTION, {tapp(.LIST, {a}), tapp(.LIST, {a})})), nil
+		case "sum":
+			return tapp(.FUNCTION, {tapp(.LIST, {number_t}), number_t}), nil
+		}
+	case .STRING:
+		switch fn_name {
+		case "chomp":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "replace":
+			return tapp(.FUNCTION, {string_t, string_t, string_t, string_t}), nil
+		case "slice":
+			return tapp(.FUNCTION, {string_t, number_t, number_t, string_t}), nil
+		case "index":
+			return tapp(.FUNCTION, {string_t, number_t, string_t}), nil
+		case "chars":
+			return tapp(.FUNCTION, {string_t, tapp(.LIST, {string_t})}), nil
+		case "split_lines":
+			return tapp(.FUNCTION, {string_t, tapp(.LIST, {string_t})}), nil
+		case "upcase":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "downcase":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "reverse":
+			return tapp(.FUNCTION, {string_t, string_t}), nil
+		case "asciichar":
+			return tapp(.FUNCTION, {number_t, string_t}), nil
+		case "asciinum":
+			return tapp(.FUNCTION, {string_t, number_t}), nil
+		case "byte_size":
+			return tapp(.FUNCTION, {string_t, number_t}), nil
+		}
+	case .RESULT:
+		switch fn_name {
+		case "ok?":
+			t := fresh(tc)
+			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), bool_t})), nil
+		case "err?":
+			t := fresh(tc)
+			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), bool_t})), nil
+		case "unwrap":
+			t := fresh(tc)
+			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), t})), nil
+		case "unwrap_or":
+			t := fresh(tc)
+			e := fresh(tc)
+			return tquant({t, e}, tapp(.FUNCTION, {tapp(.RESULT, {t, e}), t, t})), nil
+		}
+	}
+
+	name, ok := reflect.enum_name_from_value(module)
+	if !ok {
+		fmt.panicf("unknown builtin module %v", module)
+	}
+	lower := strings.to_lower(name)
+	defer delete(lower)
+
+	return {}, fmt.tprintf("Function '%v' does not exist in builtin module '%v'.", fn_name, lower)
+}
+
+get_global_builtin_function_signature :: proc(
+	tc: ^TypeChecker,
+	fn: GlobalBuiltinFunction,
+) -> TypeScheme {
+	nil_t := tapp(.NIL)
+	string_t := tapp(.STRING)
+	number_t := tapp(.NUMBER)
+	never_t := type_never
+
+	switch fn {
+	case .PRINT:
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
+	case .PUTS:
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
+	case .GETS:
+		return tapp(.FUNCTION, {string_t})
+	case .PANIC:
+		return tapp(.FUNCTION, {string_t, never_t})
+	case .ASSERT:
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, nil_t}))
+	case .LEN:
+		// NOTE: this should be only for strings and lists, not everything;
+		// but right now i have no way to differentiate them with standard HM.
+		// Someday if I add typeclasses that would be doable
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, number_t}))
+	case .TYPEOF:
+		// NOTE: I might turn typeof into an operator, so that i can use
+		// type_string() to create a string representation of the type directly
+		// at compile time
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, string_t}))
+	case .STR:
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, string_t}))
+	case .PARSE:
+		return tapp(.FUNCTION, {string_t, number_t})
+	case .COPY:
+		a := fresh(tc)
+		return tquant({a}, tapp(.FUNCTION, {a, a}))
+	case .DIRNAME:
+		return tapp(.FUNCTION, {string_t})
+	case .FILENAME:
+		return tapp(.FUNCTION, {string_t})
+	case .OK:
+		t := fresh(tc)
+		e := fresh(tc)
+		return tquant({t, e}, tapp(.FUNCTION, {t, tapp(.RESULT, {t, e})}))
+	case .ERR:
+		e := fresh(tc)
+		t := fresh(tc)
+		return tquant({t, e}, tapp(.FUNCTION, {e, tapp(.RESULT, {t, e})}))
+	}
+
+	fmt.panicf("undefined global-scoped native function '%v'", fn)
+}
+
+
 init_natives :: proc(gc: ^GC) {
 	#unroll for fn in GLOBAL_BUILTIN_FUNCTIONS {
 		define_native(gc, fn.name, fn.function, fn.arity)

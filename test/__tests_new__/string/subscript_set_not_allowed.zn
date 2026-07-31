@@ -1,2 +1,2 @@
 var s = "hello";
-s[0] = "H"  // ERR: Can only set elements of a list.
+s[0] = "H"  // ERR: Expected subscripted expression to be of type List[a], got String.

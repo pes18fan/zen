@@ -1,1 +1,1 @@
-nil.foo // ERR: Cannot access property of a non-record.
+nil\foo // ERR: `\` operator can only be used on a module.

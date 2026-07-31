@@ -1,3 +1,0 @@
-// Sequence expressions (separated by newline or ;) return the rightmost value.
-1 + 2;
-echo 3 + 4 // expect: 7

@@ -2,4 +2,4 @@
 for x in 42 {
     puts(x)
 }
-// ERR: Can only iterate over lists, not number.
+// ERR: Expected iterable to be of type List[a], got Number.
