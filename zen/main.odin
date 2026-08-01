@@ -53,7 +53,8 @@ repl :: proc(vm: ^VM) -> int {
 	return 0
 }
 
-/* Read a file and return it as a string. */
+// Read a file and return it as a string.
+// **Allocates using `context.allocator`.**
 read_file :: proc(path: string) -> (string, bool) {
 	data, err := os.read_entire_file(path, context.allocator)
 	if err != nil {
