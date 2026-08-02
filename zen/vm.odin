@@ -66,6 +66,11 @@ VM :: struct #all_or_none {
 	/* Table of compile-time global variables; necessary for the REPL. */
 	compiler_globals: Table,
 
+	/* The REPL's global scope as resolved so far, kept from one line to the
+	 * next so that variable declarations persist; see `repl` in main.odin
+	 * and `persist_repl_scope` in resolver.odin. */
+	repl_scope: map[string]^Symbol,
+
 	/* Linked list of all open upvalues. */
 	open_upvalues:    ^ObjUpvalue,
 
@@ -176,6 +181,7 @@ init_VM :: proc() -> VM {
 		chunk            = nil,
 		open_upvalues    = nil,
 		compiler_globals = init_table(),
+		repl_scope       = nil,
 		sp               = -1,
 		frame_count      = 0,
 		args             = nil,
@@ -192,6 +198,13 @@ init_VM :: proc() -> VM {
 /* Free's the VM's memory. */
 free_VM :: proc(vm: ^VM) {
 	free_table(&vm.compiler_globals)
+
+	/* Free the resolver's copy of the REPL's global scope, if any. */
+	for name, var in vm.repl_scope {
+		delete(name)
+		free(var)
+	}
+	delete(vm.repl_scope)
 
 	// don't free explicitly, let gc do it
 	vm.it = nil_val()
@@ -937,7 +950,18 @@ interpret :: proc(
 	}
 
 	// Resolve all names in the module graph.
-	reso, rs_ok := resolve(graph)
+	/* In the REPL, the resolver resolves against a clone of the global scope
+	 * accumulated over the previous lines, which it leaves behind in
+	 * `vm.repl_scope` when done. If the line fails for any reason, the clone
+	 * is discarded and the previous scope is kept, so a failed line leaves
+	 * no trace; see `resolve` and `persist_repl_scope` in resolver.odin. */
+	old_repl_scope := vm.repl_scope
+	persisted := false
+	defer if in_repl() && !persisted {
+		vm.repl_scope = old_repl_scope
+	}
+
+	reso, rs_ok := resolve(graph, &vm.repl_scope if in_repl() else nil)
 	if !rs_ok {
 		return .INTERPRET_COMPILE_ERROR
 	}
@@ -1027,7 +1051,16 @@ interpret :: proc(
 	vm_push(vm, obj_val(closure))
 	call(vm, closure, 0) // The script itself is a function, so call it.
 
-	return run(vm, importer)
+	result := run(vm, importer)
+
+	/* On a successful line, copy the resolved global scope into the VM,
+	 * where it survives to the next one. */
+	if in_repl() && result == .INTERPRET_OK {
+		persist_repl_scope(vm, old_repl_scope)
+		persisted = true
+	}
+
+	return result
 }
 
 /* Push a value onto the stack. */

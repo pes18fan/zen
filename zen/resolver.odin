@@ -1,6 +1,7 @@
 package zen
 
 import "core:fmt"
+import "core:strings"
 
 // The state of the resolver.
 Resolver :: struct #all_or_none {
@@ -738,8 +739,14 @@ resolver_error :: proc(rs: ^Resolver, message: string, details: string = "") {
 // Takes in the module graph, resolves all variables.
 // Also returns whether the operation succeeded, while printing out the error
 // messages as 'resolution errors' in the process.
+// If `repl_scope` is provided, the global scope of the root module is cloned
+// from and written back to it, so that the REPL can keep its declarations
+// alive from one line to the next.
 @(require_results)
-resolve :: proc(graph: []^Module) -> (resolutions: ResolutionMap, success: bool) {
+resolve :: proc(
+	graph: []^Module,
+	repl_scope: ^map[string]^Symbol = nil,
+) -> (resolutions: ResolutionMap, success: bool) {
 	rs := Resolver {
 		resolution_map      = make(ResolutionMap),
 		file_scopes         = make(map[string]map[string]^Symbol),
@@ -756,7 +763,17 @@ resolve :: proc(graph: []^Module) -> (resolutions: ResolutionMap, success: bool)
 			return {}, false
 		}
 
-		globals := make(map[string]^Symbol)
+		/* The root module is the one whose fullpath is the path of the
+		program currently being interpreted. In the REPL, it resolves against
+		a private copy of the global scope accumulated over the previous
+		lines, which is handed back to the VM once the line resolves; see
+		`persist_repl_scope` below and `interpret` in vm.odin. */
+		globals: map[string]^Symbol
+		if module.fullpath == zen_get_path() && repl_scope != nil {
+			globals = copy_repl_scope(repl_scope^)
+		} else {
+			globals = make(map[string]^Symbol)
+		}
 		rs.file_scopes[module.name] = globals
 
 		rs.current_module = module
@@ -765,7 +782,59 @@ resolve :: proc(graph: []^Module) -> (resolutions: ResolutionMap, success: bool)
 
 		collect_forward_references(&rs, module.ast) or_return
 		resolve_with_resolver(&rs, module.ast) or_return
+
+		/* Hand the resolved scope back to the VM. Maps are copy-on-write, so
+		the changes made during resolution live in a different backing than
+		the copy made above, which is discarded. */
+		if module.fullpath == zen_get_path() && repl_scope != nil {
+			repl_scope^ = rs.file_scopes[module.name]
+		}
 	}
 
 	return rs.resolution_map, true
+}
+
+/* Make a copy of the REPL's global scope on the current allocator for the
+ * resolver to work on. This copy dies with the compiler frontend's arena at
+ * the end of the line, keeping the VM's copy pristine so that a failed line
+ * leaves no trace; see `persist_repl_scope`. */
+copy_repl_scope :: proc(scope: map[string]^Symbol) -> map[string]^Symbol {
+	scope_copy := make(map[string]^Symbol, len(scope))
+	for name, var in scope {
+		name_copy := strings.clone(name)
+		var_copy := new(Symbol)
+		var_copy^ = var^
+		var_copy.name = name_copy
+		scope_copy[name_copy] = var_copy
+	}
+	return scope_copy
+}
+
+/* Copy the REPL's global scope from the resolver onto the default allocator,
+ * where the VM owns it from one line to the next, and free the scope from the
+ * previous lines once its declarations live in the new copy. Module imports
+ * are left out; they are re-resolved from scratch on every line. */
+persist_repl_scope :: proc(vm: ^VM, previous: map[string]^Symbol) {
+	old := vm.repl_scope
+	vm.repl_scope = make(map[string]^Symbol, len(old))
+
+	for name, var in old {
+		if var.is_module {
+			continue
+		}
+
+		name_copy := strings.clone(name)
+		var_copy := new(Symbol)
+		var_copy^ = var^
+		var_copy.name = name_copy
+		vm.repl_scope[name_copy] = var_copy
+	}
+
+	delete(old)
+
+	for name, var in previous {
+		delete(name)
+		free(var)
+	}
+	delete(previous)
 }
