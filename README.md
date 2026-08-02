@@ -1,3 +1,7 @@
+# ARCHIVAL NOTICE
+
+zen is no longer under development.
+
 # zen
 
 A lightweight programming language written in Odin.
